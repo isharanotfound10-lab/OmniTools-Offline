@@ -323,7 +323,7 @@ class MainActivity : Activity() {
                             systemInstruction = Contents.of(
                                 "You are Local AI, an offline Android agent. Use the provided tools to open supported apps or Android settings when asked. Never claim an action succeeded unless a tool result confirms it. If a request is outside your tools, explain the limitation."
                             ),
-                            tools = listOf(tool(AndroidAgentTools(this)))
+                            tools = listOf(tool(AndroidAgentTools(applicationContext)))
                         )
                     )
                     LocalAgentRuntime.install(newEngine, newConversation)
@@ -387,7 +387,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        // The process-wide agent runtime is shared with the floating orb.\n        worker.shutdownNow()
+        // The process-wide agent runtime is shared with the floating orb.
+        worker.shutdownNow()
         super.onDestroy()
     }
 
