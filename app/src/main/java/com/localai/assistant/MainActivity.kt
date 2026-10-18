@@ -46,7 +46,7 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "PRIVATE BY DESIGN  •  TEXT CHAT"
+            text = "PRIVATE BY DESIGN  •  OFFLINE COMMANDS"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(Color.rgb(177, 155, 205))
@@ -102,8 +102,7 @@ class MainActivity : Activity() {
         root.addView(composer, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
 
-        addMessage("Local AI", "Hey! The text-chat interface is ready. The offline AI model is not connected yet, so I can't generate real AI answers in this build.", false)
-        addMessage("Setup", "Next: connect a compact on-device language model, then test memory use and response speed on your phone.", false)
+        addMessage("Local AI", "Offline command engine is ready. Try: help, time, date, or calculate 12 * (4 + 3). Open-ended AI chat needs a separate on-device language model, which is not connected yet.", false)
     }
 
     private fun sendMessage() {
@@ -113,7 +112,7 @@ class MainActivity : Activity() {
         input.setText("")
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
-        addMessage("Local AI", "I received your message, but the local language model is not connected in this version yet.", false)
+        addMessage("Local AI", OfflineBrain.respond(text), false)
     }
 
     private fun addMessage(sender: String, body: String, fromUser: Boolean) {
