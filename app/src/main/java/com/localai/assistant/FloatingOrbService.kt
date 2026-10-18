@@ -13,6 +13,8 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.GradientDrawable
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
@@ -25,6 +27,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.min
+import java.util.concurrent.Executors
 
 class FloatingOrbService : Service() {
     private var orbView: OrbView? = null
@@ -38,6 +41,9 @@ class FloatingOrbService : Service() {
     private var orbitAnimator: ValueAnimator? = null
     private var dockedRight = false
     private var expanded = false
+    private var commandBusy = false
+    private val commandWorker = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
@@ -152,7 +158,7 @@ class FloatingOrbService : Service() {
         }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val heading = TextView(this).apply {
-            text = "✦  LOCAL AI COMMAND"
+            text = "✦  QUICK ACTIONS"
             textSize = 12f; setTextColor(Color.WHITE); letterSpacing = 0.08f
         }
         val close = TextView(this).apply {
@@ -173,7 +179,7 @@ class FloatingOrbService : Service() {
             setPadding(dp(8), dp(2), dp(5), dp(2))
         }
         val edit = EditText(this).apply {
-            hint = "Type a command…"
+            hint = "What should I do?"
             setHintTextColor(Color.rgb(190, 165, 211)); setTextColor(Color.WHITE)
             textSize = 15f; maxLines = 3; minHeight = dp(46); setPadding(dp(8), dp(4), dp(6), dp(4))
             background = null; imeOptions = EditorInfo.IME_ACTION_SEND
@@ -182,7 +188,7 @@ class FloatingOrbService : Service() {
             }
         }
         val send = TextView(this).apply {
-            text = "➤"; textSize = 20f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+            text = "GO"; textSize = 13f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF7303C0.toInt(), 0xFFEC38BC.toInt())).apply { cornerRadius = dp(15).toFloat() }
             setOnClickListener { submitCommand() }
         }
@@ -190,7 +196,7 @@ class FloatingOrbService : Service() {
         composer.addView(send, LinearLayout.LayoutParams(dp(44), dp(44)))
         panel.addView(composer, LinearLayout.LayoutParams(-1, -2))
         val result = TextView(this).apply {
-            text = "Type a command to get started."
+            text = "Ready • tasks run on this phone."
             textSize = 12f; setTextColor(Color.rgb(239, 220, 255))
             setPadding(dp(4), dp(8), dp(4), dp(2)); visibility = View.GONE
         }
@@ -235,16 +241,30 @@ class FloatingOrbService : Service() {
 
     private fun submitCommand() {
         val command = commandInput?.text?.toString()?.trim().orEmpty()
-        if (command.isEmpty()) return
-        val result = AgentActions.execute(this, command) ?: when {
-            command.contains("mp4", true) || command.contains("convert", true) || command.contains("transcode", true) ->
-                "I understand the request, but file conversion is not implemented yet. I can open supported apps and Android settings now; conversion needs a separate media-conversion feature."
-            else -> OfflineBrain.respond(command)
-        }
-        responseText?.text = result
-        responseText?.visibility = View.VISIBLE
+        if (command.isEmpty() || commandBusy) return
+        commandInput?.setText("")
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(commandInput?.windowToken, 0)
+        commandBusy = true
+        responseText?.text = "Working on your task…"
+        responseText?.visibility = View.VISIBLE
+
+        commandWorker.execute {
+            val result = try {
+                AgentActions.execute(this@FloatingOrbService, command) ?: when {
+                    command.contains("mp4", true) || command.contains("convert", true) || command.contains("transcode", true) ->
+                        "File conversion isn't available yet. This version can launch supported apps and settings; a real conversion engine still needs to be added."
+                    else -> LocalAgentRuntime.executeWithModel(command) ?: OfflineBrain.respond(command)
+                }
+            } catch (e: Exception) {
+                "Task failed: ${e.message ?: "agent error"}. You can retry or use a supported action."
+            }
+            mainHandler.post {
+                responseText?.text = result
+                responseText?.visibility = View.VISIBLE
+                commandBusy = false
+            }
+        }
     }
 
     private fun closeCommandPanel() {
