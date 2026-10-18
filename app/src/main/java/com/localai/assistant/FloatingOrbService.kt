@@ -236,9 +236,9 @@ class FloatingOrbService : Service() {
     private fun submitCommand() {
         val command = commandInput?.text?.toString()?.trim().orEmpty()
         if (command.isEmpty()) return
-        val result = when {
+        val result = AgentActions.execute(this, command) ?: when {
             command.contains("mp4", true) || command.contains("convert", true) || command.contains("transcode", true) ->
-                "I understand the request, but file conversion and access to files selected in other apps are not implemented yet. This bar can accept commands; conversion needs a separate file-access and media-conversion feature."
+                "I understand the request, but file conversion is not implemented yet. I can open supported apps and Android settings now; conversion needs a separate media-conversion feature."
             else -> OfflineBrain.respond(command)
         }
         responseText?.text = result
