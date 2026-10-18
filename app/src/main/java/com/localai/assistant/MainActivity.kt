@@ -22,6 +22,7 @@ import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
@@ -40,8 +41,11 @@ class MainActivity : Activity() {
     @Volatile private var busy = false
 
     private val modelFile: File by lazy { File(filesDir, "Gemma3-1B-IT_q4.task") }
+    // Public mirror of the same 555 MB MediaPipe task model. Verify its checksum before use.
     private val modelUrl =
-        "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task"
+        "https://huggingface.co/typosbro/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task"
+    private val expectedModelSha256 =
+        "ddfaf1210d8b4d1b812b5fadb6652999e852c8be6dd9abe353b9213a25262c10"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -218,14 +222,63 @@ class MainActivity : Activity() {
                         setRequestProperty("User-Agent", "LocalAI-Android")
                     }
                     connection.connect()
-                    if (connection.responseCode !in 200..299) error("Download server returned HTTP ${connection.responseCode}")
+                    if (connection.responseCode !in 200..299) {
+                        val code = connection.responseCode
+                        error(
+                            when (code) {
+                                401, 403 -> "The model host denied access (HTTP $code). Open the model page in a browser and check its access conditions."
+                                404 -> "The model file was not found (HTTP 404)."
+                                else -> "Download server returned HTTP $code."
+                            }
+                        )
+                    }
                     val temp = File(filesDir, "model.download")
-                    connection.inputStream.use { source ->
-                        temp.outputStream().buffered().use { target -> source.copyTo(target) }
+                    temp.delete()
+                    val totalBytes = connection.contentLengthLong
+                    var downloadedBytes = 0L
+                    var lastShownPercent = -1
+                    connection.inputStream.buffered().use { source ->
+                        temp.outputStream().buffered().use { target ->
+                            val buffer = ByteArray(64 * 1024)
+                            while (true) {
+                                val count = source.read(buffer)
+                                if (count < 0) break
+                                target.write(buffer, 0, count)
+                                downloadedBytes += count
+                                if (totalBytes > 0L) {
+                                    val percent = ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100)
+                                    if (percent != lastShownPercent) {
+                                        lastShownPercent = percent
+                                        runOnUiThread {
+                                            modelStatus.text = "Downloading AI model… $percent% (${downloadedBytes / 1_000_000} MB)"
+                                        }
+                                    }
+                                } else if (downloadedBytes % (10L * 1024L * 1024L) < buffer.size) {
+                                    val mb = downloadedBytes / 1_000_000
+                                    runOnUiThread { modelStatus.text = "Downloading AI model… $mb MB received" }
+                                }
+                            }
+                        }
                     }
                     if (temp.length() < 100_000_000L) {
+                        val received = temp.length()
                         temp.delete()
-                        error("Downloaded file was too small to be a valid model.")
+                        error("The server returned an incomplete model file ($received bytes). Check your connection and retry.")
+                    }
+                    runOnUiThread { modelStatus.text = "Verifying downloaded model…" }
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    temp.inputStream().buffered().use { source ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val count = source.read(buffer)
+                            if (count < 0) break
+                            digest.update(buffer, 0, count)
+                        }
+                    }
+                    val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+                    if (!actualHash.equals(expectedModelSha256, ignoreCase = true)) {
+                        temp.delete()
+                        error("Model integrity check failed. The unexpected download was deleted; please retry on a stable connection.")
                     }
                     if (modelFile.exists()) modelFile.delete()
                     if (!temp.renameTo(modelFile)) {
@@ -238,8 +291,9 @@ class MainActivity : Activity() {
                         modelButton.isEnabled = true
                     }
                 } catch (e: Exception) {
+                    File(filesDir, "model.download").delete()
                     runOnUiThread {
-                        modelStatus.text = "Model download failed: ${e.message ?: "unknown error"}. Check connection and retry."
+                        modelStatus.text = "Model download failed: ${e.message ?: "unknown error"}. Check connection and free storage, then retry."
                         modelButton.text = "Retry model download"
                         modelButton.isEnabled = true
                     }
