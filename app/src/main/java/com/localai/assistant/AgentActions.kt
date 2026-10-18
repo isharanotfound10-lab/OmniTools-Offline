@@ -6,22 +6,34 @@ import android.provider.Settings
 import java.util.Locale
 
 /**
- * Small, deterministic native action layer.
- * Actions are allow-listed and launched through Android intents; generated text
- * is never treated as executable code.
+ * First native agent tools. The app launches only explicitly supported packages
+ * and Android settings pages; it never executes arbitrary model output as code.
  */
 object AgentActions {
+    private val appPackages = mapOf(
+        "youtube" to "com.google.android.youtube",
+        "whatsapp" to "com.whatsapp",
+        "whatsapp business" to "com.whatsapp.w4b",
+        "chrome" to "com.android.chrome",
+        "google chrome" to "com.android.chrome",
+        "gmail" to "com.google.android.gm",
+        "google maps" to "com.google.android.apps.maps",
+        "maps" to "com.google.android.apps.maps",
+        "play store" to "com.android.vending",
+        "google photos" to "com.google.android.apps.photos",
+        "photos" to "com.google.android.apps.photos",
+        "camera" to "com.android.camera2",
+        "clock" to "com.google.android.deskclock",
+        "calculator" to "com.google.android.calculator"
+    )
+
     fun execute(context: Context, command: String): String? {
         val normalized = command.trim().lowercase(Locale.ROOT)
         if (normalized.isEmpty()) return null
-
-        val openVerb = listOf("open ", "launch ", "start ", "go to ").firstOrNull {
+        val verb = listOf("open ", "launch ", "start ", "go to ").firstOrNull {
             normalized.startsWith(it)
         } ?: return null
-        val target = normalized.removePrefix(openVerb)
-            .removeSuffix(" please")
-            .removeSuffix(" app")
-            .trim()
+        val target = normalized.removePrefix(verb).removeSuffix(" please").removeSuffix(" app").trim()
         if (target.isEmpty()) return "Tell me which app or settings page to open."
 
         val settingsAction = when {
@@ -43,42 +55,31 @@ object AgentActions {
             }
         }
 
-        // Resolve only installed apps with a launcher activity; no arbitrary intents or shell commands.
-        val packageManager = context.packageManager
-        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val apps = try {
-            @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(launcherIntent, 0)
-        } catch (_: Exception) {
-            emptyList()
-        }
-        val matches = apps.mapNotNull { resolve ->
-            val label = resolve.loadLabel(packageManager)?.toString()?.trim().orEmpty()
-            val labelLower = label.lowercase(Locale.ROOT)
-            val score = when {
-                labelLower == target -> 0
-                labelLower.startsWith(target) -> 1
-                labelLower.contains(target) -> 2
-                target.contains(labelLower) && labelLower.length >= 3 -> 3
-                else -> return@mapNotNull null
-            }
-            Triple(score, label, resolve.activityInfo.packageName)
-        }.sortedWith(compareBy<Triple<Int, String, String>> { it.first }.thenBy { it.second.length })
-
-        val match = matches.firstOrNull()
-            ?: return if (target in listOf("youtube", "whatsapp", "chrome", "camera", "gallery", "photos")) {
-                "I couldn't find $target installed. If it's installed, try its full app name."
-            } else null
-
+        val packageName = appPackages[target] ?: return null
         return try {
-            val launch = packageManager.getLaunchIntentForPackage(match.third)
-                ?: return "I found ${match.second}, but Android doesn't provide a launch action for it."
+            val launch = context.packageManager.getLaunchIntentForPackage(packageName)
+                ?: return "I couldn't find ${displayName(target)} installed on this phone."
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(launch)
-            "Opening ${match.second}."
+            "Opening ${displayName(target)}."
         } catch (_: Exception) {
-            "Android couldn't open ${match.second}. Check whether the app is disabled."
+            "Android couldn't open ${displayName(target)}. Check whether the app is installed or disabled."
         }
+    }
+
+    private fun displayName(target: String): String = when (target) {
+        "youtube" -> "YouTube"
+        "whatsapp" -> "WhatsApp"
+        "whatsapp business" -> "WhatsApp Business"
+        "chrome", "google chrome" -> "Chrome"
+        "gmail" -> "Gmail"
+        "google maps", "maps" -> "Google Maps"
+        "play store" -> "Play Store"
+        "google photos", "photos" -> "Google Photos"
+        "camera" -> "Camera"
+        "clock" -> "Clock"
+        "calculator" -> "Calculator"
+        else -> target
     }
 
     private fun settingsLabel(target: String): String = when {
