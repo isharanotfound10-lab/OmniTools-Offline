@@ -155,20 +155,20 @@ class MainActivity : Activity() {
             }
         }
         val send = Button(this).apply {
-            text = "↑"
-            textSize = 22f
+            text = "GO"
+            textSize = 13f
             setTextColor(Color.WHITE)
             isAllCaps = false
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(purple, pink)
             ).apply { cornerRadius = dp(18).toFloat() }
-            minWidth = dp(48)
-            minimumWidth = dp(48)
+            minWidth = dp(54)
+            minimumWidth = dp(54)
             setOnClickListener { sendMessage() }
         }
         composer.addView(input, LinearLayout.LayoutParams(0, -2, 1f))
-        composer.addView(send, LinearLayout.LayoutParams(dp(48), dp(48)))
+        composer.addView(send, LinearLayout.LayoutParams(dp(54), dp(48)))
         root.addView(composer, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
 
@@ -321,7 +321,7 @@ class MainActivity : Activity() {
                     val newConversation = newEngine.createConversation(
                         ConversationConfig(
                             systemInstruction = Contents.of(
-                                "You are Local AI, an offline Android agent. Use the provided tools to open supported apps or Android settings when asked. Never claim an action succeeded unless a tool result confirms it. If a request is outside your tools, explain the limitation."
+                                "You are Local AI, an on-device Android task agent, not a conversational chatbot. Interpret the user's message as a task to perform. Use the provided tools for supported app-launching and Android-settings actions. Keep results brief, report only outcomes confirmed by tool results, and never pretend to perform an unsupported task. If the requested task is outside your available tools, clearly say it is not supported yet."
                             ),
                             tools = listOf(tool(AndroidAgentTools(applicationContext)))
                         )
