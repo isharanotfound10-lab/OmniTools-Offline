@@ -61,7 +61,7 @@ class FloatingOrbService : Service() {
         }
         orbParams = params
         val view = OrbView().apply {
-            contentDescription = "Local AI floating orb. Tap to type a command; drag vertically and release to dock at a screen edge."
+            contentDescription = "Local AI floating assistant. Tap to ask a question or request a task; drag to dock at a screen edge."
             isClickable = true
             alpha = IDLE_ALPHA
         }
@@ -158,7 +158,7 @@ class FloatingOrbService : Service() {
         }
         val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val heading = TextView(this).apply {
-            text = "✦  QUICK ACTIONS"
+            text = "✦  LOCAL AI"
             textSize = 12f; setTextColor(Color.WHITE); letterSpacing = 0.08f
         }
         val close = TextView(this).apply {
@@ -196,7 +196,7 @@ class FloatingOrbService : Service() {
         composer.addView(send, LinearLayout.LayoutParams(dp(44), dp(44)))
         panel.addView(composer, LinearLayout.LayoutParams(-1, -2))
         val result = TextView(this).apply {
-            text = "Ready • tasks run on this phone."
+            text = "Ready • ask me anything or describe a task."
             textSize = 12f; setTextColor(Color.rgb(239, 220, 255))
             setPadding(dp(4), dp(8), dp(4), dp(2)); visibility = View.GONE
         }
@@ -246,16 +246,14 @@ class FloatingOrbService : Service() {
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(commandInput?.windowToken, 0)
         commandBusy = true
-        responseText?.text = "Working on your task…"
+        responseText?.text = "Thinking about your request…"
         responseText?.visibility = View.VISIBLE
 
         commandWorker.execute {
             val result = try {
-                AgentActions.execute(this@FloatingOrbService, command) ?: when {
-                    command.contains("mp4", true) || command.contains("convert", true) || command.contains("transcode", true) ->
-                        "File conversion isn't available yet. This version can launch supported apps and settings; a real conversion engine still needs to be added."
-                    else -> LocalAgentRuntime.executeWithModel(command) ?: OfflineBrain.respond(command)
-                }
+                AgentActions.execute(this@FloatingOrbService, command)
+                    ?: LocalAgentRuntime.executeWithModel(command)
+                    ?: OfflineBrain.respond(command)
             } catch (e: Exception) {
                 "Task failed: ${e.message ?: "agent error"}. You can retry or use a supported action."
             }
