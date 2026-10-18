@@ -9,6 +9,10 @@ import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -31,6 +35,7 @@ class MainActivity : Activity() {
     private lateinit var input: EditText
     private lateinit var modelButton: Button
     private lateinit var modelStatus: TextView
+    private lateinit var orbButton: Button
     @Volatile private var llm: LlmInference? = null
     @Volatile private var busy = false
 
@@ -91,6 +96,20 @@ class MainActivity : Activity() {
         header.addView(subtitle)
         header.addView(modelStatus)
         header.addView(modelButton, LinearLayout.LayoutParams(-1, dp(44)))
+        orbButton = Button(this).apply {
+            text = "Enable floating bot"
+            textSize = 12f
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(purple, pink)
+            ).apply { cornerRadius = dp(14).toFloat() }
+            setOnClickListener { enableFloatingOrb() }
+        }
+        val orbParams = LinearLayout.LayoutParams(-1, dp(44))
+        orbParams.topMargin = dp(8)
+        header.addView(orbButton, orbParams)
         root.addView(header)
 
         scroll = ScrollView(this).apply {
@@ -145,6 +164,41 @@ class MainActivity : Activity() {
 
         addMessage("Local AI", "Chat works with offline commands now. Download and load the optional language model above to enable generative AI. The model runs on this device after download; no cloud chat is used.", false)
         if (modelFile.exists()) modelStatus.text = "Model file found • tap Load offline AI"
+        refreshOrbStatus()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshOrbStatus()
+    }
+
+    private fun refreshOrbStatus() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            try {
+                startService(Intent(this, FloatingOrbService::class.java))
+                orbButton.text = "Floating bot enabled ✓"
+            } catch (_: Exception) {
+                orbButton.text = "Tap to enable floating bot"
+            }
+        } else {
+            orbButton.text = "Enable floating bot (permission required)"
+        }
+    }
+
+    private fun enableFloatingOrb() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            try {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+            } catch (_: Exception) {
+                modelStatus.text = "Open Android Settings > Apps > Special app access > Display over other apps > Local AI, then allow it."
+            }
+        } else {
+            refreshOrbStatus()
+        }
     }
 
     private fun onModelButton() {
