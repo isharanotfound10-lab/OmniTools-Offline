@@ -78,7 +78,7 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "ON-DEVICE AI  •  PRIVATE CHAT"
+            text = "ON-DEVICE ACTION AGENT  •  TEXT ONLY"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(Color.rgb(255, 218, 250))
@@ -141,7 +141,7 @@ class MainActivity : Activity() {
             background = rounded(panel, dp(22))
         }
         input = EditText(this).apply {
-            hint = "Message Local AI…"
+            hint = "Describe a task to execute…"
             setHintTextColor(Color.rgb(187, 162, 211))
             setTextColor(Color.WHITE)
             textSize = 15f
@@ -172,7 +172,7 @@ class MainActivity : Activity() {
         root.addView(composer, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
 
-        addMessage("Local AI", "Chat works with offline commands now. Download and load the optional language model above to enable generative AI. The model runs on this device after download; no cloud chat is used.", false)
+        showStatus("Ready for a task. Tap the floating orb to open the quick action panel, or enter a task below. Download and load the on-device agent model to enable model-based tool selection.")
         if (modelFile.exists()) modelStatus.text = "Model file found • tap Load offline AI"
         refreshOrbStatus()
     }
@@ -326,15 +326,14 @@ class MainActivity : Activity() {
                             tools = listOf(tool(AndroidAgentTools(this)))
                         )
                     )
-                    conversation?.close()
-                    engine?.close()
+                    LocalAgentRuntime.install(newEngine, newConversation)
                     engine = newEngine
                     conversation = newConversation
                     runOnUiThread {
                         modelStatus.text = "Offline agent model loaded • runs on this device"
                         modelButton.text = "Agent model loaded ✓"
                         modelButton.isEnabled = true
-                        addMessage("Local AI", "The on-device language model is loaded. Try asking me a question.", false)
+                        showStatus("Agent ready • model loaded on this device. Enter a task and tap GO, or use the floating orb.")
                     }
                 } catch (e: Exception) {
                     runOnUiThread {
@@ -352,47 +351,43 @@ class MainActivity : Activity() {
     private fun sendMessage() {
         val text = input.text.toString().trim()
         if (text.isEmpty() || busy) return
-        addMessage("You", text, true)
         input.setText("")
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
 
-        // Run supported native device actions before falling back to chat/utility responses.
+        // Execute known native actions directly; use the local model for other requests.
         val actionResult = AgentActions.execute(this, text)
         if (actionResult != null) {
-            addMessage("Local AI", actionResult, false)
+            showStatus(actionResult)
             return
         }
 
-        val activeConversation = conversation
-        if (activeConversation == null) {
-            addMessage("Local AI", OfflineBrain.respond(text) + "\n\nDownload and load the smaller offline agent model above to enable model-based requests.", false)
+        if (!LocalAgentRuntime.isLoaded()) {
+            showStatus(OfflineBrain.respond(text) + "\n\nLoad the downloaded on-device agent model to enable model-based task selection.")
             return
         }
 
         busy = true
-        addMessage("Local AI", "Thinking offline…", false)
+        showStatus("Working on your task…")
         worker.execute {
             try {
-                val response = activeConversation.sendMessage(text).toString()
-                runOnUiThread {
-                    val last = messages.getChildAt(messages.childCount - 1) as? LinearLayout
-                    val bubble = last?.getChildAt(1) as? TextView
-                    if (bubble != null && bubble.text == "Thinking offline…") bubble.text = response.trim()
-                    else addMessage("Local AI", response.trim(), false)
-                }
+                val response = LocalAgentRuntime.executeWithModel(text) ?: OfflineBrain.respond(text)
+                runOnUiThread { showStatus(response) }
             } catch (e: Exception) {
-                runOnUiThread { addMessage("Local AI", "Generation failed: ${e.message ?: "model error"}. You can still use offline commands.", false) }
+                runOnUiThread { showStatus("Task failed: ${e.message ?: "agent error"}. Try a supported action or retry.") }
             } finally {
                 busy = false
             }
         }
     }
 
+    private fun showStatus(body: String) {
+        messages.removeAllViews()
+        addMessage("ACTION STATUS", body, false)
+    }
+
     override fun onDestroy() {
-        conversation?.close()
-        engine?.close()
-        worker.shutdownNow()
+        // The process-wide agent runtime is shared with the floating orb.\n        worker.shutdownNow()
         super.onDestroy()
     }
 
