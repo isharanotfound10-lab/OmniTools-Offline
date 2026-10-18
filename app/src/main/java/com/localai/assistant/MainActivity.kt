@@ -1,6 +1,7 @@
 package com.localai.assistant
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.os.Bundle
 import android.graphics.Color
 import android.graphics.Typeface
@@ -309,9 +310,25 @@ class MainActivity : Activity() {
             busy = true
             worker.execute {
                 try {
+                    // Native LLM initialization can terminate the process on memory-constrained
+                    // devices, so check available device memory before entering the native runtime.
+                    val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                    val memoryInfo = ActivityManager.MemoryInfo()
+                    activityManager.getMemoryInfo(memoryInfo)
+                    val totalRamGb = memoryInfo.totalMem / (1024L * 1024L * 1024L)
+                    val availableRamGb = memoryInfo.availMem / (1024L * 1024L * 1024L)
+                    if (totalRamGb < 5L || availableRamGb < 2L) {
+                        runOnUiThread {
+                            modelStatus.text =
+                                "This phone currently has about ${totalRamGb} GB RAM total and ${availableRamGb} GB available. Gemma 1B needs substantial memory and may crash here. Free memory or use a smaller model."
+                            modelButton.text = "Model needs more memory"
+                            modelButton.isEnabled = true
+                        }
+                        return@execute
+                    }
                     val options = LlmInference.LlmInferenceOptions.builder()
                         .setModelPath(modelFile.absolutePath)
-                        .setMaxTokens(256)
+                        .setMaxTokens(128)
                         .build()
                     val engine = LlmInference.createFromOptions(this, options)
                     llm?.close()
