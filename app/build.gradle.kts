@@ -10,5 +10,5 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 dependencies {
-    implementation("com.google.mediapipe:tasks-genai:0.10.27")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
 }
