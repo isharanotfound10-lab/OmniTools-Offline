@@ -1,5 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.google.android.youtube"/>
+        <package android:name="com.whatsapp"/>
+        <package android:name="com.whatsapp.w4b"/>
+        <package android:name="com.android.chrome"/>
+        <package android:name="com.google.android.gm"/>
+        <package android:name="com.google.android.apps.maps"/>
+        <package android:name="com.android.vending"/>
+        <package android:name="com.google.android.apps.photos"/>
+        <package android:name="com.android.camera2"/>
+        <package android:name="com.google.android.deskclock"/>
+        <package android:name="com.google.android.calculator"/>
+    </queries>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <application android:allowBackup="false" android:label="Local AI" android:icon="@drawable/ic_launcher" android:roundIcon="@drawable/ic_launcher" android:theme="@android:style/Theme.Material.NoActionBar" android:supportsRtl="true" android:usesCleartextTraffic="false">
