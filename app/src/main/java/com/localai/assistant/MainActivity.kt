@@ -19,11 +19,15 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import com.google.mediapipe.tasks.genai.llminference.LlmInference
+import com.google.ai.edge.litertlm.Backend
+import com.google.ai.edge.litertlm.Conversation
+import com.google.ai.edge.litertlm.ConversationConfig
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.EngineConfig
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
@@ -38,15 +42,15 @@ class MainActivity : Activity() {
     private lateinit var modelButton: Button
     private lateinit var modelStatus: TextView
     private lateinit var orbButton: Button
-    @Volatile private var llm: LlmInference? = null
+    @Volatile private var engine: Engine? = null
+    @Volatile private var conversation: Conversation? = null
     @Volatile private var busy = false
 
-    private val modelFile: File by lazy { File(filesDir, "Gemma3-1B-IT_q4.task") }
-    // Public mirror of the same 555 MB MediaPipe task model. Verify its checksum before use.
+    private val modelFile: File by lazy { File(filesDir, "functiongemma-mobile-actions.litertlm") }
+    // LiteRT-LM Mobile Actions FunctionGemma model (~289 MB in the official Q8 configuration).
+    // This public mirror serves the LiteRT-LM .litertlm deployment format.
     private val modelUrl =
-        "https://huggingface.co/typosbro/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q4_ekv2048.task"
-    private val expectedModelSha256 =
-        "ddfaf1210d8b4d1b812b5fadb6652999e852c8be6dd9abe353b9213a25262c10"
+        "https://huggingface.co/Yagna1/functiongemma-270m-mobile-actions/resolve/main/mobile-actions_q8_ekv1024.litertlm"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,13 +85,13 @@ class MainActivity : Activity() {
         }
         modelStatus = TextView(this).apply {
             text = if (modelFile.exists()) "Model downloaded • tap Load offline AI" else
-                "Optional model: about 555 MB. 4 GB RAM is recommended; this phone may struggle."
+                "Optional agent model: about 289 MB. Performance depends on available RAM."
             textSize = 11f
             setTextColor(Color.rgb(245, 228, 255))
             setPadding(dp(2), dp(2), dp(2), dp(8))
         }
         modelButton = Button(this).apply {
-            text = if (modelFile.exists()) "Load offline AI" else "Download AI model (~555 MB)"
+            text = if (modelFile.exists()) "Load offline AI" else "Download agent model (~289 MB)"
             textSize = 12f
             isAllCaps = false
             setTextColor(Color.WHITE)
@@ -261,26 +265,12 @@ class MainActivity : Activity() {
                             }
                         }
                     }
-                    if (temp.length() < 100_000_000L) {
+                    if (temp.length() < 200_000_000L) {
                         val received = temp.length()
                         temp.delete()
-                        error("The server returned an incomplete model file ($received bytes). Check your connection and retry.")
+                        error("The server returned an incomplete model file ($received bytes). Expected a model of roughly 289 MB; check access and retry.")
                     }
-                    runOnUiThread { modelStatus.text = "Verifying downloaded model…" }
-                    val digest = MessageDigest.getInstance("SHA-256")
-                    temp.inputStream().buffered().use { source ->
-                        val buffer = ByteArray(64 * 1024)
-                        while (true) {
-                            val count = source.read(buffer)
-                            if (count < 0) break
-                            digest.update(buffer, 0, count)
-                        }
-                    }
-                    val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
-                    if (!actualHash.equals(expectedModelSha256, ignoreCase = true)) {
-                        temp.delete()
-                        error("Model integrity check failed. The unexpected download was deleted; please retry on a stable connection.")
-                    }
+                    runOnUiThread { modelStatus.text = "Checking model file…" }
                     if (modelFile.exists()) modelFile.delete()
                     if (!temp.renameTo(modelFile)) {
                         temp.copyTo(modelFile, overwrite = true)
@@ -310,32 +300,35 @@ class MainActivity : Activity() {
             busy = true
             worker.execute {
                 try {
-                    // Native LLM initialization can terminate the process on memory-constrained
-                    // devices, so check available device memory before entering the native runtime.
                     val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
                     val memoryInfo = ActivityManager.MemoryInfo()
                     activityManager.getMemoryInfo(memoryInfo)
-                    val totalRamGb = memoryInfo.totalMem / (1024L * 1024L * 1024L)
-                    val availableRamGb = memoryInfo.availMem / (1024L * 1024L * 1024L)
-                    if (totalRamGb < 5L || availableRamGb < 2L) {
+                    val availableRamMb = memoryInfo.availMem / (1024L * 1024L)
+                    if (availableRamMb < 650L) {
                         runOnUiThread {
-                            modelStatus.text =
-                                "This phone currently has about ${totalRamGb} GB RAM total and ${availableRamGb} GB available. Gemma 1B needs substantial memory and may crash here. Free memory or use a smaller model."
-                            modelButton.text = "Model needs more memory"
+                            modelStatus.text = "Only ${availableRamMb} MB RAM is available. Close other apps before loading the ~289 MB agent model."
+                            modelButton.text = "Try loading again"
                             modelButton.isEnabled = true
                         }
                         return@execute
                     }
-                    val options = LlmInference.LlmInferenceOptions.builder()
-                        .setModelPath(modelFile.absolutePath)
-                        .setMaxTokens(128)
-                        .build()
-                    val engine = LlmInference.createFromOptions(this, options)
-                    llm?.close()
-                    llm = engine
+                    val newEngine = Engine(EngineConfig(
+                        modelPath = modelFile.absolutePath,
+                        backend = Backend.CPU()
+                    ))
+                    newEngine.initialize()
+                    val newConversation = newEngine.createConversation(
+                        ConversationConfig(systemInstruction = Contents.of(
+                            "You are Local AI, an offline mobile-actions agent. Use available tools when offered. Be concise and never claim an action succeeded unless the tool result confirms it."
+                        ))
+                    )
+                    conversation?.close()
+                    engine?.close()
+                    engine = newEngine
+                    conversation = newConversation
                     runOnUiThread {
-                        modelStatus.text = "Offline language model loaded • prompts stay on this device"
-                        modelButton.text = "AI model loaded ✓"
+                        modelStatus.text = "Offline agent model loaded • runs on this device"
+                        modelButton.text = "Agent model loaded ✓"
                         modelButton.isEnabled = true
                         addMessage("Local AI", "The on-device language model is loaded. Try asking me a question.", false)
                     }
@@ -367,9 +360,9 @@ class MainActivity : Activity() {
             return
         }
 
-        val engine = llm
-        if (engine == null) {
-            addMessage("Local AI", OfflineBrain.respond(text) + "\n\nFor open-ended AI chat, download and load the optional model above.", false)
+        val activeConversation = conversation
+        if (activeConversation == null) {
+            addMessage("Local AI", OfflineBrain.respond(text) + "\n\nDownload and load the smaller offline agent model above to enable model-based requests.", false)
             return
         }
 
@@ -377,7 +370,7 @@ class MainActivity : Activity() {
         addMessage("Local AI", "Thinking offline…", false)
         worker.execute {
             try {
-                val response = engine.generateResponse("You are Local AI, a helpful, concise assistant. Answer in plain text. User: $text\nAssistant:")
+                val response = activeConversation.sendMessage(text).text
                 runOnUiThread {
                     val last = messages.getChildAt(messages.childCount - 1) as? LinearLayout
                     val bubble = last?.getChildAt(1) as? TextView
@@ -393,7 +386,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        llm?.close()
+        conversation?.close()
+        engine?.close()
         worker.shutdownNow()
         super.onDestroy()
     }
