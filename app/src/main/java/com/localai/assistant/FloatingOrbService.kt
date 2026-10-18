@@ -281,6 +281,7 @@ class FloatingOrbService : Service() {
         commandPanel?.let { try { windowManager?.removeView(it) } catch (_: Exception) {} }
         orbView?.let { try { windowManager?.removeView(it) } catch (_: Exception) {} }
         commandPanel = null; orbView = null; windowManager = null
+        commandWorker.shutdownNow()
         super.onDestroy()
     }
 
