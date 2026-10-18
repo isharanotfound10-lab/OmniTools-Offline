@@ -1,0 +1,17 @@
+{
+  "name": "omnitools-offline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An offline-first collection of browser-based utilities.",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  }
+}
