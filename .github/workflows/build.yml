@@ -1,0 +1,49 @@
+name: Build OmniTools Offline
+on:
+  push:
+    branches: ["main", "feature/**"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run tests
+        run: npm test
+      - name: Build offline website
+        run: npm run build
+      - name: Package offline website ZIP
+        run: cd dist && zip -r ../omnitools-offline-website.zip .
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Generate Android project
+        run: npx cap add android
+      - name: Sync Android assets
+        run: npx cap sync android
+      - name: Build debug APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniTools-Offline-build
+          if-no-files-found: error
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            omnitools-offline-website.zip
+            dist/
