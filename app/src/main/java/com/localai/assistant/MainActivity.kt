@@ -374,7 +374,7 @@ class MainActivity : Activity() {
         addMessage("Local AI", "Thinking offline…", false)
         worker.execute {
             try {
-                val response = activeConversation.sendMessage(text).text
+                val response = activeConversation.sendMessage(text).toString()
                 runOnUiThread {
                     val last = messages.getChildAt(messages.childCount - 1) as? LinearLayout
                     val bubble = last?.getChildAt(1) as? TextView
