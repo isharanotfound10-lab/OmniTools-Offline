@@ -21,9 +21,10 @@ import java.net.URL
 import java.util.concurrent.Executors
 
 class MainActivity : Activity() {
-    private val bg = Color.rgb(13, 7, 23)
-    private val panel = Color.rgb(28, 18, 43)
-    private val purple = Color.rgb(166, 105, 255)
+    private val bg = Color.rgb(3, 0, 30)          // #03001e
+    private val purple = Color.rgb(115, 3, 192)   // #7303c0
+    private val pink = Color.rgb(236, 56, 188)    // #ec38bc
+    private val panel = Color.rgb(22, 10, 48)
     private val worker = Executors.newSingleThreadExecutor()
     private lateinit var messages: LinearLayout
     private lateinit var scroll: ScrollView
@@ -41,12 +42,14 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = bg
         window.navigationBarColor = bg
-        window.decorView.systemUiVisibility = 0
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(12), dp(18), dp(12))
-            setBackgroundColor(bg)
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(bg, purple, pink)
+            )
         }
 
         val header = LinearLayout(this).apply {
@@ -63,14 +66,14 @@ class MainActivity : Activity() {
             text = "ON-DEVICE AI  •  PRIVATE CHAT"
             textSize = 10f
             letterSpacing = 0.12f
-            setTextColor(Color.rgb(177, 155, 205))
+            setTextColor(Color.rgb(255, 218, 250))
             setPadding(0, dp(5), 0, dp(8))
         }
         modelStatus = TextView(this).apply {
             text = if (modelFile.exists()) "Model downloaded • tap Load offline AI" else
-                "Optional model: about 555 MB download. 4 GB RAM is recommended; this phone may struggle."
+                "Optional model: about 555 MB. 4 GB RAM is recommended; this phone may struggle."
             textSize = 11f
-            setTextColor(Color.rgb(203, 185, 226))
+            setTextColor(Color.rgb(245, 228, 255))
             setPadding(dp(2), dp(2), dp(2), dp(8))
         }
         modelButton = Button(this).apply {
@@ -78,7 +81,10 @@ class MainActivity : Activity() {
             textSize = 12f
             isAllCaps = false
             setTextColor(Color.WHITE)
-            background = rounded(Color.rgb(75, 43, 112), dp(14))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(purple, pink)
+            ).apply { cornerRadius = dp(14).toFloat() }
             setOnClickListener { onModelButton() }
         }
         header.addView(title)
@@ -90,6 +96,7 @@ class MainActivity : Activity() {
         scroll = ScrollView(this).apply {
             isFillViewport = true
             overScrollMode = ScrollView.OVER_SCROLL_NEVER
+            setBackgroundColor(Color.TRANSPARENT)
         }
         messages = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -106,7 +113,7 @@ class MainActivity : Activity() {
         }
         input = EditText(this).apply {
             hint = "Message Local AI…"
-            setHintTextColor(Color.rgb(159, 143, 178))
+            setHintTextColor(Color.rgb(187, 162, 211))
             setTextColor(Color.WHITE)
             textSize = 15f
             maxLines = 4
@@ -123,7 +130,10 @@ class MainActivity : Activity() {
             textSize = 22f
             setTextColor(Color.WHITE)
             isAllCaps = false
-            background = rounded(purple, dp(18))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(purple, pink)
+            ).apply { cornerRadius = dp(18).toFloat() }
             minWidth = dp(48)
             minimumWidth = dp(48)
             setOnClickListener { sendMessage() }
@@ -265,7 +275,7 @@ class MainActivity : Activity() {
         val label = TextView(this).apply {
             text = sender
             textSize = 11f
-            setTextColor(if (fromUser) Color.rgb(202, 174, 255) else Color.rgb(177, 155, 205))
+            setTextColor(if (fromUser) Color.rgb(255, 202, 246) else Color.rgb(255, 218, 250))
             setPadding(dp(8), 0, dp(8), dp(4))
         }
         val bubble = TextView(this).apply {
@@ -273,7 +283,7 @@ class MainActivity : Activity() {
             textSize = 15f
             setTextColor(Color.WHITE)
             setPadding(dp(14), dp(11), dp(14), dp(11))
-            background = rounded(if (fromUser) Color.rgb(75, 43, 112) else panel, dp(18))
+            background = rounded(if (fromUser) purple else panel, dp(18))
             maxWidth = resources.displayMetrics.widthPixels - dp(80)
         }
         wrapper.addView(label)
