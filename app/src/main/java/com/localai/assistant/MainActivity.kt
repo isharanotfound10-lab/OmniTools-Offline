@@ -360,6 +360,13 @@ class MainActivity : Activity() {
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
             .hideSoftInputFromWindow(input.windowToken, 0)
 
+        // Run supported native device actions before falling back to chat/utility responses.
+        val actionResult = AgentActions.execute(this, text)
+        if (actionResult != null) {
+            addMessage("Local AI", actionResult, false)
+            return
+        }
+
         val engine = llm
         if (engine == null) {
             addMessage("Local AI", OfflineBrain.respond(text) + "\n\nFor open-ended AI chat, download and load the optional model above.", false)
