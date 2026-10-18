@@ -1,0 +1,9 @@
+{
+  "appId": "io.omnitools.offline",
+  "appName": "OmniTools Offline",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "backgroundColor": "#090812"
+  }
+}
