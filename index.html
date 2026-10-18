@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090812">
+  <meta name="description" content="Private, offline-first everyday tools.">
+  <title>OmniTools Offline</title>
+  <link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="OmniTools home"><span class="brand-mark">✳</span><span>OmniTools <em>Offline</em></span></a>
+    <button id="theme-toggle" class="icon-button" aria-label="Toggle appearance" title="Toggle appearance">◐</button>
+  </header>
+  <main>
+    <section class="hero">
+      <div class="eyebrow"><span class="status-dot"></span> PRIVATE BY DESIGN · WORKS OFFLINE</div>
+      <h1>Your tools.<br><span>One calm workspace.</span></h1>
+      <p>Useful utilities that run on your device. No account, no upload, no tracking.</p>
+      <label class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="Search tools…" autocomplete="off" aria-label="Search tools"><kbd>/</kbd></label>
+      <div class="quick-stats"><span>✦ <b id="tool-count">12</b> tools available</span><span>◉ Files stay on your device</span></div>
+    </section>
+    <nav id="categories" class="categories" aria-label="Tool categories"></nav>
+    <section class="workspace">
+      <div class="section-heading"><div><p class="eyebrow">TOOLBOX</p><h2 id="section-title">All tools</h2></div><span id="result-count" class="result-count"></span></div>
+      <div id="tool-grid" class="tool-grid"></div>
+      <div id="empty-state" class="empty-state" hidden>No tools match that search. Try another word.</div>
+    </section>
+    <section id="tool-panel" class="tool-panel" hidden>
+      <div class="panel-heading"><div><span id="panel-icon" class="tool-icon">✦</span><div><p class="eyebrow" id="panel-category"></p><h2 id="panel-title">Tool</h2></div></div><button id="close-tool" class="icon-button" aria-label="Close tool">✕</button></div>
+      <p id="panel-description" class="panel-description"></p>
+      <div id="tool-controls"></div>
+      <div id="tool-output-wrap" hidden><div class="output-heading"><span>OUTPUT</span><button id="copy-output" class="small-button">Copy</button></div><textarea id="tool-output" readonly spellcheck="false"></textarea></div>
+      <p id="tool-message" class="message" role="status"></p>
+    </section>
+    <footer><span class="brand-mini">✳ OmniTools Offline</span><span>Built for useful things, without the internet.</span></footer>
+  </main>
+  <script src="src/app.js"></script>
+</body>
+</html>
