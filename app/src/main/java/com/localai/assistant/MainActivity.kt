@@ -64,7 +64,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(6), 0, dp(12))
         }
-        scroll.addView(messages, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(messages)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
         val composer = LinearLayout(this).apply {
