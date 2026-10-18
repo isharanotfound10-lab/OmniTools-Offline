@@ -47,11 +47,11 @@ class MainActivity : Activity() {
     @Volatile private var conversation: Conversation? = null
     @Volatile private var busy = false
 
-    private val modelFile: File by lazy { File(filesDir, "functiongemma-mobile-actions.litertlm") }
-    // LiteRT-LM Mobile Actions FunctionGemma model (~271 MB in the official Q8 configuration).
-    // This public mirror serves the LiteRT-LM .litertlm deployment format.
+    private val modelFile: File by lazy { File(filesDir, "qwen2-0.5b-instruct.litertlm") }
+    // General-purpose Qwen2 0.5B Instruct model in LiteRT-LM format (about 647 MB).
+    // It provides open-ended offline text generation rather than being only a mobile-action specialist.
     private val modelUrl =
-        "https://huggingface.co/Yagna1/functiongemma-270m-mobile-actions/resolve/main/mobile-actions_q8_ekv1024.litertlm"
+        "https://huggingface.co/litert-community/Qwen2-0.5B-Instruct/resolve/main/Qwen2_0.5B_Instruct.litertlm"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,13 +86,13 @@ class MainActivity : Activity() {
         }
         modelStatus = TextView(this).apply {
             text = if (modelFile.exists()) "Model downloaded • tap Load offline AI" else
-                "Optional agent model: about 271 MB. Performance depends on available RAM."
+                "Optional general offline AI model: about 647 MB. Performance depends on available RAM."
             textSize = 11f
             setTextColor(Color.rgb(245, 228, 255))
             setPadding(dp(2), dp(2), dp(2), dp(8))
         }
         modelButton = Button(this).apply {
-            text = if (modelFile.exists()) "Load offline AI" else "Download agent model (~271 MB)"
+            text = if (modelFile.exists()) "Load offline AI" else "Download offline AI (~647 MB)"
             textSize = 12f
             isAllCaps = false
             setTextColor(Color.WHITE)
@@ -266,10 +266,10 @@ class MainActivity : Activity() {
                             }
                         }
                     }
-                    if (temp.length() < 200_000_000L) {
+                    if (temp.length() < 600_000_000L) {
                         val received = temp.length()
                         temp.delete()
-                        error("The server returned an incomplete model file ($received bytes). Expected a model of roughly 271 MB; check access and retry.")
+                        error("The server returned an incomplete model file ($received bytes). Expected a model of roughly 647 MB; check access and retry.")
                     }
                     runOnUiThread { modelStatus.text = "Checking model file…" }
                     if (modelFile.exists()) modelFile.delete()
@@ -278,7 +278,7 @@ class MainActivity : Activity() {
                         temp.delete()
                     }
                     runOnUiThread {
-                        modelStatus.text = "Download complete. Tap Load offline AI."
+                        modelStatus.text = "Download complete. Tap Load offline AI. This is the general-purpose local model."
                         modelButton.text = "Load offline AI"
                         modelButton.isEnabled = true
                     }
@@ -305,9 +305,9 @@ class MainActivity : Activity() {
                     val memoryInfo = ActivityManager.MemoryInfo()
                     activityManager.getMemoryInfo(memoryInfo)
                     val availableRamMb = memoryInfo.availMem / (1024L * 1024L)
-                    if (availableRamMb < 650L) {
+                    if (availableRamMb < 950L) {
                         runOnUiThread {
-                            modelStatus.text = "Only ${availableRamMb} MB RAM is available. Close other apps before loading the ~271 MB agent model."
+                            modelStatus.text = "Only ${availableRamMb} MB RAM is available. Close other apps before loading the ~647 MB offline AI model."
                             modelButton.text = "Try loading again"
                             modelButton.isEnabled = true
                         }
@@ -321,7 +321,7 @@ class MainActivity : Activity() {
                     val newConversation = newEngine.createConversation(
                         ConversationConfig(
                             systemInstruction = Contents.of(
-                                "You are Local AI, an on-device Android task agent, not a conversational chatbot. Interpret the user's message as a task to perform. Use the provided tools for supported app-launching and Android-settings actions. Keep results brief, report only outcomes confirmed by tool results, and never pretend to perform an unsupported task. If the requested task is outside your available tools, clearly say it is not supported yet."
+                                "You are Local AI, a helpful general-purpose AI assistant that runs entirely on this phone. You are not limited to a fixed list of commands: understand ordinary language, answer questions, explain things, help brainstorm, and reason through the user's goals. Maintain conversational context across turns. When the user asks you to do something on Android, use the provided tools when appropriate; never claim an action happened unless a tool confirms it. If you cannot perform a requested phone action with the available tools, explain the limitation and offer the closest useful next step. Be concise but natural. Do not claim to have internet access; your knowledge and inference run offline."
                             ),
                             tools = listOf(tool(AndroidAgentTools(applicationContext)))
                         )
@@ -330,10 +330,10 @@ class MainActivity : Activity() {
                     engine = newEngine
                     conversation = newConversation
                     runOnUiThread {
-                        modelStatus.text = "Offline agent model loaded • runs on this device"
+                        modelStatus.text = "General offline AI loaded • runs on this device"
                         modelButton.text = "Agent model loaded ✓"
                         modelButton.isEnabled = true
-                        showStatus("Agent ready • model loaded on this device. Enter a task and tap GO, or use the floating orb.")
+                        showStatus("Local AI is ready • general offline model loaded. Ask a question or describe a task.")
                     }
                 } catch (e: Exception) {
                     runOnUiThread {
