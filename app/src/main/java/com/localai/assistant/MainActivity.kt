@@ -25,6 +25,7 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.tool
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -47,7 +48,7 @@ class MainActivity : Activity() {
     @Volatile private var busy = false
 
     private val modelFile: File by lazy { File(filesDir, "functiongemma-mobile-actions.litertlm") }
-    // LiteRT-LM Mobile Actions FunctionGemma model (~289 MB in the official Q8 configuration).
+    // LiteRT-LM Mobile Actions FunctionGemma model (~271 MB in the official Q8 configuration).
     // This public mirror serves the LiteRT-LM .litertlm deployment format.
     private val modelUrl =
         "https://huggingface.co/Yagna1/functiongemma-270m-mobile-actions/resolve/main/mobile-actions_q8_ekv1024.litertlm"
@@ -85,13 +86,13 @@ class MainActivity : Activity() {
         }
         modelStatus = TextView(this).apply {
             text = if (modelFile.exists()) "Model downloaded • tap Load offline AI" else
-                "Optional agent model: about 289 MB. Performance depends on available RAM."
+                "Optional agent model: about 271 MB. Performance depends on available RAM."
             textSize = 11f
             setTextColor(Color.rgb(245, 228, 255))
             setPadding(dp(2), dp(2), dp(2), dp(8))
         }
         modelButton = Button(this).apply {
-            text = if (modelFile.exists()) "Load offline AI" else "Download agent model (~289 MB)"
+            text = if (modelFile.exists()) "Load offline AI" else "Download agent model (~271 MB)"
             textSize = 12f
             isAllCaps = false
             setTextColor(Color.WHITE)
@@ -268,7 +269,7 @@ class MainActivity : Activity() {
                     if (temp.length() < 200_000_000L) {
                         val received = temp.length()
                         temp.delete()
-                        error("The server returned an incomplete model file ($received bytes). Expected a model of roughly 289 MB; check access and retry.")
+                        error("The server returned an incomplete model file ($received bytes). Expected a model of roughly 271 MB; check access and retry.")
                     }
                     runOnUiThread { modelStatus.text = "Checking model file…" }
                     if (modelFile.exists()) modelFile.delete()
@@ -306,7 +307,7 @@ class MainActivity : Activity() {
                     val availableRamMb = memoryInfo.availMem / (1024L * 1024L)
                     if (availableRamMb < 650L) {
                         runOnUiThread {
-                            modelStatus.text = "Only ${availableRamMb} MB RAM is available. Close other apps before loading the ~289 MB agent model."
+                            modelStatus.text = "Only ${availableRamMb} MB RAM is available. Close other apps before loading the ~271 MB agent model."
                             modelButton.text = "Try loading again"
                             modelButton.isEnabled = true
                         }
@@ -318,9 +319,12 @@ class MainActivity : Activity() {
                     ))
                     newEngine.initialize()
                     val newConversation = newEngine.createConversation(
-                        ConversationConfig(systemInstruction = Contents.of(
-                            "You are Local AI, an offline mobile-actions agent. Use available tools when offered. Be concise and never claim an action succeeded unless the tool result confirms it."
-                        ))
+                        ConversationConfig(
+                            systemInstruction = Contents.of(
+                                "You are Local AI, an offline Android agent. Use the provided tools to open supported apps or Android settings when asked. Never claim an action succeeded unless a tool result confirms it. If a request is outside your tools, explain the limitation."
+                            ),
+                            tools = listOf(tool(AndroidAgentTools(this)))
+                        )
                     )
                     conversation?.close()
                     engine?.close()
