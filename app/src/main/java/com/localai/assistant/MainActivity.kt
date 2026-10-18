@@ -78,7 +78,7 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
         val subtitle = TextView(this).apply {
-            text = "ON-DEVICE ACTION AGENT  •  TEXT ONLY"
+            text = "OFFLINE AI ASSISTANT  •  TEXT ONLY"
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(Color.rgb(255, 218, 250))
