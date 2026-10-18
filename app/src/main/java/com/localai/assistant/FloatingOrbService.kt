@@ -211,6 +211,9 @@ class FloatingOrbService : Service() {
         positionCommandPanel()
         try {
             windowManager?.addView(panel, params)
+            panel.alpha = 0f
+            panel.translationX = if (dockedRight) dp(18).toFloat() else -dp(18).toFloat()
+            panel.animate().alpha(1f).translationX(0f).setDuration(220L).start()
             edit.requestFocus()
             edit.post {
                 (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
