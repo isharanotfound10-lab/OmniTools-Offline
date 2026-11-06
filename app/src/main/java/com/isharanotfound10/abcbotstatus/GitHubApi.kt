@@ -86,7 +86,12 @@ class GitHubApi(private val token: String, private val owner: String, private va
         val stepsArray = o.optJSONArray("steps") ?: JSONArray()
         val steps = (0 until stepsArray.length()).map { i ->
             val step = stepsArray.getJSONObject(i)
-            step.optString("name") to (step.optString("conclusion").ifBlank { step.optString("status") })
+            val status = step.optString("status").takeIf { it.isNotBlank() && it != "null" }
+            val conclusion = step.optString("conclusion").takeIf { it.isNotBlank() && it != "null" }
+            // GitHub only sets conclusion after a step finishes. While it is executing,
+            // use the live status (for example, in_progress) instead of displaying "null".
+            val displayState = if (status == "completed") conclusion ?: "completed" else status ?: conclusion ?: "unknown"
+            step.optString("name") to displayState
         }
         val start = o.optString("started_at")
         val end = o.optString("completed_at")
