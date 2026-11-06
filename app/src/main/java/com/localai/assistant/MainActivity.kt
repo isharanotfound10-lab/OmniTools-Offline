@@ -95,7 +95,7 @@ class MainActivity : Activity() {
             setHintTextColor(0xFF78819D.toInt())
             setTextColor(Color.WHITE)
             textSize = 16f
-            singleLine = true
+            setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             setPadding(dp(16), 0, dp(14), 0)
@@ -139,11 +139,11 @@ class MainActivity : Activity() {
             settings.safeBrowsingEnabled = true
             webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                    progress.visibility = View.VISIBLE
+                    this@MainActivity.progress.visibility = View.VISIBLE
                     status.text = "Loading public search results…"
                 }
                 override fun onPageFinished(view: WebView?, url: String?) {
-                    progress.visibility = View.GONE
+                    this@MainActivity.progress.visibility = View.GONE
                     status.text = "Results are provided by Google. Thumbnails and matches depend on public indexing."
                 }
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
