@@ -402,7 +402,7 @@ private fun statusColor(status: String?, conclusion: String?): Color = when {
     else -> Muted
 }
 
-private fun stepStatusLabel(state: String): String = when (state.lowercase()) {
+internal fun stepStatusLabel(state: String): String = when (state.lowercase()) {
     "in_progress" -> "Running"
     "queued", "pending", "waiting", "requested" -> "Queued"
     "completed" -> "Completed"
