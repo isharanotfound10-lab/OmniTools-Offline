@@ -20,7 +20,6 @@ Create a fine-grained personal access token restricted to **only** `isharanotfou
 Grant:
 - Metadata: Read
 - Actions: Read and write
-- Contents: Read
 
 Paste the token into Settings when the app first opens. The token is encrypted locally using Android Keystore; it is not embedded in the APK or sent anywhere except api.github.com.
 
