@@ -369,23 +369,43 @@ class MainActivity : Activity() {
         root.addView(label(group.title, 22, Color.WHITE, true).apply {
             setPadding(0, 0, 0, dp(6))
         })
-        root.addView(label(episodeCountLabel(group.episodes.size), 13, muted, false).apply {
+        val countLabel = label(episodeCountLabel(group.episodes.size), 13, muted, false).apply {
             setPadding(0, 0, 0, dp(18))
-        })
+        }
+        root.addView(countLabel)
         val scroll = ScrollView(this)
         val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(list)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
 
-        group.episodes.forEachIndexed { index, episode ->
+        list.addView(label("Loading episode list…", 13, muted, false).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(24), dp(12), dp(24))
+        })
+
+        val firstEpisode = group.episodes.firstOrNull() ?: return
+        worker.execute {
+            val index = fetchEpisodeDetails(firstEpisode.link)
+            main.post {
+                if (isFinishing || list.parent == null) return@post
+                val actualEpisodes = index.episodes.ifEmpty { group.episodes }
+                countLabel.text = episodeCountLabel(actualEpisodes.size)
+                renderEpisodeRows(list, actualEpisodes)
+            }
+        }
+    }
+
+    private fun renderEpisodeRows(list: LinearLayout, episodes: List<SearchResult>) {
+        list.removeAllViews()
+        episodes.forEachIndexed { index, episode ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(12), dp(12), dp(12), dp(12))
                 background = rounded(panel, 16)
             }
-            val actualEpisodeNumber = episodeIdentityNumber(episode, index + 1)
-            row.addView(label("Episode ${actualEpisodeNumber.toString().padStart(2, '0')}", 15, Color.WHITE, true))
+            val parsedNumber = episodeIdentityNumber(episode, index + 1)
+            row.addView(label("Episode \${parsedNumber.toString().padStart(2, '0')}", 15, Color.WHITE, true))
             val thumb = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 background = rounded(Color.rgb(48, 35, 68), 12)
@@ -471,7 +491,7 @@ class MainActivity : Activity() {
                 Regex("""\b480\s*p\b""").containsMatchIn(label)
             }?.attr("abs:href")?.takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
 
-            EpisodeDetails(image, download480, episodeLinks.values.toList())
+            EpisodeDetails(image, download480, episodeLinks.values.toList().sortedBy { parseEpisodeTitle(it.title)?.number ?: Int.MAX_VALUE })
         } catch (_: Exception) {
             EpisodeDetails("", "")
         }
