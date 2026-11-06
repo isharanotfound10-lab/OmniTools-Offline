@@ -185,7 +185,14 @@ class MainActivity : Activity() {
                     val firstEpisode = group.episodes.firstOrNull()
                     if (firstEpisode == null) group else {
                         val episodeIndex = fetchEpisodeDetails(firstEpisode.link)
-                        group.copy(episodes = episodeIndex.episodes.ifEmpty { group.episodes })
+                        val indexedEpisodes = episodeIndex.episodes.ifEmpty { group.episodes }
+                        // The series page's poster is also a useful fallback for
+                        // search cards and episode rows whose anchors have no img.
+                        group.copy(episodes = indexedEpisodes.map { episode ->
+                            if (episode.image.isBlank() && episodeIndex.image.isNotBlank())
+                                episode.copy(image = episodeIndex.image)
+                            else episode
+                        })
                     }
                 }
                 main.post {
@@ -478,31 +485,81 @@ class MainActivity : Activity() {
                 }.firstOrNull().orEmpty()
 
             val episodeLinks = LinkedHashMap<String, SearchResult>()
-            doc.selectFirst("div[data-title=Episodes]")?.select("a[href]")?.forEach { anchor ->
+            // Some pages render more than one Episodes pane or use slightly
+            // different tab markup. Read every pane whose data-title is Episodes.
+            val episodePanes = doc.select("[data-title]").filter {
+                it.attr("data-title").trim().equals("Episodes", ignoreCase = true)
+            }.ifEmpty {
+                doc.select(".su-tabs-pane").filter {
+                    it.attr("data-title").contains("episode", ignoreCase = true)
+                }
+            }
+            val episodeAnchors = LinkedHashSet<org.jsoup.nodes.Element>()
+            episodePanes.forEach { pane -> pane.select("a[href]").forEach { episodeAnchors.add(it) } }
+
+            fun addEpisodeAnchor(anchor: org.jsoup.nodes.Element) {
                 val href = anchor.absUrl("href").trim()
-                val parsed = runCatching { Uri.parse(href) }.getOrNull() ?: return@forEach
+                if (href.isBlank()) return
+                val parsed = runCatching { Uri.parse(href) }.getOrNull() ?: return
                 val host = parsed.host?.lowercase().orEmpty()
                 if ((host != "xanimeporn.com" && host != "www.xanimeporn.com") ||
                     parsed.path.isNullOrBlank() || parsed.path == "/" ||
-                    parsed.query != null || parsed.fragment != null
-                ) return@forEach
-                val title = sequenceOf(anchor.text().trim(), anchor.attr("title").trim(), anchor.attr("aria-label").trim())
-                    .firstOrNull { it.isNotBlank() }
-                    ?: parsed.lastPathSegment.orEmpty().replace('-', ' ').replace('_', ' ')
-                if (title.isBlank()) return@forEach
-                val thumb = anchor.selectFirst("img")?.let { img ->
-                    sequenceOf(img.attr("abs:data-src"), img.attr("abs:data-lazy-src"), img.attr("abs:src"))
+                    parsed.query != null || parsed.fragment != null ||
+                    href.trimEnd('/') == address.trimEnd('/')
+                ) return
+
+                val slugTitle = parsed.lastPathSegment.orEmpty().replace('-', ' ').replace('_', ' ')
+                val title = sequenceOf(anchor.text().trim(), anchor.attr("title").trim(),
+                    anchor.attr("aria-label").trim(), slugTitle)
+                    .firstOrNull { it.isNotBlank() }.orEmpty()
+                val identity = parseEpisodeTitle(title) ?: parseEpisodeTitle(slugTitle)
+                // The Episodes pane can contain decorative/navigation links;
+                // accept only links that identify an episode.
+                if (identity == null) return
+
+                val imageElement = anchor.selectFirst("img") ?: anchor.parent()?.selectFirst("img")
+                val thumb = imageElement?.let { img ->
+                    sequenceOf(img.attr("abs:data-src"), img.attr("abs:data-lazy-src"),
+                        img.attr("abs:data-original"), img.attr("abs:src"), img.attr("abs:data-thumb"))
                         .firstOrNull { it.startsWith("http") }.orEmpty()
                 }.orEmpty()
                 episodeLinks[href] = SearchResult(title, href, thumb)
             }
+            episodeAnchors.forEach { addEpisodeAnchor(it) }
 
-            val downloadsSection = doc.selectFirst("div[data-title=Downloads]")
-            val download480 = downloadsSection?.select("a[href]")?.firstOrNull { anchor ->
+            // Fallback for themes that omit data-title on the Episodes tab:
+            // identify episode-shaped internal links across the page.
+            if (episodeLinks.isEmpty()) {
+                doc.select("a[href]").forEach { anchor ->
+                    val href = anchor.absUrl("href")
+                    val slug = runCatching { Uri.parse(href).lastPathSegment.orEmpty() }
+                        .getOrDefault("").replace('-', ' ').replace('_', ' ')
+                    if (parseEpisodeTitle(anchor.text()) != null || parseEpisodeTitle(slug) != null) {
+                        addEpisodeAnchor(anchor)
+                    }
+                }
+            }
+
+            // Find the 480p button by both its visible/accessible label and
+            // the URL's quality parameter; the site varies its tab markup.
+            val downloadAnchors = LinkedHashSet<org.jsoup.nodes.Element>()
+            doc.select("[data-title]").filter {
+                it.attr("data-title").contains("download", ignoreCase = true)
+            }.forEach { pane -> pane.select("a[href]").forEach { downloadAnchors.add(it) } }
+            if (downloadAnchors.isEmpty()) doc.select("a[href]").forEach { downloadAnchors.add(it) }
+
+            val download480 = downloadAnchors.firstOrNull { anchor ->
+                val href = anchor.absUrl("href")
+                val uri = runCatching { Uri.parse(href) }.getOrNull()
+                val queryQuality = uri?.getQueryParameter("quality").orEmpty()
                 val label = listOf(anchor.text(), anchor.attr("title"), anchor.attr("aria-label"),
-                    anchor.attr("data-title"), anchor.attr("data-quality")).joinToString(" ").lowercase()
-                Regex("""\b480\s*p\b""").containsMatchIn(label)
-            }?.attr("abs:href")?.takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
+                    anchor.attr("data-title"), anchor.attr("data-quality"), href)
+                    .joinToString(" ").lowercase()
+                queryQuality.equals("480p", ignoreCase = true) ||
+                    Regex("""(?i)(?:^|[^0-9])480\\s*p(?:$|[^a-z0-9])""").containsMatchIn(label)
+            }?.attr("abs:href")?.takeIf {
+                it.startsWith("http://") || it.startsWith("https://")
+            }.orEmpty()
 
             EpisodeDetails(image, download480, episodeLinks.values.toList().sortedBy { parseEpisodeTitle(it.title)?.number ?: Int.MAX_VALUE })
         } catch (_: Exception) {
