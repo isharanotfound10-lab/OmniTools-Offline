@@ -150,7 +150,7 @@ private fun BotStatusApp(store: SecureTokenStore) {
             title = { Text("Connect GitHub") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Create a fine-grained token for ONLY isharanotfound10-lab/abc with Actions: Read and write, Contents: Read and Metadata: Read.", fontSize = 13.sp)
+                    Text("Create a fine-grained token for ONLY isharanotfound10-lab/abc with Actions: Read and write and Metadata: Read.", fontSize = 13.sp)
                     OutlinedTextField(
                         value = tokenDraft, onValueChange = { tokenDraft = it },
                         label = { Text("GitHub token") }, singleLine = true,
