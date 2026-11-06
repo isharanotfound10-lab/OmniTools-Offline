@@ -296,8 +296,14 @@ class MainActivity : Activity() {
 
     private fun parseEpisodeTitle(value: String): ParsedEpisodeTitle? {
         val clean = cleanEpisodeText(value)
-        val match = Regex("(?i)^(.*?)[\\s._-]+(?:episode|ep|e)[\\s._-]*0*(\\d+)\\s*[.!_-]*$").find(clean) ?: return null
-        val series = match.groupValues[1].trim().trimEnd('-', '_', '.', ' ')
+        // Accept common title variants such as:
+        // "Series episode 03", "Series - EP03", "Series_Episode_3",
+        // and titles with a trailing subtitle or punctuation.
+        val pattern = Regex(
+            """(?i)^(.+?)[\\s._\\-–—:|()\\[\\]#]*(?:episodes?|ep|e)[\\s._\\-–—:|()\\[\\]#]*0*(\\d+)(?:\\s*[-–—|:].*)?$"""
+        )
+        val match = pattern.find(clean) ?: return null
+        val series = cleanEpisodeText(match.groupValues[1]).trimEnd('-', '_', '.', ' ', ':', '|')
         val number = match.groupValues[2].toIntOrNull() ?: return null
         if (series.isBlank()) return null
         return ParsedEpisodeTitle(series, number)
