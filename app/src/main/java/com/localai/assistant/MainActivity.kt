@@ -204,36 +204,73 @@ class MainActivity : Activity() {
     }
 
     private fun parseResults(doc: org.jsoup.nodes.Document): List<SearchResult> {
-        val candidates = doc.select("article, .post, .type-post, .type-series, .hentry")
         val found = LinkedHashMap<String, SearchResult>()
-        for (item in candidates) {
-            val heading = item.selectFirst("h1 a, h2 a, h3 a, .entry-title a, .post-title a, a[rel=bookmark]")
-                ?: item.selectFirst("a[href]") ?: continue
-            val href = heading.absUrl("href")
-            if (href.isBlank()) continue
-            val title = heading.text().trim().ifBlank { heading.attr("title").trim() }
-            if (title.isBlank() || href == "https://xanimeporn.com/") continue
-            val tagsAndText = item.text().lowercase()
-            val blockedTerms = listOf("shotacon", "lolicon", "loli", "shota", "underage", "child", "elementary school", "middle school", "high school")
-            if (blockedTerms.any { tagsAndText.contains(it) }) continue
-            val img = item.selectFirst("img")
-            val image = img?.let {
-                listOf(it.absUrl("src"), it.absUrl("data-src"), it.absUrl("data-lazy-src"), it.absUrl("srcset").substringBefore(" "))
-                    .firstOrNull { value -> value.startsWith("https://") || value.startsWith("http://") }.orEmpty()
-            }.orEmpty()
-            found[href] = SearchResult(title, href, image)
-        }
-        if (found.isEmpty()) {
-            for (a in doc.select("a[href]")) {
-                val title = a.text().trim()
-                val href = a.absUrl("href")
-                if (title.length > 3 && href.contains("xanimeporn.com") && href != "https://xanimeporn.com/") {
-                    val img = a.selectFirst("img")
-                    val image = img?.absUrl("src").orEmpty()
-                    if (image.isNotBlank()) found[href] = SearchResult(title, href, image)
+        val blockedTerms = listOf(
+            "shotacon", "lolicon", "loli", "shota", "underage", "child",
+            "elementary school", "middle school", "high school"
+        )
+        val ignoredPaths = setOf(
+            "tag", "tags", "category", "categories", "author", "page",
+            "wp-content", "wp-admin", "search", "feed"
+        )
+
+        // Search-result links on this site are individual, one-segment post URLs.
+        // Do not depend on a particular WordPress theme's article/card class names.
+        for (anchor in doc.select("a[href]")) {
+            val uri = runCatching { Uri.parse(anchor.absUrl("href")) }.getOrNull() ?: continue
+            val host = uri.host?.lowercase().orEmpty()
+            if (host != "xanimeporn.com" && host != "www.xanimeporn.com") continue
+
+            val segments = uri.path.orEmpty().trim('/').split('/').filter { it.isNotBlank() }
+            if (segments.size != 1 || segments[0].lowercase() in ignoredPaths) continue
+            if (uri.query != null || uri.fragment != null) continue
+
+            val href = uri.toString().trimEnd('/') + "/"
+            val title = sequenceOf(
+                anchor.text().trim(),
+                anchor.attr("title").trim(),
+                anchor.attr("aria-label").trim()
+            ).firstOrNull { it.length >= 3 }.orEmpty()
+            if (title.isBlank()) continue
+
+            // The thumbnail and title can be separate sibling links. Walk up the
+            // nearby card containers to locate the image instead of requiring it
+            // to be nested inside the title link.
+            var container: org.jsoup.nodes.Element? = anchor
+            var imageUrl = ""
+            repeat(6) {
+                val current = container ?: return@repeat
+                if (imageUrl.isBlank()) {
+                    val img = current.selectFirst("img")
+                    if (img != null) {
+                        imageUrl = sequenceOf(
+                            img.absUrl("data-src"),
+                            img.absUrl("data-lazy-src"),
+                            img.absUrl("data-original"),
+                            img.absUrl("src"),
+                            img.absUrl("data-thumb"),
+                            img.absUrl("srcset").substringBefore(",").substringBefore(" ")
+                        ).firstOrNull { it.startsWith("https://") || it.startsWith("http://") }.orEmpty()
+                    }
                 }
+                container = current.parent()
+            }
+
+            val safetyText = (title + " " + href).lowercase()
+            if (blockedTerms.any { safetyText.contains(it) }) continue
+
+            val candidate = SearchResult(title, href, imageUrl)
+            val existing = found[href]
+            // Some cards contain two links to the same post; keep the more
+            // descriptive title and whichever duplicate has a thumbnail.
+            if (existing == null ||
+                (candidate.title.length > existing.title.length) ||
+                (existing.image.isBlank() && candidate.image.isNotBlank())
+            ) {
+                found[href] = candidate
             }
         }
+
         return found.values.take(30)
     }
 
