@@ -211,12 +211,19 @@ class MainActivity : Activity() {
         )
         val ignoredPaths = setOf(
             "tag", "tags", "category", "categories", "author", "page",
-            "wp-content", "wp-admin", "search", "feed"
+            "wp-content", "wp-admin", "search", "feed",
+            "hentai-series", "hentai-list", "top-10", "concerned",
+            "uncensored", "contact"
+        )
+        val ignoredTitles = setOf(
+            "hentai series", "hentai list", "top 10", "concerned",
+            "uncensored", "contact"
         )
 
-        // Search-result links on this site are individual, one-segment post URLs.
-        // Do not depend on a particular WordPress theme's article/card class names.
+        // Only accept links that look like actual content entries, not the
+        // site's one-segment navigation/menu links.
         for (anchor in doc.select("a[href]")) {
+            if (anchor.closest("header, nav, footer, .menu, .navigation, .site-header, .site-footer") != null) continue
             val uri = runCatching { Uri.parse(anchor.absUrl("href")) }.getOrNull() ?: continue
             val host = uri.host?.lowercase().orEmpty()
             if (host != "xanimeporn.com" && host != "www.xanimeporn.com") continue
@@ -232,6 +239,7 @@ class MainActivity : Activity() {
                 anchor.attr("aria-label").trim()
             ).firstOrNull { it.length >= 3 }.orEmpty()
             if (title.isBlank()) continue
+            if (title.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim() in ignoredTitles) continue
 
             // The thumbnail and title can be separate sibling links. Walk up the
             // nearby card containers to locate the image instead of requiring it
