@@ -76,7 +76,7 @@ class MainActivity : Activity() {
 
         val search = EditText(this).apply {
             hint = "Search titles..."; setHintTextColor(muted); setTextColor(Color.WHITE)
-            textSize = 15f; singleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
+            textSize = 15f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
             setPadding(dp(16), 0, dp(16), 0); background = rounded(panel, 16)
             setText(currentQuery)
         }
