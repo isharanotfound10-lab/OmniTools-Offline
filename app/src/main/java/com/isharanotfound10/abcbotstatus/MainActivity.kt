@@ -42,30 +42,36 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val store = SecureTokenStore(this)
-        setContent { BotStatusApp(store) }
+        val repositoryStore = RepositoryStore(this)
+        setContent { BotStatusApp(store, repositoryStore) }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BotStatusApp(store: SecureTokenStore) {
+private fun BotStatusApp(store: SecureTokenStore, repositoryStore: RepositoryStore) {
     val scope = rememberCoroutineScope()
     var token by remember { mutableStateOf(store.read()) }
+    var repositoryUrl by remember { mutableStateOf(repositoryStore.read()) }
+    val repository = remember(repositoryUrl) { parseGitHubRepository(repositoryUrl) }
+    val repositoryLabel = repository?.let { "${it.first}/${it.second}" } ?: "No repository selected"
     var data by remember { mutableStateOf<DashboardData?>(null) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var showTokenDialog by remember { mutableStateOf(token.isBlank()) }
+    var showTokenDialog by remember { mutableStateOf(token.isBlank() || repository == null) }
     var tokenDraft by remember { mutableStateOf("") }
+    var repositoryDraft by remember { mutableStateOf(repositoryUrl) }
     var selectedTab by remember { mutableStateOf("Overview") }
     var confirmRerun by remember { mutableStateOf(false) }
     var rerunning by remember { mutableStateOf(false) }
     var lastRefresh by remember { mutableStateOf("") }
 
     suspend fun refresh() {
+        val selectedRepository = parseGitHubRepository(repositoryUrl) ?: return
         if (token.isBlank()) return
         loading = true
         try {
-            data = GitHubApi(token).loadDashboard()
+            data = GitHubApi(token, selectedRepository.first, selectedRepository.second).loadDashboard()
             error = null
             lastRefresh = "Updated " + nowText()
         } catch (e: Exception) {
@@ -73,8 +79,8 @@ private fun BotStatusApp(store: SecureTokenStore) {
         } finally { loading = false }
     }
 
-    LaunchedEffect(token) {
-        if (token.isNotBlank()) {
+    LaunchedEffect(token, repositoryUrl) {
+        if (token.isNotBlank() && repository != null) {
             while (true) {
                 refresh()
                 delay(20_000)
@@ -92,14 +98,14 @@ private fun BotStatusApp(store: SecureTokenStore) {
                 title = {
                     Column {
                         Text("🤖  BOT STATUS", fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
-                        Text("isharanotfound10-lab / abc", color = Muted, fontSize = 11.sp)
+                        Text(repositoryLabel, color = Muted, fontSize = 11.sp)
                     }
                 },
                 actions = {
                     IconButton(onClick = { scope.launch { refresh() } }) {
                         Icon(Icons.Default.Refresh, "Refresh", tint = Purple)
                     }
-                    IconButton(onClick = { tokenDraft = ""; showTokenDialog = true }) {
+                    IconButton(onClick = { tokenDraft = ""; repositoryDraft = repositoryUrl; showTokenDialog = true }) {
                         Icon(Icons.Default.Settings, "Settings", tint = Purple)
                     }
                 },
@@ -138,7 +144,7 @@ private fun BotStatusApp(store: SecureTokenStore) {
                     "Jobs" -> JobsScreen(data?.jobs.orEmpty())
                     "History" -> HistoryScreen(data?.history.orEmpty())
                     "Artifacts" -> ArtifactsScreen(data?.artifacts.orEmpty())
-                    else -> OverviewScreen(data, loading, lastRefresh, rerunning, onRerun = { if (!rerunning) confirmRerun = true })
+                    else -> OverviewScreen(data, loading, lastRefresh, rerunning, repositoryLabel, onRerun = { if (!rerunning) confirmRerun = true })
                 }
             }
         }
@@ -150,7 +156,17 @@ private fun BotStatusApp(store: SecureTokenStore) {
             title = { Text("Connect GitHub") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Create a fine-grained token for ONLY isharanotfound10-lab/abc with Actions: Read and write and Metadata: Read.", fontSize = 13.sp)
+                    Text("Paste the GitHub repository URL you want to monitor. Example: https://github.com/username/repository", fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = repositoryDraft, onValueChange = { repositoryDraft = it },
+                        label = { Text("GitHub repository URL") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (repositoryDraft.isNotBlank() && parseGitHubRepository(repositoryDraft) == null) {
+                        Text("Enter a valid github.com/owner/repository URL.", color = Red, fontSize = 11.sp)
+                    }
+                    Text("Create a fine-grained token for this repository with Actions: Read and write and Metadata: Read.", fontSize = 13.sp)
                     OutlinedTextField(
                         value = tokenDraft, onValueChange = { tokenDraft = it },
                         label = { Text("GitHub token") }, singleLine = true,
@@ -163,12 +179,15 @@ private fun BotStatusApp(store: SecureTokenStore) {
             },
             confirmButton = {
                 Button(onClick = {
-                    if (tokenDraft.trim().startsWith("github_") || tokenDraft.trim().startsWith("gh")) {
+                    val selectedRepository = parseGitHubRepository(repositoryDraft)
+                    if (selectedRepository != null && tokenDraft.trim().isNotBlank()) {
+                        repositoryStore.write("https://github.com/${selectedRepository.first}/${selectedRepository.second}")
+                        repositoryUrl = "https://github.com/${selectedRepository.first}/${selectedRepository.second}"
                         store.write(tokenDraft.trim())
                         token = tokenDraft.trim()
                         showTokenDialog = false
                     }
-                }, enabled = tokenDraft.trim().isNotBlank()) { Text("Save securely") }
+                }, enabled = parseGitHubRepository(repositoryDraft) != null && tokenDraft.trim().isNotBlank()) { Text("Save securely") }
             },
             dismissButton = {
                 if (token.isNotBlank()) TextButton(onClick = { showTokenDialog = false }) { Text("Cancel") }
@@ -181,7 +200,7 @@ private fun BotStatusApp(store: SecureTokenStore) {
         AlertDialog(
             onDismissRequest = { confirmRerun = false },
             title = { Text("Rerun all jobs?") },
-            text = { Text("This will restart every job in the latest completed workflow run in isharanotfound10-lab/abc.") },
+            text = { Text("This will restart every job in the latest completed workflow run in $repositoryLabel.") },
             confirmButton = {
                 Button(enabled = !rerunning, onClick = {
                     confirmRerun = false
@@ -189,7 +208,8 @@ private fun BotStatusApp(store: SecureTokenStore) {
                         rerunning = true
                         try {
                             val runId = data?.latest?.id ?: throw IllegalStateException("No workflow run found")
-                            GitHubApi(token).rerunAll(runId)
+                            val selectedRepository = parseGitHubRepository(repositoryUrl) ?: throw IllegalStateException("Set a valid repository URL first")
+                            GitHubApi(token, selectedRepository.first, selectedRepository.second).rerunAll(runId)
                             refresh()
                         } catch (e: Exception) { error = e.message ?: "Rerun failed" }
                         finally { rerunning = false }
@@ -203,7 +223,7 @@ private fun BotStatusApp(store: SecureTokenStore) {
 }
 
 @Composable
-private fun OverviewScreen(data: DashboardData?, loading: Boolean, lastRefresh: String, rerunning: Boolean, onRerun: () -> Unit) {
+private fun OverviewScreen(data: DashboardData?, loading: Boolean, lastRefresh: String, rerunning: Boolean, repositoryLabel: String, onRerun: () -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -242,7 +262,7 @@ private fun OverviewScreen(data: DashboardData?, loading: Boolean, lastRefresh: 
         item {
             GlassCard {
                 Text("REPOSITORY", color = Muted, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.5.sp)
-                Text(data?.repo?.fullName ?: "isharanotfound10-lab/abc", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(data?.repo?.fullName ?: repositoryLabel, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 InfoRow("DEFAULT BRANCH", data?.repo?.defaultBranch ?: "—")
                 InfoRow("VISIBILITY", data?.repo?.visibility ?: "—")
                 InfoRow("STARS / FORKS", data?.repo?.let { "${it.stars} / ${it.forks}" } ?: "—")
@@ -364,3 +384,20 @@ private fun formatTime(value: String): String = try {
     DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm").withZone(ZoneId.systemDefault()).format(Instant.parse(value))
 } catch (_: Exception) { value }
 
+
+ 
+private fun parseGitHubRepository(input: String): Pair<String, String>? {
+    val cleaned = input.trim().removeSuffix(".git").trimEnd('/')
+    val match = Regex("^(?:https?://)?(?:www\\.)?github\\.com/([^/]+)/([^/?#]+)(?:[/?#].*)?$", RegexOption.IGNORE_CASE).matchEntire(cleaned)
+        ?: return null
+    val owner = match.groupValues[1]
+    val repository = match.groupValues[2]
+    if (owner.isBlank() || repository.isBlank() || owner == "." || repository == ".") return null
+    return owner to repository
+}
+
+private class RepositoryStore(context: android.content.Context) {
+    private val prefs = context.getSharedPreferences("repository_settings", android.content.Context.MODE_PRIVATE)
+    fun read(): String = prefs.getString("repository_url", "") ?: ""
+    fun write(value: String) { prefs.edit().putString("repository_url", value).apply() }
+}
