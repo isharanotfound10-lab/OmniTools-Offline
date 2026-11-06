@@ -188,7 +188,7 @@ private fun BotStatusApp(store: SecureTokenStore) {
                     scope.launch {
                         rerunning = true
                         try {
-                            val runId = data?.latest?.id ?: error("No workflow run found")
+                            val runId = data?.latest?.id ?: throw IllegalStateException("No workflow run found")
                             GitHubApi(token).rerunAll(runId)
                             refresh()
                         } catch (e: Exception) { error = e.message ?: "Rerun failed" }
