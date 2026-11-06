@@ -1,7 +1,7 @@
 name: XAnime Android Build
 on:
   push:
-    branches: [main, xanime-app, episode-grouping]
+    branches: [main, xanime-app, episode-grouping, episode-grouping-v2]
   pull_request:
     branches: [main]
   workflow_dispatch:
