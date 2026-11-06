@@ -47,7 +47,7 @@ class MainActivity : Activity() {
 
     data class SearchResult(val title: String, val link: String, val image: String)
     data class AnimeGroup(val title: String, val episodes: List<SearchResult>)
-    data class EpisodeDetails(val image: String, val download480: String)
+    data class EpisodeDetails(val image: String, val download480: String, val episodes: List<SearchResult> = emptyList())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -300,7 +300,7 @@ class MainActivity : Activity() {
         // "Series episode 03", "Series - EP03", "Series_Episode_3",
         // and titles with a trailing subtitle or punctuation.
         val pattern = Regex(
-            """(?i)^(.+?)[\\s._\\-–—:|()\\[\\]#]*(?:episodes?|ep|e)[\\s._\\-–—:|()\\[\\]#]*0*(\\d+)(?:\\s*[-–—|:].*)?$"""
+            """(?i)^(.+?)[\s._\-–—:|()\[\]#]*(?:episodes?|ep|e)[\s._\-–—:|()\[\]#]*0*(\d+)(?:\s*[-–—|:].*)?$"""
         )
         val match = pattern.find(clean) ?: return null
         val series = cleanEpisodeText(match.groupValues[1]).trimEnd('-', '_', '.', ' ', ':', '|')
@@ -444,20 +444,34 @@ class MainActivity : Activity() {
                         .firstOrNull { it.startsWith("http") }
                 }.firstOrNull().orEmpty()
 
-            val candidates = LinkedHashSet<String>()
-            for (element in doc.select("a[href], source[src], video[src], video source[src]")) {
-                val url = when (element.tagName().lowercase()) {
-                    "a" -> element.attr("abs:href")
-                    else -> element.attr("abs:src")
-                }
-                if (url.startsWith("http")) {
-                    val description = (element.text() + " " + element.attr("title") + " " +
-                        element.attr("label") + " " + url).lowercase()
-                    if (description.contains("480p") || description.contains("480")) candidates.add(url)
-                }
+            val episodeLinks = LinkedHashMap<String, SearchResult>()
+            doc.selectFirst("div[data-title=Episodes]")?.select("a[href]")?.forEach { anchor ->
+                val href = anchor.absUrl("href").trim()
+                val parsed = runCatching { Uri.parse(href) }.getOrNull() ?: return@forEach
+                val host = parsed.host?.lowercase().orEmpty()
+                if ((host != "xanimeporn.com" && host != "www.xanimeporn.com") ||
+                    parsed.path.isNullOrBlank() || parsed.path == "/" ||
+                    parsed.query != null || parsed.fragment != null
+                ) return@forEach
+                val title = sequenceOf(anchor.text().trim(), anchor.attr("title").trim(), anchor.attr("aria-label").trim())
+                    .firstOrNull { it.isNotBlank() }
+                    ?: parsed.lastPathSegment.orEmpty().replace('-', ' ').replace('_', ' ')
+                if (title.isBlank()) return@forEach
+                val thumb = anchor.selectFirst("img")?.let { img ->
+                    sequenceOf(img.attr("abs:data-src"), img.attr("abs:data-lazy-src"), img.attr("abs:src"))
+                        .firstOrNull { it.startsWith("http") }.orEmpty()
+                }.orEmpty()
+                episodeLinks[href] = SearchResult(title, href, thumb)
             }
-            EpisodeDetails(image, candidates.firstOrNull { it.matches(Regex("(?i)^https?://.+\\.(mp4|m3u8|mkv)(?:[?#].*)?$")) }
-                ?: candidates.firstOrNull().orEmpty())
+
+            val downloadsSection = doc.selectFirst("div[data-title=Downloads]")
+            val download480 = downloadsSection?.select("a[href]")?.firstOrNull { anchor ->
+                val label = listOf(anchor.text(), anchor.attr("title"), anchor.attr("aria-label"),
+                    anchor.attr("data-title"), anchor.attr("data-quality")).joinToString(" ").lowercase()
+                Regex("""\b480\s*p\b""").containsMatchIn(label)
+            }?.attr("abs:href")?.takeIf { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
+
+            EpisodeDetails(image, download480, episodeLinks.values.toList())
         } catch (_: Exception) {
             EpisodeDetails("", "")
         }
