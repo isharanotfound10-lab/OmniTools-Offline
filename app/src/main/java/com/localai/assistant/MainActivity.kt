@@ -2,31 +2,59 @@ package com.xanime.app
 
 import android.app.Activity
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.content.Intent
+import android.net.Uri
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import java.util.concurrent.Executors
+import org.jsoup.Jsoup
 
 class MainActivity : Activity() {
     private val bg = Color.rgb(10, 7, 22)
     private val panel = Color.rgb(27, 18, 48)
     private val accent = Color.rgb(178, 91, 255)
     private val muted = Color.rgb(174, 162, 196)
+    private val worker = Executors.newFixedThreadPool(3)
+    private val main = Handler(Looper.getMainLooper())
     private var currentPage = 1
     private var currentQuery = ""
+    private lateinit var results: LinearLayout
+    private lateinit var status: TextView
+    private lateinit var pageLabel: TextView
+    private lateinit var previous: Button
+    private lateinit var next: Button
+    private lateinit var searchBox: EditText
+    private lateinit var progress: ProgressBar
+
+    data class SearchResult(val title: String, val link: String, val image: String)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = bg
         window.navigationBarColor = bg
         if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("adult_confirmed", false)) showAgeGate() else showHome()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        worker.shutdownNow()
     }
 
     private fun baseLayout() = LinearLayout(this).apply {
@@ -70,51 +98,170 @@ class MainActivity : Activity() {
         })
         val titleBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
         titleBox.addView(label("XANIME", 22, Color.WHITE, true))
-        titleBox.addView(label("ADULT ANIMATION CATALOG", 10, muted, true))
+        titleBox.addView(label("SEARCH XANIMEPORN.COM", 10, muted, true))
         header.addView(titleBox, LinearLayout.LayoutParams(0, -2, 1f))
         root.addView(header)
 
-        val search = EditText(this).apply {
-            hint = "Search titles..."; setHintTextColor(muted); setTextColor(Color.WHITE)
+        searchBox = EditText(this).apply {
+            hint = "Search anything..."; setHintTextColor(muted); setTextColor(Color.WHITE)
             textSize = 15f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
             setPadding(dp(16), 0, dp(16), 0); background = rounded(panel, 16)
             setText(currentQuery)
         }
-        root.addView(search, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(26) })
-        root.addView(actionButton("SEARCH") {
-            currentQuery = search.text.toString().trim(); currentPage = 1; showHome()
-        }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
-        search.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                currentQuery = search.text.toString().trim(); currentPage = 1; showHome(); true
-            } else false
+        root.addView(searchBox, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(26) })
+        root.addView(actionButton("SEARCH") { startSearch(true) },
+            LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+        searchBox.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) { startSearch(true); true } else false
         }
 
+        status = label(if (currentQuery.isBlank()) "Search XAnimePorn" else "Results for: $currentQuery", 15, muted, true).apply {
+            setPadding(0, dp(20), 0, dp(10))
+        }
+        root.addView(status)
+        progress = ProgressBar(this).apply { visibility = View.GONE }
+        root.addView(progress, LinearLayout.LayoutParams(-2, dp(42)))
         val scroll = ScrollView(this)
-        val content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(24), 0, dp(12)) }
-        content.addView(label(if (currentQuery.isBlank()) "Discover" else "Search: $currentQuery", 21, Color.WHITE, true))
-        content.addView(label("Browse verified adult-only catalogue entries.", 13, muted, false).apply {
-            setPadding(0, dp(10), 0, dp(18))
-        })
-        content.addView(TextView(this).apply {
-            text = "CATALOG NOT CONNECTED\n\nThe target site does not provide a reliable adult-only verification signal for every entry. XAnime will only display entries that a trusted source explicitly verifies as adult-only."
-            textSize = 14f; setTextColor(muted); gravity = Gravity.CENTER
-            setPadding(dp(20), dp(26), dp(20), dp(26)); background = rounded(panel, 20)
-        }, LinearLayout.LayoutParams(-1, -2))
-        scroll.addView(content)
+        results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(12)) }
+        if (currentQuery.isBlank()) {
+            results.addView(label("Enter a keyword above to search the website.", 14, muted, false).apply {
+                gravity = Gravity.CENTER; setPadding(dp(18), dp(32), dp(18), dp(32)); background = rounded(panel, 18)
+            })
+        }
+        scroll.addView(results)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-
-        val pages = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        pages.addView(actionButton("‹  PREVIOUS", false) {
-            if (currentPage > 1) { currentPage--; showHome() }
-        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(8) })
-        pages.addView(label("PAGE $currentPage", 12, muted, true).apply { gravity = Gravity.CENTER },
-            LinearLayout.LayoutParams(dp(82), dp(44)))
-        pages.addView(actionButton("NEXT  ›", false) {
-            currentPage++; showHome()
-        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(8) })
+        val pages = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        previous = actionButton("‹ PREVIOUS", false) { if (currentPage > 1) { currentPage--; runSearch() } }
+        next = actionButton("NEXT ›", false) { currentPage++; runSearch() }
+        previous.isEnabled = currentPage > 1
+        pages.addView(previous, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(8) })
+        pageLabel = label("PAGE $currentPage", 12, muted, true).apply { gravity = Gravity.CENTER }
+        pages.addView(pageLabel, LinearLayout.LayoutParams(dp(82), dp(44)))
+        pages.addView(next, LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(8) })
         root.addView(pages)
         setContentView(root)
+        if (currentQuery.isNotBlank()) runSearch()
+    }
+
+    private fun startSearch(reset: Boolean) {
+        val q = searchBox.text.toString().trim()
+        if (q.isBlank()) {
+            status.text = "Type something to search."
+            return
+        }
+        currentQuery = q
+        if (reset) currentPage = 1
+        runSearch()
+    }
+
+    private fun runSearch() {
+        if (currentQuery.isBlank()) return
+        status.text = "Searching xanimeporn.com..."
+        progress.visibility = View.VISIBLE
+        results.removeAllViews()
+        previous.isEnabled = currentPage > 1
+        pageLabel.text = "PAGE $currentPage"
+        next.isEnabled = false
+        worker.execute {
+            try {
+                val encoded = URLEncoder.encode(currentQuery, "UTF-8")
+                val address = "https://xanimeporn.com/?s=$encoded&paged=$currentPage"
+                val connection = (URL(address).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 20000
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+                    setRequestProperty("Accept", "text/html,application/xhtml+xml")
+                }
+                val html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                connection.disconnect()
+                val doc = Jsoup.parse(html, address)
+                val parsed = parseResults(doc)
+                main.post {
+                    progress.visibility = View.GONE
+                    if (parsed.isEmpty()) {
+                        status.text = "No results found"
+                        results.addView(label("No matching results were found. Try another keyword.", 14, muted, false).apply {
+                            gravity = Gravity.CENTER; setPadding(dp(18), dp(30), dp(18), dp(30)); background = rounded(panel, 18)
+                        })
+                    } else {
+                        status.text = "${parsed.size} results for: $currentQuery"
+                        parsed.forEach { addResultCard(it) }
+                        next.isEnabled = parsed.size >= 10
+                    }
+                }
+            } catch (e: Exception) {
+                main.post {
+                    progress.visibility = View.GONE
+                    status.text = "Search failed"
+                    results.removeAllViews()
+                    results.addView(label("Couldn't connect to xanimeporn.com. Check your internet connection and try again.\n\n${e.javaClass.simpleName}", 14, muted, false).apply {
+                        gravity = Gravity.CENTER; setPadding(dp(18), dp(30), dp(18), dp(30)); background = rounded(panel, 18)
+                    })
+                }
+            }
+        }
+    }
+
+    private fun parseResults(doc: org.jsoup.nodes.Document): List<SearchResult> {
+        val candidates = doc.select("article, .post, .type-post, .type-series, .hentry")
+        val found = LinkedHashMap<String, SearchResult>()
+        for (item in candidates) {
+            val heading = item.selectFirst("h1 a, h2 a, h3 a, .entry-title a, .post-title a, a[rel=bookmark]")
+                ?: item.selectFirst("a[href]") ?: continue
+            val href = heading.absUrl("href").ifBlank { continue }
+            val title = heading.text().trim().ifBlank { heading.attr("title").trim() }
+            if (title.isBlank() || href == "https://xanimeporn.com/") continue
+            val img = item.selectFirst("img")
+            val image = img?.let {
+                listOf(it.absUrl("src"), it.absUrl("data-src"), it.absUrl("data-lazy-src"), it.absUrl("srcset").substringBefore(" "))
+                    .firstOrNull { value -> value.startsWith("https://") || value.startsWith("http://") }.orEmpty()
+            }.orEmpty()
+            found[href] = SearchResult(title, href, image)
+        }
+        if (found.isEmpty()) {
+            for (a in doc.select("a[href]")) {
+                val title = a.text().trim()
+                val href = a.absUrl("href")
+                if (title.length > 3 && href.contains("xanimeporn.com") && href != "https://xanimeporn.com/") {
+                    val img = a.selectFirst("img")
+                    val image = img?.absUrl("src").orEmpty()
+                    if (image.isNotBlank()) found[href] = SearchResult(title, href, image)
+                }
+            }
+        }
+        return found.values.take(30)
+    }
+
+    private fun addResultCard(item: SearchResult) {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10)); background = rounded(panel, 18)
+            isClickable = true; isFocusable = true
+            setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.link))) }
+        }
+        val image = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = rounded(Color.rgb(48, 35, 68), 12)
+            layoutParams = LinearLayout.LayoutParams(dp(104), dp(76))
+        }
+        card.addView(image)
+        val title = label(item.title, 14, Color.WHITE, true).apply {
+            maxLines = 3; setPadding(dp(12), 0, dp(4), 0)
+        }
+        card.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+        results.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        if (item.image.isNotBlank()) worker.execute {
+            try {
+                val c = (URL(item.image).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10000; readTimeout = 10000
+                    setRequestProperty("User-Agent", "Mozilla/5.0")
+                }
+                val bitmap = c.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
+                c.disconnect()
+                if (bitmap != null) main.post { if (!isFinishing) image.setImageBitmap(bitmap) }
+            } catch (_: Exception) { }
+        }
     }
 
     private fun actionButton(text: String, primary: Boolean = true, action: () -> Unit) =
