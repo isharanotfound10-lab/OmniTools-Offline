@@ -133,8 +133,8 @@ class MainActivity : Activity() {
 
         web = WebView(this).apply {
             setBackgroundColor(bg)
-            settings.javaScriptEnabled = false
-            settings.domStorageEnabled = false
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
             settings.cacheMode = WebSettings.LOAD_DEFAULT
             settings.safeBrowsingEnabled = true
             webViewClient = object : WebViewClient() {
