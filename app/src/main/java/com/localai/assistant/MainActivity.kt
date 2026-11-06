@@ -296,7 +296,7 @@ class MainActivity : Activity() {
 
     private fun parseEpisodeTitle(value: String): ParsedEpisodeTitle? {
         val clean = cleanEpisodeText(value)
-        val match = Regex("(?i)^(.*?)[\\s._-]+(?:episode|ep|e)[\\s._-]*0*(\d+)\\s*[.!_-]*$").find(clean) ?: return null
+        val match = Regex("(?i)^(.*?)[\\s._-]+(?:episode|ep|e)[\\s._-]*0*(\\d+)\\s*[.!_-]*$").find(clean) ?: return null
         val series = match.groupValues[1].trim().trimEnd('-', '_', '.', ' ')
         val number = match.groupValues[2].toIntOrNull() ?: return null
         if (series.isBlank()) return null
