@@ -1,9 +1,16 @@
-# Local AI
+# PSearch
 
-Native Android assistant starter. This repository is being repurposed from OmniTools-Offline into Local AI.
+PSearch is a native Android app for searching publicly indexed video pages by code or title.
 
-Current starter: purple Android chat UI, voice-input hook, floating orb foundation, and GitHub Actions debug APK build.
+## Features
+- Search all supported domains or filter to Pornhub, xHamster, and Eporner.
+- Uses Google's public video search results in an in-app browser.
+- Shows thumbnails when the search provider makes them available.
+- Opens results on their original websites.
+- 18+ confirmation before use.
 
-Important: the on-device language model, offline speech engine, screen-reading integration, and real device actions are not connected yet. They must be implemented and tested in follow-up steps. This is an Android APK project, not a website.
+## Limitations
+PSearch does not host, download, or proxy videos. Search coverage, result ranking, thumbnails, and page availability are controlled by the search provider and source websites. This app does not bypass logins, paywalls, age checks, or other access controls.
 
-Designed to keep the UI lightweight. Phones with around 1 GB available RAM may struggle with a useful local language model, so model integration must be selected and tested carefully.
+## Build
+Run `gradle assembleDebug`. GitHub Actions uploads `PSearch-debug-apk`.
