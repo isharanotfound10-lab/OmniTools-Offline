@@ -16,8 +16,6 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-private const val OWNER = "isharanotfound10-lab"
-private const val REPO = "abc"
 private const val BASE = "https://api.github.com"
 
 data class RunInfo(val id: Long, val number: Int, val name: String, val status: String, val conclusion: String?, val event: String, val branch: String, val sha: String, val createdAt: String, val updatedAt: String, val url: String)
@@ -26,7 +24,7 @@ data class RepoInfo(val fullName: String, val defaultBranch: String, val visibil
 data class ArtifactInfo(val name: String, val sizeMb: String, val expired: Boolean, val runNumber: Int)
 data class DashboardData(val latest: RunInfo?, val jobs: List<JobInfo>, val history: List<RunInfo>, val artifacts: List<ArtifactInfo>, val repo: RepoInfo?)
 
-class GitHubApi(private val token: String) {
+class GitHubApi(private val token: String, private val owner: String, private val repo: String) {
     private suspend fun get(path: String): JSONObject = request(path, "GET")
     private suspend fun request(path: String, method: String, body: JSONObject? = null): JSONObject = withContext(Dispatchers.IO) {
         val connection = (URL(BASE + path).openConnection() as HttpURLConnection).apply {
@@ -54,7 +52,7 @@ class GitHubApi(private val token: String) {
     }
 
     suspend fun loadDashboard(): DashboardData {
-        val root = "/repos/$OWNER/$REPO"
+        val root = "/repos/$owner/$repo"
         val repoJson = get(root)
         val runsJson = get("$root/actions/runs?per_page=15")
         val runsArray = runsJson.optJSONArray("workflow_runs") ?: JSONArray()
@@ -74,7 +72,7 @@ class GitHubApi(private val token: String) {
     }
 
     suspend fun rerunAll(runId: Long) {
-        request("/repos/$OWNER/$REPO/actions/runs/$runId/rerun", "POST", JSONObject())
+        request("/repos/$owner/$repo/actions/runs/$runId/rerun", "POST", JSONObject())
     }
 
     private fun parseRun(o: JSONObject) = RunInfo(
