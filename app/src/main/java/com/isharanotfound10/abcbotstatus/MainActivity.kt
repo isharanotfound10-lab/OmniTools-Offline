@@ -291,7 +291,7 @@ private fun JobsScreen(jobs: List<JobInfo>) {
                 job.steps.forEach { step ->
                     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(step.first, color = Muted, fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(step.second, color = statusColor("completed", step.second.lowercase()), fontSize = 10.sp)
+                        Text(stepStatusLabel(step.second), color = stepStatusColor(step.second), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -376,6 +376,29 @@ private fun statusColor(status: String?, conclusion: String?): Color = when {
     status in listOf("queued", "requested", "waiting", "pending") -> Amber
     status == "completed" && conclusion == "success" -> Green
     status == "completed" -> Red
+    else -> Muted
+}
+
+private fun stepStatusLabel(state: String): String = when (state.lowercase()) {
+    "in_progress" -> "Running"
+    "queued", "pending", "waiting", "requested" -> "Queued"
+    "completed" -> "Completed"
+    "success" -> "Success"
+    "failure" -> "Failed"
+    "cancelled" -> "Cancelled"
+    "skipped" -> "Skipped"
+    "timed_out" -> "Timed out"
+    "action_required" -> "Action required"
+    "neutral" -> "Neutral"
+    "stale" -> "Stale"
+    "unknown", "null", "" -> "Waiting"
+    else -> state.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
+
+private fun stepStatusColor(state: String): Color = when (state.lowercase()) {
+    "in_progress", "success", "completed" -> Green
+    "queued", "pending", "waiting", "requested" -> Amber
+    "failure", "timed_out", "action_required" -> Red
     else -> Muted
 }
 
