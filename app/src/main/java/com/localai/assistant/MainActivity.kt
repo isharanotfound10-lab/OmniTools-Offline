@@ -181,16 +181,23 @@ class MainActivity : Activity() {
                 connection.disconnect()
                 val doc = Jsoup.parse(html, address)
                 val parsed = parseResults(doc)
+                val enrichedGroups = groupResults(parsed).map { group ->
+                    val firstEpisode = group.episodes.firstOrNull()
+                    if (firstEpisode == null) group else {
+                        val episodeIndex = fetchEpisodeDetails(firstEpisode.link)
+                        group.copy(episodes = episodeIndex.episodes.ifEmpty { group.episodes })
+                    }
+                }
                 main.post {
                     progress.visibility = View.GONE
-                    if (parsed.isEmpty()) {
+                    if (enrichedGroups.isEmpty()) {
                         status.text = "No results found"
                         results.addView(label("No matching results were found. Try another keyword.", 14, muted, false).apply {
                             gravity = Gravity.CENTER; setPadding(dp(18), dp(30), dp(18), dp(30)); background = rounded(panel, 18)
                         })
                     } else {
-                        status.text = "${parsed.size} results for: $currentQuery"
-                        groupResults(parsed).forEach { addResultCard(it) }
+                        status.text = "${enrichedGroups.size} results for: $currentQuery"
+                        enrichedGroups.forEach { addResultCard(it) }
                         next.isEnabled = parsed.size >= 10
                     }
                 }
@@ -228,6 +235,12 @@ class MainActivity : Activity() {
         // site's one-segment navigation/menu links.
         for (anchor in doc.select("a[href]")) {
             if (anchor.closest("header, nav, footer, .menu, .navigation, .site-header, .site-footer") != null) continue
+            val taxonomyMarker = (anchor.className() + " " + anchor.attr("rel") + " " +
+                (anchor.parent()?.className().orEmpty()) + " " +
+                (anchor.parent()?.parent()?.className().orEmpty())).lowercase()
+            if (taxonomyMarker.contains("tag") || taxonomyMarker.contains("category") ||
+                taxonomyMarker.contains("cat-links") || anchor.attr("rel").contains("tag", ignoreCase = true)
+            ) continue
             val uri = runCatching { Uri.parse(anchor.absUrl("href")) }.getOrNull() ?: continue
             val host = uri.host?.lowercase().orEmpty()
             if (host != "xanimeporn.com" && host != "www.xanimeporn.com") continue
@@ -405,7 +418,7 @@ class MainActivity : Activity() {
                 background = rounded(panel, 16)
             }
             val parsedNumber = episodeIdentityNumber(episode, index + 1)
-            row.addView(label("Episode \${parsedNumber.toString().padStart(2, '0')}", 15, Color.WHITE, true))
+            row.addView(label("Episode ${parsedNumber.toString().padStart(2, '0')}", 15, Color.WHITE, true))
             val thumb = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 background = rounded(Color.rgb(48, 35, 68), 12)
