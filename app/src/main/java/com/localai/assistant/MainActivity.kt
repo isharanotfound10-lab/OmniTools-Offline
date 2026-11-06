@@ -286,24 +286,51 @@ class MainActivity : Activity() {
         return found.values.take(30)
     }
 
+    private data class ParsedEpisodeTitle(val seriesTitle: String, val number: Int)
+
+    private fun cleanEpisodeText(value: String): String =
+        value.replace(Regex("[\u200B-\u200D\uFEFF]"), "")
+            .replace('\u00A0', ' ')
+            .replace(Regex("\s+"), " ")
+            .trim()
+
+    private fun parseEpisodeTitle(value: String): ParsedEpisodeTitle? {
+        val clean = cleanEpisodeText(value)
+        val match = Regex("(?i)^(.*?)[\s._-]+(?:episode|ep|e)[\s._-]*0*(\d+)\s*[.!_-]*$").find(clean) ?: return null
+        val series = match.groupValues[1].trim().trimEnd('-', '_', '.', ' ')
+        val number = match.groupValues[2].toIntOrNull() ?: return null
+        if (series.isBlank()) return null
+        return ParsedEpisodeTitle(series, number)
+    }
+
+    private fun episodeIdentity(item: SearchResult): ParsedEpisodeTitle? {
+        parseEpisodeTitle(item.title)?.let { return it }
+        val slug = runCatching { Uri.parse(item.link).lastPathSegment.orEmpty() }.getOrDefault("")
+            .replace('-', ' ').replace('_', ' ')
+        return parseEpisodeTitle(slug)
+    }
+
     private fun groupResults(items: List<SearchResult>): List<AnimeGroup> {
-        val groups = LinkedHashMap<String, MutableList<SearchResult>>()
-        val episodeSuffix = Regex("(?i)\\s*[-_ ]*(?:episode|ep|e)\\s*0*\\d+\\s*$")
+        val groups = LinkedHashMap<String, MutableList<Pair<SearchResult, Int>>>()
         items.forEach { item ->
-            val base = item.title.replace(episodeSuffix, "").trim().ifBlank { item.title }
-            groups.getOrPut(base.lowercase()) { mutableListOf() }.add(item)
+            val parsed = episodeIdentity(item)
+            val seriesTitle = parsed?.seriesTitle ?: cleanEpisodeText(item.title)
+            val number = parsed?.number ?: Int.MAX_VALUE
+            val key = seriesTitle.lowercase().replace(Regex("[^\p{L}\p{N}]+"), " ").trim()
+            groups.getOrPut(key.ifBlank { item.link.lowercase() }) { mutableListOf() }.add(item to number)
         }
-        return groups.values.map { episodes ->
-            val first = episodes.first()
-            val title = first.title.replace(episodeSuffix, "").trim().ifBlank { first.title }
-            AnimeGroup(title, episodes.sortedBy { episodeNumber(it.title) })
+        return groups.values.map { entries ->
+            val first = entries.first()
+            val title = episodeIdentity(first.first)?.seriesTitle ?: cleanEpisodeText(first.first.title)
+            AnimeGroup(title, entries.sortedBy { it.second }.map { it.first })
         }
     }
 
-    private fun episodeNumber(title: String): Int {
-        val match = Regex("(?i)(?:episode|ep|e)\\s*0*(\\d+)\\s*$").find(title)
-        return match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE
-    }
+    private fun episodeIdentityNumber(item: SearchResult, fallback: Int): Int =
+        episodeIdentity(item)?.number ?: fallback
+
+    private fun episodeCountLabel(count: Int): String =
+        count.toString() + (if (count == 1) " episode" else " episodes")
 
     private fun addResultCard(group: AnimeGroup) {
         val card = LinearLayout(this).apply {
@@ -320,7 +347,7 @@ class MainActivity : Activity() {
         card.addView(image)
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(4), 0) }
         info.addView(label(group.title, 15, Color.WHITE, true).apply { maxLines = 2 })
-        info.addView(label("${group.episodes.size} ${if (group.episodes.size == 1) "episode" else "episodes"}", 12, muted, false).apply {
+        info.addView(label(episodeCountLabel(group.episodes.size), 12, muted, false).apply {
             setPadding(0, dp(6), 0, 0)
         })
         card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
@@ -336,7 +363,7 @@ class MainActivity : Activity() {
         root.addView(label(group.title, 22, Color.WHITE, true).apply {
             setPadding(0, 0, 0, dp(6))
         })
-        root.addView(label("${group.episodes.size} episodes", 13, muted, false).apply {
+        root.addView(label(episodeCountLabel(group.episodes.size), 13, muted, false).apply {
             setPadding(0, 0, 0, dp(18))
         })
         val scroll = ScrollView(this)
@@ -351,7 +378,8 @@ class MainActivity : Activity() {
                 setPadding(dp(12), dp(12), dp(12), dp(12))
                 background = rounded(panel, 16)
             }
-            row.addView(label("Episode ${(index + 1).toString().padStart(2, '0')}", 15, Color.WHITE, true))
+            val actualEpisodeNumber = episodeIdentityNumber(episode, index + 1)
+            row.addView(label("Episode ${actualEpisodeNumber.toString().padStart(2, '0')}", 15, Color.WHITE, true))
             val thumb = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 background = rounded(Color.rgb(48, 35, 68), 12)
