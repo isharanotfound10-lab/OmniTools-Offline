@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -97,7 +99,7 @@ private fun BotStatusApp(store: SecureTokenStore, repositoryStore: RepositorySto
             TopAppBar(
                 title = {
                     Column {
-                        Text("🤖  BOT STATUS", fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
+                        Text("ASITHA-MD BOT", fontWeight = FontWeight.Black, letterSpacing = 1.4.sp)
                         Text(repositoryLabel, color = Muted, fontSize = 11.sp)
                     }
                 },
@@ -153,10 +155,18 @@ private fun BotStatusApp(store: SecureTokenStore, repositoryStore: RepositorySto
     if (showTokenDialog) {
         AlertDialog(
             onDismissRequest = { if (token.isNotBlank()) showTokenDialog = false },
-            title = { Text("Connect GitHub") },
+            title = { Text("Connect Asitha-MD BOT") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Paste the GitHub repository URL you want to monitor. Example: https://github.com/username/repository", fontSize = 13.sp)
+                Column(
+                    modifier = Modifier.heightIn(max = 540.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("1. REPOSITORY LINK", color = Purple, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp)
+                    Text("Paste the link of the GitHub repository whose Actions you want to monitor. It must look exactly like this:", fontSize = 13.sp)
+                    Surface(color = Panel2, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        Text("https://github.com/USERNAME/REPOSITORY", color = Color(0xFFBFE8FF), fontSize = 12.sp, modifier = Modifier.padding(10.dp))
+                    }
+                    Text("Replace USERNAME with the GitHub account/owner and REPOSITORY with the repository name. Example: https://github.com/octocat/hello-world", color = Muted, fontSize = 11.sp)
                     OutlinedTextField(
                         value = repositoryDraft, onValueChange = { repositoryDraft = it },
                         label = { Text("GitHub repository URL") }, singleLine = true,
@@ -164,17 +174,30 @@ private fun BotStatusApp(store: SecureTokenStore, repositoryStore: RepositorySto
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (repositoryDraft.isNotBlank() && parseGitHubRepository(repositoryDraft) == null) {
-                        Text("Enter a valid github.com/owner/repository URL.", color = Red, fontSize = 11.sp)
+                        Text("Invalid link. Use https://github.com/USERNAME/REPOSITORY", color = Red, fontSize = 11.sp)
                     }
-                    Text("Create a fine-grained token for this repository with Actions: Read and write and Metadata: Read.", fontSize = 13.sp)
+                    HorizontalDivider(color = Color(0xFF594A78).copy(alpha = 0.5f))
+                    Text("2. CREATE A FINE-GRAINED TOKEN", color = Purple, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp)
+                    Text("1. Open GitHub and sign in to your account.\n2. Go to Settings → Developer settings → Personal access tokens → Fine-grained tokens.\n3. Tap Generate new token.\n4. Give it a name, choose an expiry, and select your account as the resource owner.\n5. Under Repository access, choose Only select repositories, then select the repository entered above.\n6. Under Repository permissions, set the permissions below, then generate and copy the token.", fontSize = 12.sp, lineHeight = 18.sp)
+                    Text("Open GitHub token settings", color = Color(0xFFBFE8FF), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text("https://github.com/settings/personal-access-tokens/new", color = Muted, fontSize = 11.sp)
+                    Surface(color = Panel2, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("REQUIRED PERMISSIONS", color = Purple, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            Text("• Actions — Read and write", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("• Metadata — Read-only (GitHub requires this)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Do not grant access to all repositories or any extra permissions. Actions write access is needed for the Rerun all jobs button.", color = Muted, fontSize = 11.sp)
+                        }
+                    }
+                    Text("3. PASTE YOUR TOKEN", color = Purple, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp)
                     OutlinedTextField(
                         value = tokenDraft, onValueChange = { tokenDraft = it },
-                        label = { Text("GitHub token") }, singleLine = true,
+                        label = { Text("Fine-grained personal access token") }, singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    Text("Token setup: github.com/settings/personal-access-tokens/new", color = Muted, fontSize = 11.sp)
+                    Text("Your token is stored encrypted on this device. Never send it to anyone or include it in screenshots.", color = Muted, fontSize = 11.sp)
                 }
             },
             confirmButton = {
@@ -233,7 +256,7 @@ private fun OverviewScreen(data: DashboardData?, loading: Boolean, lastRefresh: 
         }
         item {
             GlassCard {
-                Text("🤖  BOT STATUS", fontSize = 19.sp, fontWeight = FontWeight.Black)
+                Text("ASITHA-MD BOT", fontSize = 19.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.height(12.dp))
                 val run = data?.latest
                 Row(verticalAlignment = Alignment.CenterVertically) {
