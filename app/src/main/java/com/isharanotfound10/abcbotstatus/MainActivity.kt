@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -156,98 +159,194 @@ private fun BotStatusApp(store: SecureTokenStore, repositoryStore: RepositorySto
     }
 
     if (showTokenDialog) {
-        AlertDialog(
+        Dialog(
             onDismissRequest = { if (token.isNotBlank()) showTokenDialog = false },
-            title = {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text("ASITHA-MD BOT", fontWeight = FontWeight.Black, letterSpacing = 1.2.sp)
-                    Text("Monitor • Manage • Rerun", color = Purple, fontSize = 12.sp)
-                }
-            },
-            text = {
-                Column(
-                    modifier = Modifier.heightIn(max = 540.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = Bg
+            ) {
+                Box(
+                    Modifier.fillMaxSize().background(
+                        Brush.linearGradient(listOf(Color(0xFF02010B), Color(0xFF100020), Color(0xFF03010D)))
+                    )
                 ) {
-                    Text("GITHUB REPOSITORY URL", color = Purple, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp)
-                    Text("Paste the repository you want to monitor.", fontSize = 13.sp)
-                    Surface(color = Panel2, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
-                        Text("https://github.com/USERNAME/REPOSITORY", color = Color(0xFFBFE8FF), fontSize = 12.sp, modifier = Modifier.padding(10.dp))
-                    }
-                    Text("Replace USERNAME with the GitHub account/owner and REPOSITORY with the repository name. Example: https://github.com/octocat/hello-world", color = Muted, fontSize = 11.sp)
-                    OutlinedTextField(
-                        value = repositoryDraft, onValueChange = { repositoryDraft = it },
-                        label = { Text("GitHub repository URL") }, singleLine = true,
-                        textStyle = TextStyle(color = Color.White),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                            cursorColor = Purple, focusedLabelColor = Purple,
-                            unfocusedLabelColor = Muted
-                        ),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (repositoryDraft.isNotBlank() && parseGitHubRepository(repositoryDraft) == null) {
-                        Text("Invalid link. Use https://github.com/USERNAME/REPOSITORY", color = Red, fontSize = 11.sp)
-                    }
-                    HorizontalDivider(color = Color(0xFF594A78).copy(alpha = 0.5f))
-                    Text("HOW TO GET YOUR TOKEN", color = Purple, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp)
-                    Text(
-                        "1. Open GitHub token settings.\n2. Choose Generate new token → Fine-grained token.\n3. Select Only select repositories and choose the repository above.\n4. Set the permissions shown below, generate the token, then copy it.",
-                        fontSize = 12.sp, lineHeight = 18.sp
-                    )
-                    Text("github.com/settings/personal-access-tokens/new", color = Color(0xFFBFE8FF), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    Surface(color = Panel2, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("REQUIRED PERMISSIONS", color = Purple, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            Text("• Actions — Read and write", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Text("• Metadata — Read-only (GitHub requires this)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Text("Do not grant access to all repositories or any extra permissions. Actions write access is needed for the Rerun all jobs button.", color = Muted, fontSize = 11.sp)
+                    Column(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Header / glowing robot mark
+                        Row(
+                            Modifier.fillMaxWidth().height(145.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                Modifier.size(128.dp).background(
+                                    Brush.radialGradient(listOf(Color(0xFF9D28FF).copy(alpha = .45f), Color.Transparent)),
+                                    RoundedCornerShape(100.dp)
+                                ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(105.dp),
+                                    shape = RoundedCornerShape(100.dp),
+                                    color = Color(0xFF100923),
+                                    border = BorderStroke(3.dp, Color(0xFFB52CFF))
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.SmartToy, null, tint = Color(0xFFE8C9FF), modifier = Modifier.size(66.dp))
+                                    }
+                                }
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) {
+                                Text("Asitha-MD BOT", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                                Text("Monitor • Manage • Rerun", color = Color(0xFFD05BFF), fontSize = 14.sp, maxLines = 1)
+                            }
+                            Icon(Icons.Default.Info, "Information", tint = Color(0xFFD9A7FF), modifier = Modifier.size(26.dp))
+                        }
+
+                        // Repository and token card
+                        SetupGlassCard {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Link, null, tint = Color(0xFFC02BFF), modifier = Modifier.size(28.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Text("GitHub Repository URL", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            SetupInput(
+                                value = repositoryDraft,
+                                onValueChange = { repositoryDraft = it },
+                                hint = "https://github.com/USERNAME/REPOSITORY",
+                                keyboardType = KeyboardType.Uri
+                            )
+                            if (repositoryDraft.isNotBlank() && parseGitHubRepository(repositoryDraft) == null) {
+                                Text("Use https://github.com/USERNAME/REPOSITORY", color = Red, fontSize = 10.sp)
+                            }
+                            Spacer(Modifier.height(16.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Key, null, tint = Color(0xFFC02BFF), modifier = Modifier.size(28.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Text("GitHub Fine-grained Token", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = tokenDraft,
+                                onValueChange = { tokenDraft = it },
+                                placeholder = { Text("Paste your token here...", color = Color(0xFFBDB5CA), fontSize = 14.sp) },
+                                singleLine = true,
+                                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+                                visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                                        Icon(if (tokenVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null, tint = Color.White)
+                                    }
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFFB46AFF), unfocusedBorderColor = Color(0xFF8061A7),
+                                    cursorColor = Color(0xFFD05BFF)
+                                ),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp)
+                            )
+                        }
+
+                        // Compact token guide and permissions card
+                        SetupGlassCard {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Info, null, tint = Color(0xFFD02BFF), modifier = Modifier.size(28.dp))
+                                Spacer(Modifier.width(12.dp))
+                                Text("How to get your token?", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    GuideStep("1", "Go to GitHub → Settings → Developer Settings → Personal access tokens → Fine-grained tokens")
+                                    GuideStep("2", "Click \"Generate new token\"")
+                                    GuideStep("3", "Set the following permissions:")
+                                    Text("•  Actions: Read and write\n•  Metadata: Read-only", color = Color(0xFFE3D9F2), fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 30.dp))
+                                    GuideStep("4", "Copy the token and paste it here")
+                                }
+                                Surface(
+                                    modifier = Modifier.width(125.dp),
+                                    shape = RoundedCornerShape(15.dp),
+                                    color = Color(0xFF19132B),
+                                    border = BorderStroke(1.dp, Color(0xFF8D6AC0))
+                                ) {
+                                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("Fine-grained token", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Surface(color = Color(0xFF00B95E), shape = RoundedCornerShape(9.dp)) {
+                                            Text("Generate new token", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp))
+                                        }
+                                        Text("Permissions:", color = Color.White, fontSize = 11.sp)
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.CheckBox, null, tint = Color(0xFF9D27FF), modifier = Modifier.size(20.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Column {
+                                                Text("Actions", color = Color.White, fontSize = 11.sp)
+                                                Text("Read and write", color = Color.White, fontSize = 9.sp)
+                                            }
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.CheckBox, null, tint = Color(0xFF9D27FF), modifier = Modifier.size(20.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Column {
+                                                Text("Metadata", color = Color.White, fontSize = 11.sp)
+                                                Text("Read-only", color = Color.White, fontSize = 9.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Surface(
+                                color = Color(0xFF21112F),
+                                shape = RoundedCornerShape(15.dp),
+                                border = BorderStroke(1.dp, Color(0xFF7D28C9)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Lightbulb, null, tint = Color(0xFFFFE34D), modifier = Modifier.size(27.dp))
+                                    Spacer(Modifier.width(10.dp))
+                                    Column {
+                                        Text("Example URL:", color = Color(0xFFD52BFF), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text("https://github.com/isharanotfound10-lab/Game", color = Color.White, fontSize = 11.sp, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                        Button(
+                            onClick = {
+                                val selectedRepository = parseGitHubRepository(repositoryDraft)
+                                if (selectedRepository != null && tokenDraft.trim().isNotBlank()) {
+                                    repositoryStore.write("https://github.com/${selectedRepository.first}/${selectedRepository.second}")
+                                    repositoryUrl = "https://github.com/${selectedRepository.first}/${selectedRepository.second}"
+                                    store.write(tokenDraft.trim())
+                                    token = tokenDraft.trim()
+                                    showTokenDialog = false
+                                }
+                            },
+                            enabled = parseGitHubRepository(repositoryDraft) != null && tokenDraft.trim().isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().height(58.dp),
+                            shape = RoundedCornerShape(50.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7900D9), contentColor = Color.White, disabledContainerColor = Color(0xFF542078))
+                        ) {
+                            Icon(Icons.Default.Save, null, modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text("Save", fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (token.isNotBlank()) {
+                            TextButton(onClick = { showTokenDialog = false }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                                Text("Cancel", color = Color(0xFFD7B7FF))
+                            }
                         }
                     }
-                    Text("GITHUB FINE-GRAINED TOKEN", color = Purple, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 1.sp)
-                    OutlinedTextField(
-                        value = tokenDraft, onValueChange = { tokenDraft = it },
-                        label = { Text("Paste your token here") }, singleLine = true,
-                        textStyle = TextStyle(color = Color.White),
-                        visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                                Icon(
-                                    if (tokenVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                    contentDescription = if (tokenVisible) "Hide token" else "Show token",
-                                    tint = Muted
-                                )
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                            cursorColor = Purple, focusedLabelColor = Purple,
-                            unfocusedLabelColor = Muted
-                        ),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text("Your token is stored encrypted on this device. Never send it to anyone or include it in screenshots.", color = Muted, fontSize = 11.sp)
                 }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val selectedRepository = parseGitHubRepository(repositoryDraft)
-                    if (selectedRepository != null && tokenDraft.trim().isNotBlank()) {
-                        repositoryStore.write("https://github.com/${selectedRepository.first}/${selectedRepository.second}")
-                        repositoryUrl = "https://github.com/${selectedRepository.first}/${selectedRepository.second}"
-                        store.write(tokenDraft.trim())
-                        token = tokenDraft.trim()
-                        showTokenDialog = false
-                    }
-                }, enabled = parseGitHubRepository(repositoryDraft) != null && tokenDraft.trim().isNotBlank()) { Text("Save securely") }
-            },
-            dismissButton = {
-                if (token.isNotBlank()) TextButton(onClick = { showTokenDialog = false }) { Text("Cancel") }
-            },
-            containerColor = Panel
-        )
+            }
+        }
     }
 
     if (confirmRerun) {
@@ -273,6 +372,51 @@ private fun BotStatusApp(store: SecureTokenStore, repositoryStore: RepositorySto
             dismissButton = { TextButton(onClick = { confirmRerun = false }) { Text("Cancel") } },
             containerColor = Panel
         )
+    }
+}
+
+
+@Composable
+private fun SetupGlassCard(content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Color(0xDD160D27),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(1.dp, Color(0xFF8A4DD1)),
+        shadowElevation = 10.dp
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+    }
+}
+
+@Composable
+private fun SetupInput(value: String, onValueChange: (String) -> Unit, hint: String, keyboardType: KeyboardType) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = { Text(hint, color = Color.White, fontSize = 13.sp, maxLines = 1) },
+        singleLine = true,
+        textStyle = TextStyle(color = Color.White, fontSize = 13.sp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+            focusedBorderColor = Color(0xFFB46AFF), unfocusedBorderColor = Color(0xFF8061A7),
+            cursorColor = Color(0xFFD05BFF)
+        ),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp)
+    )
+}
+
+@Composable
+private fun GuideStep(number: String, text: String) {
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Surface(color = Color(0xFFB51AFF), shape = RoundedCornerShape(50), modifier = Modifier.size(22.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(number, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+        Text(text, color = Color(0xFFE7DFF2), fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.weight(1f))
     }
 }
 
