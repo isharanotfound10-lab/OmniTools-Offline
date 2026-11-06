@@ -19,6 +19,8 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import java.net.HttpURLConnection
 import java.net.URL
@@ -44,6 +46,8 @@ class MainActivity : Activity() {
     private lateinit var progress: ProgressBar
 
     data class SearchResult(val title: String, val link: String, val image: String)
+    data class AnimeGroup(val title: String, val episodes: List<SearchResult>)
+    data class EpisodeDetails(val image: String, val download480: String)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -186,7 +190,7 @@ class MainActivity : Activity() {
                         })
                     } else {
                         status.text = "${parsed.size} results for: $currentQuery"
-                        parsed.forEach { addResultCard(it) }
+                        groupResults(parsed).forEach { addResultCard(it) }
                         next.isEnabled = parsed.size >= 10
                     }
                 }
@@ -282,12 +286,31 @@ class MainActivity : Activity() {
         return found.values.take(30)
     }
 
-    private fun addResultCard(item: SearchResult) {
+    private fun groupResults(items: List<SearchResult>): List<AnimeGroup> {
+        val groups = LinkedHashMap<String, MutableList<SearchResult>>()
+        val episodeSuffix = Regex("(?i)\\s*[-_ ]*(?:episode|ep|e)\\s*0*\\d+\\s*$")
+        items.forEach { item ->
+            val base = item.title.replace(episodeSuffix, "").trim().ifBlank { item.title }
+            groups.getOrPut(base.lowercase()) { mutableListOf() }.add(item)
+        }
+        return groups.values.map { episodes ->
+            val first = episodes.first()
+            val title = first.title.replace(episodeSuffix, "").trim().ifBlank { first.title }
+            AnimeGroup(title, episodes.sortedBy { episodeNumber(it.title) })
+        }
+    }
+
+    private fun episodeNumber(title: String): Int {
+        val match = Regex("(?i)(?:episode|ep|e)\\s*0*(\\d+)\\s*$").find(title)
+        return match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE
+    }
+
+    private fun addResultCard(group: AnimeGroup) {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(10), dp(10), dp(10), dp(10)); background = rounded(panel, 18)
             isClickable = true; isFocusable = true
-            setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.link))) }
+            setOnClickListener { showEpisodes(group) }
         }
         val image = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
@@ -295,20 +318,127 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(dp(104), dp(76))
         }
         card.addView(image)
-        val title = label(item.title, 14, Color.WHITE, true).apply {
-            maxLines = 3; setPadding(dp(12), 0, dp(4), 0)
-        }
-        card.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, dp(4), 0) }
+        info.addView(label(group.title, 15, Color.WHITE, true).apply { maxLines = 2 })
+        info.addView(label("${group.episodes.size} ${if (group.episodes.size == 1) "episode" else "episodes"}", 12, muted, false).apply {
+            setPadding(0, dp(6), 0, 0)
+        })
+        card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
         results.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
-        if (item.image.isNotBlank()) worker.execute {
+        val thumb = group.episodes.firstOrNull { it.image.isNotBlank() }?.image.orEmpty()
+        loadImage(thumb, image)
+    }
+
+    private fun showEpisodes(group: AnimeGroup) {
+        val root = baseLayout().apply { gravity = Gravity.TOP }
+        root.addView(actionButton("‹ BACK", false) { showHome() },
+            LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(18) })
+        root.addView(label(group.title, 22, Color.WHITE, true).apply {
+            setPadding(0, 0, 0, dp(6))
+        })
+        root.addView(label("${group.episodes.size} episodes", 13, muted, false).apply {
+            setPadding(0, 0, 0, dp(18))
+        })
+        val scroll = ScrollView(this)
+        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(list)
+        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
+
+        group.episodes.forEachIndexed { index, episode ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                background = rounded(panel, 16)
+            }
+            row.addView(label("Episode ${(index + 1).toString().padStart(2, '0')}", 15, Color.WHITE, true))
+            val thumb = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = rounded(Color.rgb(48, 35, 68), 12)
+                layoutParams = LinearLayout.LayoutParams(-1, dp(160)).apply { topMargin = dp(10) }
+            }
+            row.addView(thumb)
+            val linkStatus = label("Checking for a 480p download link…", 12, muted, false).apply {
+                setPadding(0, dp(10), 0, dp(8))
+            }
+            row.addView(linkStatus)
+            val copy = actionButton("COPY 480P DOWNLOAD LINK") {
+                val url = copy.tag as? String
+                if (!url.isNullOrBlank()) {
+                    val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("480p download link", url))
+                    linkStatus.text = "480p link copied"
+                }
+            }
+            copy.isEnabled = false
+            row.addView(copy, LinearLayout.LayoutParams(-1, dp(44)))
+            list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+            loadImage(episode.image, thumb)
+
+            worker.execute {
+                val details = fetchEpisodeDetails(episode.link)
+                main.post {
+                    if (isFinishing || thumb.parent == null) return@post
+                    if (thumb.drawable == null && details.image.isNotBlank()) loadImage(details.image, thumb)
+                    if (details.download480.isNotBlank()) {
+                        copy.tag = details.download480
+                        copy.isEnabled = true
+                        linkStatus.text = "480p download link available"
+                    } else {
+                        linkStatus.text = "No direct 480p download link found on this episode page."
+                        copy.text = "480P LINK UNAVAILABLE"
+                    }
+                }
+            }
+        }
+    }
+
+    private fun fetchEpisodeDetails(address: String): EpisodeDetails {
+        return try {
+            val connection = (URL(address).openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"; connectTimeout = 15000; readTimeout = 20000
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+            }
+            val html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            connection.disconnect()
+            val doc = Jsoup.parse(html, address)
+            val image = doc.select("meta[property=og:image], meta[name=twitter:image]").firstOrNull()?.attr("abs:content")
+                ?.takeIf { it.startsWith("http") }
+                ?: doc.select("img").asSequence().mapNotNull { img ->
+                    sequenceOf(img.attr("abs:data-src"), img.attr("abs:data-lazy-src"), img.attr("abs:src"))
+                        .firstOrNull { it.startsWith("http") }
+                }.firstOrNull().orEmpty()
+
+            val candidates = LinkedHashSet<String>()
+            for (element in doc.select("a[href], source[src], video[src], video source[src]")) {
+                val url = when (element.tagName().lowercase()) {
+                    "a" -> element.attr("abs:href")
+                    else -> element.attr("abs:src")
+                }
+                if (url.startsWith("http")) {
+                    val description = (element.text() + " " + element.attr("title") + " " +
+                        element.attr("label") + " " + url).lowercase()
+                    if (description.contains("480p") || description.contains("480")) candidates.add(url)
+                }
+            }
+            EpisodeDetails(image, candidates.firstOrNull { it.matches(Regex("(?i)^https?://.+\\.(mp4|m3u8|mkv)(?:[?#].*)?$")) }
+                ?: candidates.firstOrNull().orEmpty())
+        } catch (_: Exception) {
+            EpisodeDetails("", "")
+        }
+    }
+
+    private fun loadImage(address: String, target: ImageView) {
+        if (address.isBlank()) return
+        worker.execute {
             try {
-                val c = (URL(item.image).openConnection() as HttpURLConnection).apply {
+                val c = (URL(address).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 10000; readTimeout = 10000
                     setRequestProperty("User-Agent", "Mozilla/5.0")
                 }
                 val bitmap = c.inputStream.use { android.graphics.BitmapFactory.decodeStream(it) }
                 c.disconnect()
-                if (bitmap != null) main.post { if (!isFinishing) image.setImageBitmap(bitmap) }
+                if (bitmap != null) main.post { if (!isFinishing) target.setImageBitmap(bitmap) }
             } catch (_: Exception) { }
         }
     }
