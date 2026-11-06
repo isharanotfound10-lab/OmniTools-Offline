@@ -362,16 +362,17 @@ class MainActivity : Activity() {
                 setPadding(0, dp(10), 0, dp(8))
             }
             row.addView(linkStatus)
-            val copy = actionButton("COPY 480P DOWNLOAD LINK") {
-                val url = copy.tag as? String
+            lateinit var copyButton: Button
+            copyButton = actionButton("COPY 480P DOWNLOAD LINK") {
+                val url = copyButton.tag as? String
                 if (!url.isNullOrBlank()) {
                     val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("480p download link", url))
                     linkStatus.text = "480p link copied"
                 }
             }
-            copy.isEnabled = false
-            row.addView(copy, LinearLayout.LayoutParams(-1, dp(44)))
+            copyButton.isEnabled = false
+            row.addView(copyButton, LinearLayout.LayoutParams(-1, dp(44)))
             list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
             loadImage(episode.image, thumb)
 
@@ -381,12 +382,12 @@ class MainActivity : Activity() {
                     if (isFinishing || thumb.parent == null) return@post
                     if (thumb.drawable == null && details.image.isNotBlank()) loadImage(details.image, thumb)
                     if (details.download480.isNotBlank()) {
-                        copy.tag = details.download480
-                        copy.isEnabled = true
+                        copyButton.tag = details.download480
+                        copyButton.isEnabled = true
                         linkStatus.text = "480p download link available"
                     } else {
                         linkStatus.text = "No direct 480p download link found on this episode page."
-                        copy.text = "480P LINK UNAVAILABLE"
+                        copyButton.text = "480P LINK UNAVAILABLE"
                     }
                 }
             }
