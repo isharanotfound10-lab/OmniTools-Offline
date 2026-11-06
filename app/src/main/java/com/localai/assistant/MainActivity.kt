@@ -300,7 +300,7 @@ class MainActivity : Activity() {
         // "Series episode 03", "Series - EP03", "Series_Episode_3",
         // and titles with a trailing subtitle or punctuation.
         val pattern = Regex(
-            """(?i)^(.+?)[\s._\-–—:|()\[\]#]*(?:episodes?|ep|e)[\s._\-–—:|()\[\]#]*0*(\d+)(?:\s*[-–—|:].*)?$"""
+            """(?i)^(.+?)[\s._\-–—:|()\[\]#]*(?:episodes?|ep|e)[\s._\-–—:|()\[\]#]*0*(\d+).*$"""
         )
         val match = pattern.find(clean) ?: return null
         val series = cleanEpisodeText(match.groupValues[1]).trimEnd('-', '_', '.', ' ', ':', '|')
