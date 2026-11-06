@@ -209,9 +209,13 @@ class MainActivity : Activity() {
         for (item in candidates) {
             val heading = item.selectFirst("h1 a, h2 a, h3 a, .entry-title a, .post-title a, a[rel=bookmark]")
                 ?: item.selectFirst("a[href]") ?: continue
-            val href = heading.absUrl("href").ifBlank { continue }
+            val href = heading.absUrl("href")
+            if (href.isBlank()) continue
             val title = heading.text().trim().ifBlank { heading.attr("title").trim() }
             if (title.isBlank() || href == "https://xanimeporn.com/") continue
+            val tagsAndText = item.text().lowercase()
+            val blockedTerms = listOf("shotacon", "lolicon", "loli", "shota", "underage", "child", "elementary school", "middle school", "high school")
+            if (blockedTerms.any { tagsAndText.contains(it) }) continue
             val img = item.selectFirst("img")
             val image = img?.let {
                 listOf(it.absUrl("src"), it.absUrl("data-src"), it.absUrl("data-lazy-src"), it.absUrl("srcset").substringBefore(" "))
