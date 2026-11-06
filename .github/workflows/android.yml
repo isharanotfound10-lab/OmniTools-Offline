@@ -1,7 +1,7 @@
 name: XAnime Android Build
 on:
   push:
-    branches: [main, xnime-app, xnime-app]
+    branches: [main, xanime-app]
   pull_request:
     branches: [main]
   workflow_dispatch:
