@@ -138,7 +138,7 @@ private fun BotStatusApp(store: SecureTokenStore) {
                     "Jobs" -> JobsScreen(data?.jobs.orEmpty())
                     "History" -> HistoryScreen(data?.history.orEmpty())
                     "Artifacts" -> ArtifactsScreen(data?.artifacts.orEmpty())
-                    else -> OverviewScreen(data, loading, lastRefresh, onRerun = { confirmRerun = true })
+                    else -> OverviewScreen(data, loading, lastRefresh, rerunning, onRerun = { if (!rerunning) confirmRerun = true })
                 }
             }
         }
@@ -158,7 +158,7 @@ private fun BotStatusApp(store: SecureTokenStore) {
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth()
                     )
-                    TextButton(onClick = { /* docs link is in README */ }) { Text("Token setup instructions are in the app README") }
+                    Text("Token setup: github.com/settings/personal-access-tokens/new", color = Muted, fontSize = 11.sp)
                 }
             },
             confirmButton = {
@@ -203,7 +203,7 @@ private fun BotStatusApp(store: SecureTokenStore) {
 }
 
 @Composable
-private fun OverviewScreen(data: DashboardData?, loading: Boolean, lastRefresh: String, onRerun: () -> Unit) {
+private fun OverviewScreen(data: DashboardData?, loading: Boolean, lastRefresh: String, rerunning: Boolean, onRerun: () -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
