@@ -291,12 +291,12 @@ class MainActivity : Activity() {
     private fun cleanEpisodeText(value: String): String =
         value.replace(Regex("[\u200B-\u200D\uFEFF]"), "")
             .replace('\u00A0', ' ')
-            .replace(Regex("\s+"), " ")
+            .replace(Regex("\\s+"), " ")
             .trim()
 
     private fun parseEpisodeTitle(value: String): ParsedEpisodeTitle? {
         val clean = cleanEpisodeText(value)
-        val match = Regex("(?i)^(.*?)[\s._-]+(?:episode|ep|e)[\s._-]*0*(\d+)\s*[.!_-]*$").find(clean) ?: return null
+        val match = Regex("(?i)^(.*?)[\\s._-]+(?:episode|ep|e)[\\s._-]*0*(\d+)\\s*[.!_-]*$").find(clean) ?: return null
         val series = match.groupValues[1].trim().trimEnd('-', '_', '.', ' ')
         val number = match.groupValues[2].toIntOrNull() ?: return null
         if (series.isBlank()) return null
@@ -316,7 +316,7 @@ class MainActivity : Activity() {
             val parsed = episodeIdentity(item)
             val seriesTitle = parsed?.seriesTitle ?: cleanEpisodeText(item.title)
             val number = parsed?.number ?: Int.MAX_VALUE
-            val key = seriesTitle.lowercase().replace(Regex("[^\p{L}\p{N}]+"), " ").trim()
+            val key = seriesTitle.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
             groups.getOrPut(key.ifBlank { item.link.lowercase() }) { mutableListOf() }.add(item to number)
         }
         return groups.values.map { entries ->
