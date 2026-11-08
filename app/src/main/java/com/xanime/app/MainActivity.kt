@@ -75,6 +75,7 @@ class MainActivity : Activity() {
     }
     private val main = Handler(Looper.getMainLooper())
     private var ambientBackground: AmbientBackgroundDrawable? = null
+    private val activeShimmers = mutableSetOf<ShimmerDrawable>()
 
     private var query = ""
     private var selectedCategory: Pair<String, String>? = null
@@ -116,15 +117,31 @@ class MainActivity : Activity() {
         else showHome()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (prefs.getBoolean("ambient_background", true)) ambientBackground?.start()
+        activeShimmers.forEach { it.start() }
+    }
+
+    override fun onPause() {
+        ambientBackground?.stop()
+        activeShimmers.forEach { it.stop() }
+        super.onPause()
+    }
+
     override fun onDestroy() {
         worker.shutdownNow()
         detailWorker.shutdownNow()
         imageWorker.shutdownNow()
         ambientBackground?.stop()
+        activeShimmers.forEach { it.stop() }
+        activeShimmers.clear()
         super.onDestroy()
     }
 
     private fun baseLayout(): LinearLayout {
+        activeShimmers.forEach { it.stop() }
+        activeShimmers.clear()
         ambientBackground?.stop()
         ambientBackground = AmbientBackgroundDrawable(bgColor, accent)
         return LinearLayout(this).apply {
@@ -157,7 +174,6 @@ class MainActivity : Activity() {
         })
         page.addView(actionButton("EXIT", false) { finish() })
         setContentView(page)
-        animateScreen(page)
         animateScreen(page)
     }
 
@@ -427,7 +443,9 @@ class MainActivity : Activity() {
                         hasCachedSearch = true
                         cachedAnimeGroups = emptyList()
                         status.text = "No results found"
-                        content.removeAllViews()
+                        activeShimmers.forEach { it.stop() }
+        activeShimmers.clear()
+        content.removeAllViews()
                         content.addView(infoCard("No matching adult-only results were found. Try another search term."))
                     } else {
                         if (append) allSearchResults.addAll(parsed)
@@ -490,6 +508,8 @@ class MainActivity : Activity() {
 
     private fun renderAnimeGroups(groups: List<AnimeGroup>) {
         val previousScrollY = if (::scroll.isInitialized) scroll.scrollY else searchScrollY
+        activeShimmers.forEach { it.stop() }
+        activeShimmers.clear()
         content.removeAllViews()
         if (groups.isEmpty()) {
             content.addView(infoCard("No matching results were found."))
@@ -958,7 +978,10 @@ class MainActivity : Activity() {
         view.setImageDrawable(null)
         if (prefs.getBoolean("shimmer_loading", true)) {
             (view.background as? ShimmerDrawable)?.stop()
-            view.background = ShimmerDrawable(surface2, accent)
+            val shimmer = ShimmerDrawable(surface2, accent)
+            activeShimmers.add(shimmer)
+            view.background = shimmer
+            shimmer.start()
         } else {
             view.background = rounded(surface2, 10)
             view.alpha = 0.62f
@@ -966,7 +989,10 @@ class MainActivity : Activity() {
     }
 
     private fun stopThumbnailShimmer(view: ImageView) {
-        (view.background as? ShimmerDrawable)?.stop()
+        (view.background as? ShimmerDrawable)?.let {
+            it.stop()
+            activeShimmers.remove(it)
+        }
         view.background = rounded(surface2, 10)
         view.alpha = 1f
     }
