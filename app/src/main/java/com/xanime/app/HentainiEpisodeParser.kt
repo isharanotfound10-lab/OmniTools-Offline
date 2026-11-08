@@ -65,8 +65,6 @@ object HentainiEpisodeParser {
 
     fun parseEpisode(html: String, pageUrl: String): HentainiEpisodePage {
         val doc = Jsoup.parse(html, pageUrl)
-        val title = doc.selectFirst("h1")?.text()?.trim()
-            ?.takeIf { it.isNotBlank() } ?: doc.title().substringBefore("|").trim()
         // Social preview metadata is commonly the SERIES cover on every
         // episode page. Use only media embedded in the episode content itself.
         // Hentaini's episode pages expose the actual frame in VideoObject
@@ -77,6 +75,15 @@ object HentainiEpisodeParser {
         // Only use VideoObject metadata. Other JSON-LD objects can describe
         // the series itself and repeat its cover/providers on every episode.
         val videoObjects = jsonLd.flatMap { findVideoObjects(it) }
+        val structuredTitle = videoObjects.asSequence()
+            .flatMap { findJsonValues(it, "name").asSequence() + findJsonValues(it, "headline").asSequence() }
+            .filterIsInstance<String>()
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() && !it.equals("Hentaini", true) }
+        val pageHeading = doc.selectFirst("h1")?.text()?.trim().orEmpty()
+        val title = structuredTitle
+            ?: pageHeading.takeIf { it.isNotBlank() }
+            ?: doc.title().substringBefore("|").trim()
         val structuredThumbnail = videoObjects.asSequence()
             .flatMap { findJsonValues(it, "thumbnailUrl").asSequence() }
             .mapNotNull { jsonImageUrl(it, pageUrl) }
@@ -175,8 +182,14 @@ object HentainiEpisodeParser {
             is JSONObject -> {
                 val type = value.opt("@type")
                 val isVideo = when (type) {
-                    is String -> type.equals("VideoObject", true)
-                    is JSONArray -> (0 until type.length()).any { type.optString(it).equals("VideoObject", true) }
+                    is String -> type.equals("VideoObject", true) || type.endsWith("/VideoObject", true) ||
+                        type.endsWith("#VideoObject", true)
+                    is JSONArray -> (0 until type.length()).any {
+                        val candidate = type.optString(it)
+                        candidate.equals("VideoObject", true) ||
+                            candidate.endsWith("/VideoObject", true) ||
+                            candidate.endsWith("#VideoObject", true)
+                    }
                     else -> false
                 }
                 if (isVideo) result.add(value)
