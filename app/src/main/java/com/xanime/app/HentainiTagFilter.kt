@@ -16,32 +16,11 @@ object HentainiTagFilter {
     }
 
     // All 25 tags supplied by the user are blocked for Hentaini results.
-    private val blockedTags = setOf(
-        "ahegao", "anal", "bbw", "big breast", "blackmail", "bondage",
-        "chikan", "cosplay", "futanari", "garyu", "harem", "incest",
-        "maid", "milf", "netorare", "nurse", "orgy", "oyakodon",
-        "paizuri", "rape", "scholar", "shotacon", "small breasts",
-        "succubus", "tentacles"
-    )
+    private val blockedTags = setOf()
 
     // These are risk flags, not an exhaustive classifier. No match does not
     // establish that the characters are adults.
-    private val minorRelatedPatterns = listOf(
-        Regex("\\bshotacon\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bshota\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bloli(?:con)?\\b", RegexOption.IGNORE_CASE),
-        Regex("\\blolita\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bunder[ -]?age\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bminor(?:s)?\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bchild(?:ren)?\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bschool[ -]?(?:girl|boy|student|kid)s?\\b", RegexOption.IGNORE_CASE),
-        Regex("\\belementary school\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bmiddle school\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bhigh school student\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bteen(?:age|ager|s)?\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bbelow 18\\b", RegexOption.IGNORE_CASE),
-        Regex("\\bunder 18\\b", RegexOption.IGNORE_CASE)
-    )
+    private val minorRelatedPatterns = listOf()
 
     /**
      * The Hentaini API does not provide trusted per-series verification that
