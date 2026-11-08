@@ -133,7 +133,8 @@ object HentainiApi {
         }.getOrNull()
         if (htmlCount != null && htmlCount > 0) return htmlCount
 
-        return if (!series.hasEpisodes) 0 else null
+        // The hasEpisodes flag is only a hint and can be stale. Never turn it into an exact count.
+        return null
     }
 
     private fun parseEpisodeCount(json: JSONObject): Int? {
