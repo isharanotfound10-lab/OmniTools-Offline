@@ -175,6 +175,12 @@ object HentainiEpisodeParser {
             // Search scripts even when VideoObject exists, but accept only
             // explicit supported-provider URLs and deduplicate them.
             val scripts = doc.select("script").joinToString("\n") { it.data() + it.html() }
+                // Some player configs are JSON-escaped twice by the page.
+                // Decode both single- and double-escaped separators.
+                .replace("\\\\/", "/")
+                .replace("\\\\u002f", "/")
+                .replace("\\\\u002F", "/")
+                .replace("\\\\u0026", "&")
                 .replace("\\/", "/")
                 .replace("\\u0026", "&")
                 .replace("\\u002f", "/")
