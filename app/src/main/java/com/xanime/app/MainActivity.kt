@@ -645,7 +645,7 @@ class MainActivity : Activity() {
                     10, accent, true
                 ).apply {
                     setPadding(dp(10), dp(7), dp(10), dp(7))
-                    background = rounded(surface2, 10)
+                    background = ripple(glassDrawable(10))
                     isClickable = true
                     isFocusable = true
                     setOnClickListener {
@@ -1068,7 +1068,7 @@ class MainActivity : Activity() {
 
     private fun infoCard(message: String) = TextView(this).apply {
         text = message; textSize = 13f; setTextColor(muted)
-        setPadding(dp(16), dp(18), dp(16), dp(18)); background = rounded(surface, 16)
+        setPadding(dp(16), dp(18), dp(16), dp(18)); background = glassDrawable(16)
     }
 
     private fun actionButton(text: String, primary: Boolean = true, action: () -> Unit) =
