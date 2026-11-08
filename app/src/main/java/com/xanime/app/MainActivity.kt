@@ -44,14 +44,15 @@ class MainActivity : Activity() {
 
     private var query = ""
     private var page = 1
+    private val maxSearchPages = 5
+    private val seenResultUrls = mutableSetOf<String>()
     private var busy = false
     private lateinit var root: LinearLayout
     private lateinit var content: LinearLayout
+    private lateinit var scroll: ScrollView
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
     private lateinit var search: EditText
-    private lateinit var previous: Button
-    private lateinit var next: Button
     private lateinit var pageText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,20 +131,22 @@ class MainActivity : Activity() {
         root.addView(status)
         progress = ProgressBar(this).apply { visibility = View.GONE }
         root.addView(progress, LinearLayout.LayoutParams(-2, dp(38)))
-        val scroll = ScrollView(this)
+        scroll = ScrollView(this).apply {
+            isFillViewport = true
+            setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                val child = getChildAt(0)
+                if (child != null && child.bottom - (scrollY + height) <= dp(320)) loadNextPage()
+            }
+        }
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(10)) }
         if (query.isBlank()) content.addView(infoCard("Search for an adult title to discover its available episodes."))
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        val pager = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        previous = actionButton("‹ PREVIOUS", false) { if (page > 1 && !busy) { page--; runSearch() } }
-        next = actionButton("NEXT ›", false) { if (!busy) { page++; runSearch() } }
-        previous.isEnabled = page > 1
-        pager.addView(previous, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(7) })
-        pageText = label("PAGE $page", 11, muted, true).apply { gravity = Gravity.CENTER }
-        pager.addView(pageText, LinearLayout.LayoutParams(dp(76), dp(42)))
-        pager.addView(next, LinearLayout.LayoutParams(0, dp(42), 1f).apply { leftMargin = dp(7) })
-        root.addView(pager)
+        pageText = label("SCROLL TO LOAD • UP TO 5 PAGES", 10, muted, true).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(4))
+        }
+        root.addView(pageText)
         setContentView(root)
         if (query.isNotBlank()) runSearch()
     }
@@ -152,47 +155,75 @@ class MainActivity : Activity() {
         val value = search.text.toString().trim()
         if (value.isBlank()) { status.text = "Enter a search term."; return }
         query = value
-        if (reset) page = 1
+        if (reset) {
+            page = 1
+            seenResultUrls.clear()
+        }
         runSearch()
     }
 
-    private fun runSearch() {
+    private fun runSearch(append: Boolean = false) {
         if (busy || query.isBlank()) return
         busy = true
-        status.text = "Searching..."
+        val requestedPage = page
+        status.text = if (append) "Loading more results..." else "Searching..."
         progress.visibility = View.VISIBLE
-        content.removeAllViews()
-        previous.isEnabled = page > 1
-        next.isEnabled = false
-        pageText.text = "PAGE $page"
+        if (!append) content.removeAllViews()
+        pageText.text = "LOADING PAGE $requestedPage OF $maxSearchPages"
         worker.execute {
             try {
                 val encoded = URLEncoder.encode(query, "UTF-8")
-                val address = "https://xanimeporn.com/?s=$encoded&paged=$page"
+                val address = "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
                 val html = request(address)
                 val parsed = SiteParser.parseSearch(Jsoup.parse(html, address))
                 main.post {
                     busy = false
                     progress.visibility = View.GONE
-                    if (parsed.isEmpty()) {
+                    val fresh = parsed.filter { seenResultUrls.add(it.url) }
+                    if (fresh.isEmpty() && !append) {
                         status.text = "No safe results found"
                         content.addView(infoCard("No matching adult-only results were found. Try another search term."))
+                        pageText.text = "NO RESULTS"
+                    } else if (fresh.isEmpty()) {
+                        page = (requestedPage - 1).coerceAtLeast(1)
+                        status.text = "No more results found"
+                        pageText.text = "END OF RESULTS • PAGE $page OF $maxSearchPages"
                     } else {
-                        status.text = "${parsed.size} results for “$query”"
-                        parsed.forEach { addResultCard(it) }
-                        next.isEnabled = parsed.size >= 10
+                        fresh.forEach { addResultCard(it) }
+                        status.text = "${seenResultUrls.size} results for “$query”"
+                        pageText.text = if (requestedPage >= maxSearchPages) {
+                            "END OF RESULTS • 5 PAGES"
+                        } else {
+                            "PAGE $requestedPage OF $maxSearchPages • SCROLL FOR MORE"
+                        }
+                        if (requestedPage < maxSearchPages) {
+                            scroll.post { loadNextPageIfViewportIsShort() }
+                        }
                     }
-                    previous.isEnabled = page > 1
                 }
             } catch (error: Exception) {
                 main.post {
                     busy = false
                     progress.visibility = View.GONE
+                    if (append) page = (requestedPage - 1).coerceAtLeast(1)
                     status.text = "Search unavailable"
-                    content.addView(infoCard("Could not load search results. Check your connection and try again."))
+                    pageText.text = if (append) "COULD NOT LOAD PAGE ${requestedPage} • SCROLL TO RETRY" else "SEARCH FAILED"
+                    if (!append) content.addView(infoCard("Could not load search results. Check your connection and try again."))
                 }
             }
         }
+    }
+
+    private fun loadNextPageIfViewportIsShort() {
+        if (busy || page >= maxSearchPages || !::scroll.isInitialized) return
+        val child = scroll.getChildAt(0) ?: return
+        if (child.height <= scroll.height + scroll.scrollY + dp(80)) loadNextPage()
+    }
+
+    private fun loadNextPage() {
+        if (busy || page >= maxSearchPages || query.isBlank()) return
+        page += 1
+        runSearch(append = true)
     }
 
     private fun addResultCard(item: SearchResult) {
