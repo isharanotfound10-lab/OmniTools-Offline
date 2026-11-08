@@ -29,6 +29,8 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.animation.ValueAnimator
+import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -50,6 +52,7 @@ class MainActivity : Activity() {
     private val worker = Executors.newFixedThreadPool(2)
     private val detailWorker = Executors.newFixedThreadPool(4)
     private val imageWorker = Executors.newFixedThreadPool(3)
+    private val pendingImages = ConcurrentHashMap<String, MutableList<WeakReference<ImageView>>>()
     private val detailCache = ConcurrentHashMap<String, Pair<EpisodeDetails?, List<String>>>()
     private val detailSlots = Semaphore(4)
     private val imageCache = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
@@ -709,12 +712,38 @@ class MainActivity : Activity() {
 
     private fun loadImage(url: String, target: ImageView) {
         target.tag = url
+        target.contentDescription = "Loading thumbnail"
         val cacheEnabled = getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)
-        if (cacheEnabled) imageCache.get(url)?.let {
-            target.setImageBitmap(it)
+        if (cacheEnabled) imageCache.get(url)?.let { bitmap ->
+            target.animate().cancel()
+            target.alpha = 1f
+            target.setImageBitmap(bitmap)
+            target.contentDescription = "Episode thumbnail"
+            target.setOnClickListener(null)
             return
         }
+
+        // Keep one request per URL even when search cards are rebuilt while
+        // detail pages finish. Every currently visible ImageView gets the
+        // bitmap as soon as this individual download completes.
+        val watchers = pendingImages[url]
+        if (watchers != null) {
+            synchronized(watchers) { watchers.add(WeakReference(target)) }
+            startThumbnailPulse(target)
+            return
+        }
+
+        val newWatchers = mutableListOf(WeakReference(target))
+        val existing = pendingImages.putIfAbsent(url, newWatchers)
+        if (existing != null) {
+            synchronized(existing) { existing.add(WeakReference(target)) }
+            startThumbnailPulse(target)
+            return
+        }
+        startThumbnailPulse(target)
+
         imageWorker.execute {
+            var bitmap: Bitmap? = null
             try {
                 val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 7000
@@ -722,7 +751,7 @@ class MainActivity : Activity() {
                     setRequestProperty("User-Agent", "Mozilla/5.0")
                     setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
                 }
-                val bitmap = try {
+                bitmap = try {
                     connection.inputStream.use { stream ->
                         val options = BitmapFactory.Options().apply {
                             inSampleSize = if (getSharedPreferences("xanime", MODE_PRIVATE)
@@ -733,14 +762,49 @@ class MainActivity : Activity() {
                 } finally {
                     connection.disconnect()
                 }
-                if (bitmap != null) {
-                    if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)) imageCache.put(url, bitmap)
-                    main.post {
-                        if (!isFinishing && target.tag == url) target.setImageBitmap(bitmap)
-                    }
+                if (bitmap != null && getSharedPreferences("xanime", MODE_PRIVATE)
+                        .getBoolean("cache_enabled", true)) {
+                    imageCache.put(url, bitmap)
                 }
             } catch (_: Exception) { }
+
+            val completedBitmap = bitmap
+            val registered = pendingImages.remove(url).orEmpty()
+            main.post {
+                registered.forEach { reference ->
+                    val view = reference.get() ?: return@forEach
+                    if (isFinishing || view.tag != url) return@forEach
+                    view.animate().cancel()
+                    view.alpha = 1f
+                    if (completedBitmap != null) {
+                        view.setImageBitmap(completedBitmap)
+                        view.contentDescription = "Episode thumbnail"
+                        view.setOnClickListener(null)
+                    } else {
+                        view.setImageResource(android.R.drawable.ic_menu_rotate)
+                        view.contentDescription = "Thumbnail failed. Tap to retry."
+                        view.setOnClickListener {
+                            view.setImageDrawable(null)
+                            loadImage(url, view)
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    private fun startThumbnailPulse(view: ImageView) {
+        view.setImageDrawable(null)
+        view.alpha = 0.55f
+        view.animate().alpha(0.85f).setDuration(520).withEndAction {
+            if (view.tag != null && view.drawable == null && !isFinishing) {
+                view.animate().alpha(0.55f).setDuration(520).withEndAction {
+                    if (view.tag != null && view.drawable == null && !isFinishing) {
+                        startThumbnailPulse(view)
+                    }
+                }.start()
+            }
+        }.start()
     }
 
     private fun showSettings() {
