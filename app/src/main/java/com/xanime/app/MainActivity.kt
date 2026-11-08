@@ -98,6 +98,7 @@ class MainActivity : Activity() {
     private var cachedAnimeGroups: List<AnimeGroup> = emptyList()
     private var searchScrollY = 0
     private var isDetailScreen = false
+    private var showingFavorites = false
     private val expandedAnimeNames = mutableSetOf<String>()
     private val loadingExtraThumbnails = mutableSetOf<String>()
     private lateinit var root: LinearLayout
@@ -182,17 +183,17 @@ class MainActivity : Activity() {
         window.navigationBarColor = bgColor
         root = baseLayout()
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
-        header.addView(TextView(this).apply {
-            text = "X"; textSize = 25f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER
-            setTextColor(white); background = rounded(accent, 16)
-            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+        val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titles.addView(label("XAnime", 25, white, true))
+        titles.addView(label(":|", 17, accent, true).apply {
+            letterSpacing = .22f
+            setPadding(dp(2), dp(1), 0, 0)
         })
-        val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
-        titles.addView(label("XANIME", 22, white, true))
-        titles.addView(label("ADULT-ONLY LIBRARY", 10, muted, true))
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(actionButton("♥ Favorites", false) { showingFavorites = true; showHome() },
+            LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
         header.addView(actionButton("⚙", false) { showSettings() },
-            LinearLayout.LayoutParams(dp(48), dp(44)))
+            LinearLayout.LayoutParams(dp(44), dp(44)))
         root.addView(header)
 
         search = EditText(this).apply {
@@ -203,7 +204,7 @@ class MainActivity : Activity() {
         }
         root.addView(search, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(22) })
         root.addView(actionButton("SEARCH") { startSearch(true) }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(9) })
-        root.addView(label("BROWSE BY CATEGORY", 10, muted, true).apply {
+        if (!showingFavorites) root.addView(label("BROWSE BY CATEGORY", 10, muted, true).apply {
             setPadding(0, dp(15), 0, dp(7))
         })
         val categoryScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
@@ -218,8 +219,8 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
         }
         categoryScroller.addView(categoryRow)
-        root.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(42)))
-        if (query.isBlank()) {
+        if (!showingFavorites) root.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(42)))
+        if (query.isBlank() && !showingFavorites) {
             root.addView(label("SORT BY", 10, muted, true).apply {
                 setPadding(0, dp(12), 0, dp(7))
             })
@@ -269,7 +270,12 @@ class MainActivity : Activity() {
         setContentView(root)
         animateScreen(root)
         scroll.setOnScrollChangeListener { _, _, scrollY, _, _ -> ambientBackground?.setScrollOffset(scrollY) }
-        if (hasCachedSearch) {
+        if (showingFavorites) {
+            status.text = "Your saved series"
+            val favorites = loadFavoriteGroups()
+            renderAnimeGroups(favorites)
+            pageText.text = "FAVORITES • ${favorites.size} SERIES"
+        } else if (hasCachedSearch) {
             status.text = if (cachedAnimeGroups.isEmpty()) "No results for: $query" else
                 "${cachedAnimeGroups.size} unique anime • cached results"
             renderAnimeGroups(cachedAnimeGroups)
@@ -290,6 +296,7 @@ class MainActivity : Activity() {
         if (value.isBlank()) { status.text = "Enter a search term or choose a category."; return }
         selectedCategory = null
         catalogMode = false
+        showingFavorites = false
         query = value
         if (reset) {
             page = 1
@@ -306,6 +313,7 @@ class MainActivity : Activity() {
     private fun selectAllCategories() {
         if (busy) return
         selectedCategory = null
+        showingFavorites = false
         query = ""
         catalogMode = true
         search.setText("")
@@ -316,6 +324,7 @@ class MainActivity : Activity() {
     private fun selectSort(filter: String) {
         if (busy) return
         selectedSort = filter
+        showingFavorites = false
         query = ""
         catalogMode = true
         search.setText("")
@@ -336,6 +345,7 @@ class MainActivity : Activity() {
     private fun selectCategory(name: String, slug: String) {
         if (busy) return
         selectedCategory = name to slug
+        showingFavorites = false
         catalogMode = true
         query = ""
         search.setText("")
@@ -540,6 +550,9 @@ class MainActivity : Activity() {
                 setPadding(dp(9), dp(6), dp(9), dp(6))
                 background = rounded(surface2, 10)
             })
+            heading.addView(actionButton(if (isFavorite(group)) "♥" else "♡", false) {
+                toggleFavorite(group)
+            }, LinearLayout.LayoutParams(dp(42), dp(36)).apply { marginStart = dp(8) })
             card.addView(heading)
 
             val episodes = group.details?.episodes.orEmpty()
@@ -670,6 +683,49 @@ class MainActivity : Activity() {
         renderNextPageButton()
         scroll.post { scroll.scrollTo(0, previousScrollY) }
     }
+
+
+    private fun favoriteEntries(): Set<String> =
+        prefs.getStringSet("favorite_series", emptySet())?.toSet() ?: emptySet()
+
+    private fun isFavorite(group: AnimeGroup): Boolean =
+        favoriteEntries().any { encoded ->
+            runCatching { org.json.JSONObject(encoded).optString("url") == group.firstResult.url }.getOrDefault(false)
+        }
+
+    private fun toggleFavorite(group: AnimeGroup) {
+        val entries = favoriteEntries().toMutableSet()
+        val existing = entries.firstOrNull { encoded ->
+            runCatching { org.json.JSONObject(encoded).optString("url") == group.firstResult.url }.getOrDefault(false)
+        }
+        if (existing != null) {
+            entries.remove(existing)
+            Toast.makeText(this, "Removed from Favorites", Toast.LENGTH_SHORT).show()
+        } else {
+            val item = org.json.JSONObject()
+                .put("title", group.name)
+                .put("url", group.firstResult.url)
+                .put("thumbnail", group.firstResult.thumbnail)
+                .put("subEng", group.hasSubEng)
+            entries.add(item.toString())
+            Toast.makeText(this, "Added to Favorites", Toast.LENGTH_SHORT).show()
+        }
+        prefs.edit().putStringSet("favorite_series", entries).apply()
+        if (showingFavorites) renderAnimeGroups(loadFavoriteGroups())
+        else renderAnimeGroups(cachedAnimeGroups)
+    }
+
+    private fun loadFavoriteGroups(): List<AnimeGroup> =
+        favoriteEntries().mapNotNull { encoded ->
+            runCatching {
+                val item = org.json.JSONObject(encoded)
+                val title = item.optString("title").takeIf { it.isNotBlank() } ?: return@runCatching null
+                val url = item.optString("url").takeIf { it.isNotBlank() } ?: return@runCatching null
+                val thumbnail = item.optString("thumbnail")
+                val result = SearchResult(title, url, thumbnail, "")
+                AnimeGroup(title, result, null, emptyList(), item.optBoolean("subEng"))
+            }.getOrNull()
+        }.sortedBy { it.name.lowercase() }
 
     private fun fetchRemainingThumbnails(group: AnimeGroup) {
         val episodes = group.details?.episodes.orEmpty()
