@@ -1,9 +1,12 @@
-# Local AI
+# XAnime Android
 
-Native Android assistant starter. This repository is being repurposed from OmniTools-Offline into Local AI.
+Native Android app for searching the site's listing pages, grouping episode links from each episode page, and copying the exact 480p download URL when present.
 
-Current starter: purple Android chat UI, voice-input hook, floating orb foundation, and GitHub Actions debug APK build.
+- Kotlin Android app (not a web app)
+- Search results with thumbnails and durations
+- Episode grouping from the page's Episodes tab
+- Exact 480p URL extraction and clipboard copy
+- Adult age gate and conservative title/tag filtering
+- Parser unit tests and GitHub Actions debug APK artifact
 
-Important: the on-device language model, offline speech engine, screen-reading integration, and real device actions are not connected yet. They must be implemented and tested in follow-up steps. This is an Android APK project, not a website.
-
-Designed to keep the UI lightweight. Phones with around 1 GB available RAM may struggle with a useful local language model, so model integration must be selected and tested carefully.
+Build branch: `xanime-app`. The `main` branch is kept separate.

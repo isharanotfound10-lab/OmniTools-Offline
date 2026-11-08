@@ -103,7 +103,6 @@ object SiteParser {
             append(title).append(' ')
             append(doc.select(".post-tags, .tags-links, .entry-meta, .post-meta, [rel=tag]").text())
             append(' ')
-            append(doc.select(".su-tabs-pane[data-title=Description]").text())
         }
         val blocked = if (isAllowed(safetyText)) null else
             "This entry was hidden because its title, tags, or description contains school-related or age-ambiguous terms."
