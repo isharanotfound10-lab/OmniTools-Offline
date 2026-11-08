@@ -13,6 +13,9 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.RippleDrawable
+import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -71,6 +74,7 @@ class MainActivity : Activity() {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
     private val main = Handler(Looper.getMainLooper())
+    private var ambientBackground: AmbientBackgroundDrawable? = null
 
     private var query = ""
     private var selectedCategory: Pair<String, String>? = null
@@ -116,14 +120,20 @@ class MainActivity : Activity() {
         worker.shutdownNow()
         detailWorker.shutdownNow()
         imageWorker.shutdownNow()
+        ambientBackground?.stop()
         super.onDestroy()
     }
 
-    private fun baseLayout(): LinearLayout = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(18), dp(20), dp(18), dp(14))
-        setBackgroundColor(bgColor)
-        layoutParams = ViewGroup.LayoutParams(-1, -1)
+    private fun baseLayout(): LinearLayout {
+        ambientBackground?.stop()
+        ambientBackground = AmbientBackgroundDrawable(bgColor, accent)
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(20), dp(18), dp(14))
+            background = ambientBackground
+            if (prefs.getBoolean("ambient_background", true)) ambientBackground?.start()
+            layoutParams = ViewGroup.LayoutParams(-1, -1)
+        }
     }
 
     private fun showAgeGate() {
@@ -147,6 +157,7 @@ class MainActivity : Activity() {
         })
         page.addView(actionButton("EXIT", false) { finish() })
         setContentView(page)
+        animateScreen(page)
     }
 
     private fun showHome() {
@@ -170,7 +181,7 @@ class MainActivity : Activity() {
         search = EditText(this).apply {
             hint = "Search titles..."; setHintTextColor(muted); setTextColor(white)
             textSize = 15f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setPadding(dp(15), 0, dp(15), 0); background = rounded(surface, 16)
+            setPadding(dp(15), 0, dp(15), 0); background = ripple(glassDrawable(16))
             setText(query)
         }
         root.addView(search, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(22) })
@@ -239,6 +250,8 @@ class MainActivity : Activity() {
         }
         root.addView(pageText)
         setContentView(root)
+        animateScreen(root)
+        scroll.setOnScrollChangeListener { _, _, scrollY, _, _ -> ambientBackground?.setScrollOffset(scrollY) }
         if (hasCachedSearch) {
             status.text = if (cachedAnimeGroups.isEmpty()) "No results for: $query" else
                 "${cachedAnimeGroups.size} unique anime • cached results"
@@ -487,7 +500,7 @@ class MainActivity : Activity() {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(13), dp(13), dp(13), dp(13))
-                background = rounded(cardSurface(), cardRadius())
+                background = ripple(if (prefs.getString("card_style", "Glass") == "Glass") glassDrawable(cardRadius()) else rounded(cardSurface(), cardRadius()))
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -792,7 +805,7 @@ class MainActivity : Activity() {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
                 setPadding(dp(14), dp(13), dp(14), dp(13))
-                background = rounded(if (selected) surface2 else surface, 14)
+                background = ripple(glassDrawable(14))
                 isClickable = true; isFocusable = true
                 setOnClickListener { if (!selected) openEpisode(ep.url) }
             }
@@ -859,7 +872,7 @@ class MainActivity : Activity() {
         val cacheEnabled = getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)
         if (cacheEnabled) imageCache.get(url)?.let { bitmap ->
             target.animate().cancel()
-            target.alpha = 1f
+            stopThumbnailShimmer(target)
             target.setImageBitmap(bitmap)
             target.contentDescription = "Episode thumbnail"
             target.setOnClickListener(null)
@@ -918,7 +931,7 @@ class MainActivity : Activity() {
                     val view = reference.get() ?: return@forEach
                     if (isFinishing || view.tag != url) return@forEach
                     view.animate().cancel()
-                    view.alpha = 1f
+                    stopThumbnailShimmer(view)
                     if (completedBitmap != null) {
                         view.setImageBitmap(completedBitmap)
                         view.contentDescription = "Episode thumbnail"
@@ -938,16 +951,19 @@ class MainActivity : Activity() {
 
     private fun startThumbnailPulse(view: ImageView) {
         view.setImageDrawable(null)
-        view.alpha = 0.55f
-        view.animate().alpha(0.85f).setDuration(520).withEndAction {
-            if (view.tag != null && view.drawable == null && !isFinishing) {
-                view.animate().alpha(0.55f).setDuration(520).withEndAction {
-                    if (view.tag != null && view.drawable == null && !isFinishing) {
-                        startThumbnailPulse(view)
-                    }
-                }.start()
-            }
-        }.start()
+        if (prefs.getBoolean("shimmer_loading", true)) {
+            (view.background as? ShimmerDrawable)?.stop()
+            view.background = ShimmerDrawable(surface2, accent)
+        } else {
+            view.background = rounded(surface2, 10)
+            view.alpha = 0.62f
+        }
+    }
+
+    private fun stopThumbnailShimmer(view: ImageView) {
+        (view.background as? ShimmerDrawable)?.stop()
+        view.background = rounded(surface2, 10)
+        view.alpha = 1f
     }
 
     private fun showSettings() {
@@ -989,6 +1005,8 @@ class MainActivity : Activity() {
         selector("Card design", "card_style", listOf("Glass", "Solid", "Minimal"), "Glass")
         selector("Content layout", "layout_mode", listOf("Gallery", "Compact"), "Gallery")
         option("AMOLED black background", "amoled_mode", false)
+        option("Animated aurora + galaxy particles", "ambient_background", true)
+        option("Shimmer thumbnail loading", "shimmer_loading", true)
         panel.addView(label("PERFORMANCE", 11, accent, true).apply {
             setPadding(0, dp(12), 0, dp(4))
         })
@@ -1025,7 +1043,13 @@ class MainActivity : Activity() {
     private fun actionButton(text: String, primary: Boolean = true, action: () -> Unit) =
         Button(this).apply {
             this.text = text; textSize = 11f; isAllCaps = false; typeface = Typeface.DEFAULT_BOLD
-            setTextColor(white); background = rounded(if (primary) accent else surface2, 14)
+            setTextColor(white)
+            val fill = if (primary) accent else surface2
+            background = ripple(GradientDrawable().apply {
+                setColor(fill)
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.argb(85, 235, 220, 255))
+            })
             setOnClickListener {
                 if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("smooth_animations", true)) {
                     animate().scaleX(0.97f).scaleY(0.97f).setDuration(65).withEndAction {
@@ -1035,6 +1059,25 @@ class MainActivity : Activity() {
                 action()
             }
         }
+
+    private fun glassDrawable(radius: Int): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Color.argb(174, 34, 25, 53), Color.argb(142, 17, 17, 32))).apply {
+            cornerRadius = dp(radius).toFloat()
+            setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+        }
+
+    private fun ripple(content: Drawable): RippleDrawable =
+        RippleDrawable(ColorStateList.valueOf(Color.argb(72, 225, 205, 255)), content, null)
+
+    private fun animateScreen(view: View) {
+        if (!prefs.getBoolean("smooth_animations", true)) return
+        view.alpha = 0f
+        view.translationY = dp(7).toFloat()
+        view.post {
+            if (!isFinishing) view.animate().alpha(1f).translationY(0f).setDuration(230).start()
+        }
+    }
 
     private fun label(text: String, size: Int, color: Int, bold: Boolean) = TextView(this).apply {
         this.text = text; textSize = size.toFloat(); setTextColor(color)
