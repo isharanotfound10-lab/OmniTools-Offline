@@ -22,6 +22,10 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.Spinner
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
+import android.widget.HorizontalScrollView
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -42,10 +46,18 @@ import java.util.concurrent.Callable
 import org.jsoup.Jsoup
 
 class MainActivity : Activity() {
-    private val bgColor = Color.rgb(7, 6, 15)
-    private val surface = Color.rgb(24, 19, 36)
-    private val surface2 = Color.rgb(34, 26, 49)
-    private val accent = Color.rgb(190, 75, 255)
+    private val prefs get() = getSharedPreferences("xanime", MODE_PRIVATE)
+    private val amoled get() = prefs.getBoolean("amoled_mode", false)
+    private val bgColor: Int get() = if (amoled) Color.BLACK else Color.rgb(7, 6, 15)
+    private val surface: Int get() = if (amoled) Color.rgb(13, 13, 17) else Color.rgb(24, 19, 36)
+    private val surface2: Int get() = if (amoled) Color.rgb(24, 24, 29) else Color.rgb(34, 26, 49)
+    private val accent: Int get() = when (prefs.getString("accent_color", "Purple")) {
+        "Pink" -> Color.rgb(255, 76, 164)
+        "Cyan" -> Color.rgb(0, 190, 210)
+        "Blue" -> Color.rgb(75, 130, 255)
+        "Green" -> Color.rgb(60, 190, 130)
+        else -> Color.rgb(190, 75, 255)
+    }
     private val pink = Color.rgb(255, 76, 164)
     private val muted = Color.rgb(174, 163, 193)
     private val white = Color.WHITE
@@ -61,6 +73,15 @@ class MainActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
 
     private var query = ""
+    private var selectedCategory: Pair<String, String>? = null
+    private val categories = listOf(
+        "Action" to "action", "Betrayal" to "betrayal", "Big Tits" to "big-tits",
+        "Censored" to "censored", "Comedy" to "comedy", "Domination" to "domination",
+        "Futanari" to "futanari", "Harem" to "harem", "Incest" to "incest",
+        "Maid" to "maid", "Monsters" to "monsters", "Nurse" to "nurse",
+        "Romance" to "romance", "Small Tits" to "small-tits", "Tentacles" to "tentacles",
+        "Uncensored" to "uncensored", "Yaoi" to "yaoi", "Yuri" to "yuri"
+    )
     private var page = 1
     private val maxSearchPages = 10
     private val seenResultUrls = mutableSetOf<String>()
@@ -127,6 +148,8 @@ class MainActivity : Activity() {
     }
 
     private fun showHome() {
+        window.statusBarColor = bgColor
+        window.navigationBarColor = bgColor
         root = baseLayout()
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         header.addView(TextView(this).apply {
@@ -150,6 +173,19 @@ class MainActivity : Activity() {
         }
         root.addView(search, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(22) })
         root.addView(actionButton("SEARCH") { startSearch(true) }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(9) })
+        root.addView(label("BROWSE BY CATEGORY", 10, muted, true).apply {
+            setPadding(0, dp(15), 0, dp(7))
+        })
+        val categoryScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        val categoryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        categories.forEach { (name, slug) ->
+            val isSelected = selectedCategory?.second == slug
+            categoryRow.addView(actionButton(name, isSelected) {
+                selectCategory(name, slug)
+            }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
+        }
+        categoryScroller.addView(categoryRow)
+        root.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(42)))
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) { startSearch(true); true } else false
         }
@@ -169,7 +205,7 @@ class MainActivity : Activity() {
             isFillViewport = true
         }
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(10)) }
-        if (query.isBlank()) content.addView(infoCard("Search for an adult title to discover its available episodes."))
+        if (query.isBlank() && selectedCategory == null) content.addView(infoCard("Search titles or browse a category to explore the catalogue."))
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         pageText = label("SEARCH RESULTS FROM PAGE 1 ONLY", 10, muted, true).apply {
@@ -184,7 +220,7 @@ class MainActivity : Activity() {
             renderAnimeGroups(cachedAnimeGroups)
             pageText.text = "PAGE $page COMPLETE • ${cachedAnimeGroups.size} UNIQUE ANIME"
             scroll.post { scroll.scrollTo(0, searchScrollY) }
-        } else if (query.isNotBlank()) {
+        } else if (query.isNotBlank() || selectedCategory != null) {
             runSearch()
         }
         isDetailScreen = false
@@ -196,7 +232,8 @@ class MainActivity : Activity() {
 
     private fun startSearch(reset: Boolean) {
         val value = search.text.toString().trim()
-        if (value.isBlank()) { status.text = "Enter a search term."; return }
+        if (value.isBlank()) { status.text = "Enter a search term or choose a category."; return }
+        selectedCategory = null
         query = value
         if (reset) {
             page = 1
@@ -210,8 +247,23 @@ class MainActivity : Activity() {
         runSearch()
     }
 
+    private fun selectCategory(name: String, slug: String) {
+        if (busy) return
+        selectedCategory = name to slug
+        query = ""
+        search.setText("")
+        page = 1
+        seenResultUrls.clear()
+        allSearchResults.clear()
+        hasCachedSearch = false
+        cachedAnimeGroups = emptyList()
+        expandedAnimeNames.clear()
+        searchScrollY = 0
+        runSearch()
+    }
+
     private fun runSearch(append: Boolean = false) {
-        if (busy || query.isBlank()) return
+        if (busy || (query.isBlank() && selectedCategory == null)) return
         busy = true
         val requestedPage = page
         status.text = if (append) "Loading more results..." else "Searching..."
@@ -221,8 +273,13 @@ class MainActivity : Activity() {
         pageText.text = "SEARCHING PAGE $requestedPage"
         worker.execute {
             try {
-                val encoded = URLEncoder.encode(query, "UTF-8")
-                val address = "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
+                val address = selectedCategory?.let { (_, slug) ->
+                    if (requestedPage == 1) "https://xanimeporn.com/$slug/"
+                    else "https://xanimeporn.com/$slug/page/$requestedPage/"
+                } ?: run {
+                    val encoded = URLEncoder.encode(query, "UTF-8")
+                    "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
+                }
                 val html = request(address)
                 val parsed = SiteParser.parseSearch(Jsoup.parse(html, address))
                 val uniqueResults = LinkedHashMap<String, SearchResult>()
@@ -338,7 +395,7 @@ class MainActivity : Activity() {
     }
 
     private fun loadNextPage() {
-        if (busy || page >= maxSearchPages || query.isBlank()) return
+        if (busy || page >= maxSearchPages || (query.isBlank() && selectedCategory == null)) return
         page += 1
         runSearch(append = true)
     }
@@ -374,7 +431,7 @@ class MainActivity : Activity() {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(13), dp(13), dp(13), dp(13))
-                background = rounded(surface, 18)
+                background = rounded(cardSurface(), cardRadius())
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -396,62 +453,92 @@ class MainActivity : Activity() {
             card.addView(heading)
 
             val episodes = group.details?.episodes.orEmpty()
-            val visibleEpisodes = if (expanded) episodes else episodes.take(4)
-            val gallery = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-            }
-            visibleEpisodes.chunked(4).forEachIndexed { rowIndex, rowEpisodes ->
-                val row = LinearLayout(this).apply {
+            if (prefs.getString("layout_mode", "Gallery") == "Compact") {
+                val previewRow = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(10), 0, 0)
                 }
-                rowEpisodes.forEachIndexed { columnIndex, episode ->
-                    val episodeIndex = rowIndex * 4 + columnIndex
-                    val tile = LinearLayout(this).apply {
-                        orientation = LinearLayout.VERTICAL
-                        gravity = Gravity.CENTER
-                        background = rounded(surface2, 10)
-                        clipToOutline = true
+                val preview = ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    background = rounded(surface2, 10)
+                    layoutParams = LinearLayout.LayoutParams(dp(104), dp(72))
+                }
+                previewRow.addView(preview)
+                val previewUrl = group.thumbnails.firstOrNull()?.takeIf { it.isNotBlank() }
+                    ?: group.firstResult.thumbnail
+                if (previewUrl.isNotBlank()) loadImage(previewUrl, preview)
+                val previewInfo = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), 0, 0, 0)
+                }
+                previewInfo.addView(label(
+                    if (episodes.isNotEmpty()) "${episodes.size} Episodes" else "Episode count loading",
+                    12, white, true
+                ))
+                previewInfo.addView(label(
+                    if (group.hasSubEng) "SUB-ENG" else "Anime episode list",
+                    10, muted, false
+                ).apply { setPadding(0, dp(5), 0, 0) })
+                previewRow.addView(previewInfo, LinearLayout.LayoutParams(0, -2, 1f))
+                card.addView(previewRow)
+            } else {
+                val expanded = group.name.lowercase() in expandedAnimeNames
+                val visibleEpisodes = if (expanded) episodes else episodes.take(4)
+                val gallery = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                visibleEpisodes.chunked(4).forEachIndexed { rowIndex, rowEpisodes ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
                     }
+                    rowEpisodes.forEachIndexed { columnIndex, episode ->
+                        val episodeIndex = rowIndex * 4 + columnIndex
+                        val tile = LinearLayout(this).apply {
+                            orientation = LinearLayout.VERTICAL
+                            gravity = Gravity.CENTER
+                            background = rounded(surface2, 10)
+                            clipToOutline = true
+                        }
+                        val image = ImageView(this).apply {
+                            scaleType = ImageView.ScaleType.CENTER_CROP
+                            background = rounded(surface2, 10)
+                            layoutParams = LinearLayout.LayoutParams(-1, dp(72))
+                        }
+                        tile.addView(image)
+                        val number = episode.number.takeIf { it > 0 }?.let { "EP $it" } ?: "EP " + (episodeIndex + 1)
+                        tile.addView(label(number, 9, muted, true).apply {
+                            gravity = Gravity.CENTER
+                            setPadding(0, dp(5), 0, dp(5))
+                        })
+                        row.addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                            if (columnIndex > 0) marginStart = dp(7)
+                        })
+                        group.thumbnails.getOrNull(episodeIndex)?.takeIf { it.isNotBlank() }?.let {
+                            loadImage(it, image)
+                        }
+                    }
+                    repeat(4 - rowEpisodes.size) {
+                        row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f).apply {
+                            if (row.childCount > 0) marginStart = dp(7)
+                        })
+                    }
+                    gallery.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                        if (rowIndex > 0) topMargin = dp(8)
+                    })
+                }
+                if (episodes.isEmpty()) {
                     val image = ImageView(this).apply {
                         scaleType = ImageView.ScaleType.CENTER_CROP
                         background = rounded(surface2, 10)
                         layoutParams = LinearLayout.LayoutParams(-1, dp(72))
                     }
-                    tile.addView(image)
-                    val number = episode.number.takeIf { it > 0 }?.let { "EP $it" } ?: "EP " + (episodeIndex + 1)
-                    tile.addView(label(number, 9, muted, true).apply {
-                        gravity = Gravity.CENTER
-                        setPadding(0, dp(5), 0, dp(5))
-                    })
-                    row.addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                        if (columnIndex > 0) marginStart = dp(7)
-                    })
-                    group.thumbnails.getOrNull(episodeIndex)?.takeIf { it.isNotBlank() }?.let {
-                        loadImage(it, image)
-                    }
+                    gallery.addView(image)
+                    if (group.firstResult.thumbnail.isNotBlank()) loadImage(group.firstResult.thumbnail, image)
                 }
-                repeat(4 - rowEpisodes.size) {
-                    row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f).apply {
-                        if (row.childCount > 0) marginStart = dp(7)
-                    })
-                }
-                gallery.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
-                    if (rowIndex > 0) topMargin = dp(8)
+                card.addView(gallery, LinearLayout.LayoutParams(-1, -2).apply {
+                    topMargin = dp(11)
                 })
             }
-            if (episodes.isEmpty()) {
-                val image = ImageView(this).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    background = rounded(surface2, 10)
-                    layoutParams = LinearLayout.LayoutParams(-1, dp(72))
-                }
-                gallery.addView(image)
-                if (group.firstResult.thumbnail.isNotBlank()) loadImage(group.firstResult.thumbnail, image)
-            }
-            card.addView(gallery, LinearLayout.LayoutParams(-1, -2).apply {
-                topMargin = dp(11)
-            })
 
             val footer = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -808,7 +895,6 @@ class MainActivity : Activity() {
     }
 
     private fun showSettings() {
-        val prefs = getSharedPreferences("xanime", MODE_PRIVATE)
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(8), dp(22), dp(4))
@@ -825,6 +911,31 @@ class MainActivity : Activity() {
                 }
             })
         }
+        fun selector(title: String, key: String, values: List<String>, default: String) {
+            panel.addView(label(title, 12, muted, true).apply {
+                setPadding(0, dp(10), 0, dp(4))
+            })
+            val spinner = Spinner(this)
+            spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, values)
+            spinner.setSelection(values.indexOf(prefs.getString(key, default)).coerceAtLeast(0))
+            spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+                override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                    prefs.edit().putString(key, values[position]).apply()
+                }
+            }
+            panel.addView(spinner, LinearLayout.LayoutParams(-1, dp(44)))
+        }
+        panel.addView(label("PERSONALIZATION", 11, accent, true).apply {
+            setPadding(0, dp(4), 0, dp(4))
+        })
+        selector("Accent colour", "accent_color", listOf("Purple", "Pink", "Cyan", "Blue", "Green"), "Purple")
+        selector("Card design", "card_style", listOf("Glass", "Solid", "Minimal"), "Glass")
+        selector("Content layout", "layout_mode", listOf("Gallery", "Compact"), "Gallery")
+        option("AMOLED black background", "amoled_mode", false)
+        panel.addView(label("PERFORMANCE", 11, accent, true).apply {
+            setPadding(0, dp(12), 0, dp(4))
+        })
         option("Smooth animations", "smooth_animations", true)
         option("Fast search (up to 4 concurrent detail requests)", "fast_search", true)
         option("High-quality thumbnails (uses more data)", "high_quality_thumbnails", false)
@@ -832,7 +943,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("XAnime settings")
             .setView(panel)
-            .setPositiveButton("DONE", null)
+            .setPositiveButton("APPLY") { _, _ -> showHome() }
             .setNeutralButton("CLEAR CACHE") { _, _ ->
                 detailCache.clear()
                 imageCache.evictAll()
@@ -872,6 +983,18 @@ class MainActivity : Activity() {
     private fun label(text: String, size: Int, color: Int, bold: Boolean) = TextView(this).apply {
         this.text = text; textSize = size.toFloat(); setTextColor(color)
         if (bold) typeface = Typeface.DEFAULT_BOLD
+    }
+
+    private fun cardSurface(): Int = when (prefs.getString("card_style", "Glass")) {
+        "Solid" -> surface2
+        "Minimal" -> Color.TRANSPARENT
+        else -> surface
+    }
+
+    private fun cardRadius(): Int = when (prefs.getString("card_style", "Glass")) {
+        "Minimal" -> 8
+        "Solid" -> 14
+        else -> 18
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
