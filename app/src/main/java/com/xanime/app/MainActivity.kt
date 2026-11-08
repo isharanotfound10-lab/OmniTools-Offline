@@ -74,6 +74,8 @@ class MainActivity : Activity() {
 
     private var query = ""
     private var selectedCategory: Pair<String, String>? = null
+    private var selectedSort = "latest"
+    private var catalogMode = false
     private val categories = listOf(
         "Action" to "action", "Betrayal" to "betrayal", "Big Tits" to "big-tits",
         "Censored" to "censored", "Comedy" to "comedy", "Domination" to "domination",
@@ -178,6 +180,9 @@ class MainActivity : Activity() {
         })
         val categoryScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val categoryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        categoryRow.addView(actionButton("All", selectedCategory == null && catalogMode) {
+            selectAllCategories()
+        }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
         categories.forEach { (name, slug) ->
             val isSelected = selectedCategory?.second == slug
             categoryRow.addView(actionButton(name, isSelected) {
@@ -186,6 +191,24 @@ class MainActivity : Activity() {
         }
         categoryScroller.addView(categoryRow)
         root.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(42)))
+        root.addView(label("SORT BY", 10, muted, true).apply {
+            setPadding(0, dp(12), 0, dp(7))
+        })
+        val sortScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(
+            "latest" to "Latest",
+            "views" to "Most Viewed",
+            "longest" to "Longest",
+            "rate" to "Top Rated",
+            "random" to "Random"
+        ).forEach { (filter, title) ->
+            sortRow.addView(actionButton(title, selectedSort == filter) {
+                selectSort(filter)
+            }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
+        }
+        sortScroller.addView(sortRow)
+        root.addView(sortScroller, LinearLayout.LayoutParams(-1, dp(42)))
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) { startSearch(true); true } else false
         }
@@ -205,7 +228,7 @@ class MainActivity : Activity() {
             isFillViewport = true
         }
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(10)) }
-        if (query.isBlank() && selectedCategory == null) content.addView(infoCard("Search titles or browse a category to explore the catalogue."))
+        if (query.isBlank() && selectedCategory == null && !catalogMode) content.addView(infoCard("Search titles, choose a category, or select a sort filter to browse the full catalogue."))
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         pageText = label("SEARCH RESULTS FROM PAGE 1 ONLY", 10, muted, true).apply {
@@ -220,7 +243,7 @@ class MainActivity : Activity() {
             renderAnimeGroups(cachedAnimeGroups)
             pageText.text = "PAGE $page COMPLETE • ${cachedAnimeGroups.size} UNIQUE ANIME"
             scroll.post { scroll.scrollTo(0, searchScrollY) }
-        } else if (query.isNotBlank() || selectedCategory != null) {
+        } else if (query.isNotBlank() || selectedCategory != null || catalogMode) {
             runSearch()
         }
         isDetailScreen = false
@@ -234,6 +257,7 @@ class MainActivity : Activity() {
         val value = search.text.toString().trim()
         if (value.isBlank()) { status.text = "Enter a search term or choose a category."; return }
         selectedCategory = null
+        catalogMode = false
         query = value
         if (reset) {
             page = 1
@@ -247,9 +271,40 @@ class MainActivity : Activity() {
         runSearch()
     }
 
+    private fun selectAllCategories() {
+        if (busy) return
+        selectedCategory = null
+        query = ""
+        catalogMode = true
+        search.setText("")
+        resetCatalogResults()
+        runSearch()
+    }
+
+    private fun selectSort(filter: String) {
+        if (busy) return
+        selectedSort = filter
+        query = ""
+        catalogMode = true
+        search.setText("")
+        resetCatalogResults()
+        runSearch()
+    }
+
+    private fun resetCatalogResults() {
+        page = 1
+        seenResultUrls.clear()
+        allSearchResults.clear()
+        hasCachedSearch = false
+        cachedAnimeGroups = emptyList()
+        expandedAnimeNames.clear()
+        searchScrollY = 0
+    }
+
     private fun selectCategory(name: String, slug: String) {
         if (busy) return
         selectedCategory = name to slug
+        catalogMode = true
         query = ""
         search.setText("")
         page = 1
@@ -263,7 +318,7 @@ class MainActivity : Activity() {
     }
 
     private fun runSearch(append: Boolean = false) {
-        if (busy || (query.isBlank() && selectedCategory == null)) return
+        if (busy || (query.isBlank() && selectedCategory == null && !catalogMode)) return
         busy = true
         val requestedPage = page
         status.text = if (append) "Loading more results..." else "Searching..."
@@ -273,10 +328,9 @@ class MainActivity : Activity() {
         pageText.text = "SEARCHING PAGE $requestedPage"
         worker.execute {
             try {
-                val address = selectedCategory?.let { (_, slug) ->
-                    if (requestedPage == 1) "https://xanimeporn.com/$slug/"
-                    else "https://xanimeporn.com/$slug/page/$requestedPage/"
-                } ?: run {
+                val address = if (query.isBlank()) {
+                    CatalogUrlBuilder.build(selectedCategory?.second, selectedSort, requestedPage)
+                } else {
                     val encoded = URLEncoder.encode(query, "UTF-8")
                     "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
                 }
@@ -395,7 +449,7 @@ class MainActivity : Activity() {
     }
 
     private fun loadNextPage() {
-        if (busy || page >= maxSearchPages || (query.isBlank() && selectedCategory == null)) return
+        if (busy || page >= maxSearchPages || (query.isBlank() && selectedCategory == null && !catalogMode)) return
         page += 1
         runSearch(append = true)
     }
