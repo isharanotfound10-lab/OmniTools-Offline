@@ -22,7 +22,7 @@ class HentainiEpisodeParserTest {
         )
 
         assertEquals(listOf(1, 2), episodes.map { it.number })
-        assertEquals("Episode 01", episodes.first().title)
+        assertEquals("Episode 1", episodes.first().title)
         assertEquals("https://hentaini.com/ep1.jpg", episodes.first().thumbnailUrl)
     }
 
@@ -87,6 +87,6 @@ class HentainiEpisodeParserTest {
             html, "https://hentaini.com/h/sample-series", "sample-series"
         ).single()
 
-        assertEquals("Episode 01", episode.title)
+        assertEquals("Episode 1", episode.title)
     }
 }
