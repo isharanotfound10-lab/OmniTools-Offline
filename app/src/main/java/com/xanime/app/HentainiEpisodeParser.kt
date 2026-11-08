@@ -74,13 +74,29 @@ object HentainiEpisodeParser {
         }
         // Only use VideoObject metadata. Other JSON-LD objects can describe
         // the series itself and repeat its cover/providers on every episode.
-        val videoObjects = jsonLd.flatMap { findVideoObjects(it) }
+        val allVideoObjects = jsonLd.flatMap { findVideoObjects(it) }
+        val pageHeading = doc.selectFirst("h1")?.text()?.trim().orEmpty()
+        // A page can contain shared/related VideoObjects as well as the
+        // current episode. Match canonical identity first; title is a
+        // secondary signal. If multiple unrelated objects remain, do not
+        // guess and accidentally reuse another episode's media.
+        val identityMatches = allVideoObjects.filter { videoObject ->
+            videoObjectBelongsToPage(videoObject, pageUrl)
+        }
+        val titleMatches = allVideoObjects.filter { videoObject ->
+            sequenceOf(videoObject.optString("name"), videoObject.optString("headline"))
+                .any { it.isNotBlank() && pageHeading.isNotBlank() && it.trim().equals(pageHeading, true) }
+        }
+        val videoObjects = when {
+            identityMatches.isNotEmpty() -> identityMatches
+            titleMatches.isNotEmpty() -> titleMatches
+            allVideoObjects.size == 1 -> allVideoObjects
+            else -> emptyList()
+        }
         val structuredTitle = videoObjects.asSequence()
-            .flatMap { findJsonValues(it, "name").asSequence() + findJsonValues(it, "headline").asSequence() }
-            .filterIsInstance<String>()
+            .flatMap { sequenceOf(it.optString("name"), it.optString("headline")).asSequence() }
             .map { it.trim() }
             .firstOrNull { it.isNotBlank() && !it.equals("Hentaini", true) }
-        val pageHeading = doc.selectFirst("h1")?.text()?.trim().orEmpty()
         val title = structuredTitle
             ?: pageHeading.takeIf { it.isNotBlank() }
             ?: doc.title().substringBefore("|").trim()
@@ -173,6 +189,26 @@ object HentainiEpisodeParser {
         }
 
         return HentainiEpisodePage(title, thumbnail, found.values.sortedBy { it.host.lowercase() })
+    }
+
+    private fun videoObjectBelongsToPage(video: JSONObject, pageUrl: String): Boolean {
+        val page = runCatching { URI(pageUrl) }.getOrNull() ?: return false
+        val identityValues = sequenceOf(
+            findJsonValues(video, "url"),
+            findJsonValues(video, "@id"),
+            findJsonValues(video, "mainEntityOfPage")
+        ).flatten()
+        return identityValues.any { value ->
+            val raw = when (value) {
+                is String -> value
+                is JSONObject -> value.optString("@id").ifBlank { value.optString("url") }
+                else -> ""
+            }
+            val candidate = normalizeUrl(raw, pageUrl) ?: return@any false
+            val uri = runCatching { URI(candidate) }.getOrNull() ?: return@any false
+            uri.host.equals(page.host, true) &&
+                uri.path.orEmpty().trimEnd('/').equals(page.path.orEmpty().trimEnd('/'), true)
+        }
     }
 
     private fun parseJsonLd(source: String): Any? {
