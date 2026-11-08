@@ -186,6 +186,35 @@ object HentainiApi {
         return episodeLinks.size
     }
 
+
+    fun loadEpisodes(series: HentainiSeries): List<HentainiEpisode> {
+        val html = request(series.pageUrl, "text/html")
+        return HentainiEpisodeParser.parseSeries(html, series.pageUrl, series.slug)
+    }
+
+    fun loadEpisodePage(episode: HentainiEpisode): HentainiEpisodePage {
+        val html = request(episode.url, "text/html")
+        val parsed = HentainiEpisodeParser.parseEpisode(html, episode.url)
+        if (parsed.streams.isNotEmpty()) return parsed
+
+        // The site's Download control can lead to a separate page containing
+        // the host choices. Follow only same-site download pages.
+        val downloadPage = runCatching {
+            val document = Jsoup.parse(html, episode.url)
+            document.select("a[href]").firstOrNull { anchor ->
+                anchor.text().contains("download", ignoreCase = true) &&
+                    anchor.absUrl("href").contains("hentaini.com", ignoreCase = true) &&
+                    anchor.absUrl("href") != episode.url
+            }?.absUrl("href")
+        }.getOrNull()
+        if (downloadPage.isNullOrBlank()) return parsed
+
+        val downloadHtml = runCatching { request(downloadPage, "text/html") }.getOrNull()
+            ?: return parsed
+        val downloadParsed = HentainiEpisodeParser.parseEpisode(downloadHtml, downloadPage)
+        return parsed.copy(streams = downloadParsed.streams)
+    }
+
     private fun request(address: String, accept: String): String {
         val connection = (URL(address).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
