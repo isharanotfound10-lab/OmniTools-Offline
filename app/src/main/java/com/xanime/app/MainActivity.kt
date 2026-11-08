@@ -32,7 +32,7 @@ import java.util.concurrent.Executors
 import org.jsoup.Jsoup
 
 class MainActivity : Activity() {
-    private val background = Color.rgb(7, 6, 15)
+    private val bgColor = Color.rgb(7, 6, 15)
     private val surface = Color.rgb(24, 19, 36)
     private val surface2 = Color.rgb(34, 26, 49)
     private val accent = Color.rgb(190, 75, 255)
@@ -56,8 +56,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = background
-        window.navigationBarColor = background
+        window.statusBarColor = bgColor
+        window.navigationBarColor = bgColor
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LOW_PROFILE
         if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("adult_confirmed", false)) showAgeGate()
         else showHome()
@@ -71,7 +71,7 @@ class MainActivity : Activity() {
     private fun baseLayout(): LinearLayout = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(dp(18), dp(20), dp(18), dp(14))
-        setBackgroundColor(background)
+        setBackgroundColor(bgColor)
         layoutParams = ViewGroup.LayoutParams(-1, -1)
     }
 
