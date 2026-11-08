@@ -80,7 +80,7 @@ class MainActivity : Activity() {
         "Futanari" to "futanari", "Harem" to "harem", "Incest" to "incest",
         "Maid" to "maid", "Monsters" to "monsters", "Nurse" to "nurse",
         "Romance" to "romance", "Small Tits" to "small-tits", "Tentacles" to "tentacles",
-        "Uncensored" to "uncensored", "Yaoi" to "yaoi", "Yuri" to "yuri"
+        "Uncensored" to "uncensored", "Yaoi" to "yaoi", "Yuri" to "yuri", "School" to "school", "Shotacon" to "shotacon"
     )
     private var page = 1
     private val maxSearchPages = 10
