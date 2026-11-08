@@ -85,7 +85,10 @@ object HentainiEpisodeParser {
             ?: pageHeading.takeIf { it.isNotBlank() }
             ?: doc.title().substringBefore("|").trim()
         val structuredThumbnail = videoObjects.asSequence()
-            .flatMap { findJsonValues(it, "thumbnailUrl").asSequence() }
+            .flatMap { video ->
+                sequenceOf("thumbnailUrl", "thumbnail", "image")
+                    .flatMap { key -> findJsonValues(video, key).asSequence() }
+            }
             .mapNotNull { jsonImageUrl(it, pageUrl) }
             .firstOrNull { isEpisodeImage(it) }
         val thumbnail = sequenceOf(
@@ -131,28 +134,37 @@ object HentainiEpisodeParser {
 
         // DOM fallback is restricted to episode content and actual supported
         // provider hosts; skip global header/footer/sidebar navigation.
-        val contentRoots = doc.select("main, article, .entry-content, .episode-content, [class*=episode-content], [class*=download-links]")
-        val scanRoot = contentRoots.firstOrNull() ?: doc.body()
-        scanRoot?.select("a[href], iframe[src], [data-url], [data-href], [data-link], [data-download-url], button, [role=button]")?.forEach { element ->
-            val label = element.text().ifBlank { element.attr("title") }.ifBlank { element.attr("aria-label") }
-            listOf("href", "src", "data-url", "data-href", "data-link", "data-download-url").forEach { key ->
-                val value = element.attr(key)
-                if (value.isNotBlank()) add(value, label)
-            }
-            val onclick = element.attr("onclick")
-            Regex("""['"]((?:https?:)?//[^'"]+)['"]""").findAll(onclick).forEach {
-                add(it.groupValues[1], label)
+        val contentRoots = doc.select("main, article, .entry-content, .episode-content, [class*=episode-content], [class*=download-links], [class*=download], [id*=download]")
+        val scanRoots = contentRoots.ifEmpty { listOfNotNull(doc.body()) }.distinct()
+        scanRoots.forEach { scanRoot ->
+            scanRoot.select("a[href], iframe[src], [data-url], [data-href], [data-link], [data-download-url], button, [role=button]").forEach { element ->
+                val label = element.text().ifBlank { element.attr("title") }.ifBlank { element.attr("aria-label") }
+                listOf("href", "src", "data-url", "data-href", "data-link", "data-download-url", "data-src").forEach { key ->
+                    val value = element.attr(key)
+                    if (value.isNotBlank()) add(value, label)
+                }
+                val onclick = element.attr("onclick")
+                Regex("""['"]((?:https?:)?//[^'"]+)['"]""").findAll(onclick).forEach {
+                    add(it.groupValues[1], label)
+                }
             }
         }
 
         // Some pages expose the same episode's provider URLs in a player
         // configuration script rather than JSON-LD. Only inspect scripts
         // when structured VideoObject metadata is absent.
-        if (videoObjects.isEmpty() && found.isEmpty()) {
+        if (found.isEmpty()) {
+            // Player configurations often live in page-specific scripts beside
+            // a VideoObject that contains only title/thumbnail metadata.
+            // Search scripts even when VideoObject exists, but accept only
+            // explicit supported-provider URLs and deduplicate them.
             val scripts = doc.select("script").joinToString("\n") { it.data() + it.html() }
                 .replace("\\/", "/")
                 .replace("\\u0026", "&")
+                .replace("\\u002f", "/")
+                .replace("\\u002F", "/")
                 .replace("&amp;", "&")
+                .replace("&#038;", "&")
             Regex("""https?://[^\s"'<>\\]+""").findAll(scripts).forEach { match ->
                 val candidate = match.value.trimEnd(',', ';', ')', ']', '}')
                 val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
@@ -244,7 +256,13 @@ object HentainiEpisodeParser {
     private fun jsonImageUrl(value: Any, base: String): String? {
         val raw = when (value) {
             is String -> value
-            is JSONObject -> value.optString("url").ifBlank { value.optString("contentUrl") }
+            is JSONObject -> value.optString("url")
+                .ifBlank { value.optString("contentUrl") }
+                .ifBlank { value.optString("@id") }
+            is JSONArray -> (0 until value.length())
+                .asSequence()
+                .mapNotNull { jsonImageUrl(value.opt(it) ?: return@mapNotNull null, base) }
+                .firstOrNull().orEmpty()
             else -> ""
         }
         if (raw.isBlank()) return null
