@@ -15,7 +15,13 @@ object HentainiTagFilter {
         ELIGIBLE
     }
 
-    private val blockedTags = setOf("shotacon")
+    private val blockedTags = setOf(
+        "ahegao", "anal", "bbw", "big breast", "blackmail", "bondage",
+        "chikan", "cosplay", "futanari", "garyu", "harem", "incest",
+        "maid", "milf", "netorare", "nurse", "orgy", "oyakodon",
+        "paizuri", "rape", "scholar", "shotacon", "small breasts",
+        "succubus", "tentacles"
+    )
 
     // Deliberately conservative indicators. These are risk flags, not an
     // exhaustive classifier; absence of a match never proves adult-only status.
