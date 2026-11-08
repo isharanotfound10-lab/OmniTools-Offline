@@ -31,7 +31,9 @@ class ShimmerDrawable(
         }
     }
 
-    init { animator.start() }
+    fun start() {
+        if (!animator.isStarted) animator.start()
+    }
 
     fun stop() {
         if (animator.isStarted) animator.cancel()
