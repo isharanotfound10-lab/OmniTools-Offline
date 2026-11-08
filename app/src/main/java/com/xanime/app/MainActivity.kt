@@ -196,7 +196,7 @@ class MainActivity : Activity() {
         progress.visibility = View.VISIBLE
         progress.progress = requestedPage
         if (!append) content.removeAllViews()
-        pageText.text = "SEARCHING PAGE 1 ONLY"
+        pageText.text = "SEARCHING PAGE $requestedPage"
         worker.execute {
             try {
                 val encoded = URLEncoder.encode(query, "UTF-8")
