@@ -33,13 +33,27 @@ class HentainiTagFilterTest {
         )
     }
 
-    @Test fun ordinaryGenreTagsAreNotTreatedAsAgeVerification() {
+    @Test fun everyUserSuppliedGenreIsBlocked() {
+        val blocked = listOf(
+            "Ahegao", "Anal", "BBW", "Big Breast", "Blackmail", "Bondage",
+            "Chikan", "Cosplay", "Futanari", "Garyu", "Harem", "Incest",
+            "Maid", "Milf", "Netorare", "Nurse", "Orgy", "Oyakodon",
+            "Paizuri", "Rape", "Scholar", "Shotacon", "Small Breasts",
+            "Succubus", "Tentacles"
+        )
+        blocked.forEach { tag ->
+            assertEquals(
+                "Expected tag to be blocked: " + tag,
+                HentainiTagFilter.Result.BLOCKED_MINOR_RELATED_TAG,
+                HentainiTagFilter.evaluate(listOf(tag), allCharactersVerifiedAdult = true)
+            )
+        }
+    }
+
+    @Test fun entriesWithoutBlockedGenresStillFailClosedWhenAgeIsUnverified() {
         assertEquals(
             HentainiTagFilter.Result.UNVERIFIED,
-            HentainiTagFilter.evaluate(
-                listOf("Milf", "Harem", "Big Breast"),
-                allCharactersVerifiedAdult = false
-            )
+            HentainiTagFilter.evaluate(listOf("Drama"), allCharactersVerifiedAdult = false)
         )
     }
 
@@ -57,7 +71,7 @@ class HentainiTagFilterTest {
         assertEquals(
             HentainiTagFilter.Result.ELIGIBLE,
             HentainiTagFilter.evaluate(
-                listOf("Milf", "Harem"),
+                listOf("Drama"),
                 allCharactersVerifiedAdult = true,
                 title = "Adult-only title"
             )
