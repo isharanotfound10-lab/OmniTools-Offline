@@ -158,6 +158,7 @@ class MainActivity : Activity() {
         page.addView(actionButton("EXIT", false) { finish() })
         setContentView(page)
         animateScreen(page)
+        animateScreen(page)
     }
 
     private fun showHome() {
@@ -784,6 +785,7 @@ class MainActivity : Activity() {
         page.addView(actionButton("‹ BACK", false) { showHome() })
         page.addView(label("Loading episode...", 16, white, true).apply { setPadding(0, dp(28), 0, 0) })
         setContentView(page)
+        animateScreen(page)
     }
 
     private fun showEpisode(item: EpisodeDetails) {
@@ -794,6 +796,7 @@ class MainActivity : Activity() {
         if (item.blockedReason != null) {
             page.addView(infoCard("This entry is hidden by the adult-safety filter."))
             setContentView(page)
+        animateScreen(page)
             return
         }
 
@@ -834,6 +837,7 @@ class MainActivity : Activity() {
         scroll.addView(body)
         page.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(page)
+        animateScreen(page)
     }
 
     private fun showErrorDetail(message: String) {
@@ -842,6 +846,7 @@ class MainActivity : Activity() {
         page.addView(actionButton("‹ BACK", false) { showHome() })
         page.addView(infoCard(message))
         setContentView(page)
+        animateScreen(page)
     }
 
     private fun copyLink(url: String) {
