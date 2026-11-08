@@ -142,7 +142,7 @@ class MainActivity : Activity() {
         if (query.isBlank()) content.addView(infoCard("Search for an adult title to discover its available episodes."))
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        pageText = label("SCROLL TO LOAD • UP TO 5 PAGES", 10, muted, true).apply {
+        pageText = label("AUTOMATICALLY LOADING UP TO 5 PAGES", 10, muted, true).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(4))
         }
@@ -179,25 +179,26 @@ class MainActivity : Activity() {
                 main.post {
                     busy = false
                     progress.visibility = View.GONE
-                    val fresh = parsed.filter { seenResultUrls.add(it.url) }
-                    if (fresh.isEmpty() && !append) {
-                        status.text = "No safe results found"
-                        content.addView(infoCard("No matching adult-only results were found. Try another search term."))
-                        pageText.text = "NO RESULTS"
-                    } else if (fresh.isEmpty()) {
-                        page = (requestedPage - 1).coerceAtLeast(1)
-                        status.text = "No more results found"
-                        pageText.text = "END OF RESULTS • PAGE $page OF $maxSearchPages"
+                    if (parsed.isEmpty()) {
+                        if (!append) {
+                            status.text = "No safe results found"
+                            content.addView(infoCard("No matching adult-only results were found. Try another search term."))
+                            pageText.text = "NO RESULTS"
+                        } else {
+                            page = (requestedPage - 1).coerceAtLeast(1)
+                            status.text = "${seenResultUrls.size} results for “$query”"
+                            pageText.text = "ALL AVAILABLE RESULTS LOADED • PAGE $page"
+                        }
                     } else {
+                        val fresh = parsed.filter { seenResultUrls.add(it.url) }
                         fresh.forEach { addResultCard(it) }
                         status.text = "${seenResultUrls.size} results for “$query”"
-                        pageText.text = if (requestedPage >= maxSearchPages) {
-                            "END OF RESULTS • 5 PAGES"
-                        } else {
-                            "PAGE $requestedPage OF $maxSearchPages • SCROLL FOR MORE"
-                        }
                         if (requestedPage < maxSearchPages) {
-                            scroll.post { loadNextPageIfViewportIsShort() }
+                            pageText.text = "LOADING ALL RESULTS • PAGE $requestedPage OF $maxSearchPages"
+                            // Fetch every available page automatically; the user only scrolls the combined list.
+                            scroll.post { loadNextPage() }
+                        } else {
+                            pageText.text = "ALL RESULTS LOADED • 5 PAGES"
                         }
                     }
                 }
