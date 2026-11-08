@@ -107,8 +107,21 @@ object HentainiEpisodeParser {
             }
             .mapNotNull { jsonImageUrl(it, pageUrl) }
             .firstOrNull { isEpisodeImage(it) }
+        // Hentaini serves episode-specific screenshots through its Nuxt
+        // image proxy in og:image/twitter:image metadata. These are not
+        // necessarily the series cover, so inspect them before generic DOM
+        // images (which can belong to navigation or related content).
+        val metadataThumbnail = sequenceOf(
+            doc.selectFirst("meta[property=og:image]")?.attr("content"),
+            doc.selectFirst("meta[name=twitter:image]")?.attr("content"),
+            doc.selectFirst("meta[property=og:image:url]")?.attr("content"),
+            doc.selectFirst("link[rel=image_src]")?.attr("href")
+        ).filterNotNull()
+            .mapNotNull { normalizeUrl(it, pageUrl) }
+            .firstOrNull { isEpisodeImage(it) }
         val thumbnail = sequenceOf(
             structuredThumbnail,
+            metadataThumbnail,
             doc.selectFirst("video[poster]")?.absUrl("poster"),
             doc.selectFirst("article img")?.let { imageUrl(it) },
             doc.selectFirst("main img")?.let { imageUrl(it) },
