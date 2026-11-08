@@ -1,9 +1,9 @@
 name: XAnime Android Build
 on:
   push:
-    branches: [main, xanime-app]
+    branches: [main, xanime-app, feature/catalog-sorting]
   pull_request:
-    branches: [main]
+    branches: [main, xanime-app]
   workflow_dispatch:
 permissions:
   contents: read
