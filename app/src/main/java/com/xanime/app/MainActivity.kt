@@ -197,13 +197,17 @@ class MainActivity : Activity() {
                     pageText.text = "READING EPISODE COUNTS FROM PAGE 1 RESULTS"
                 }
                 uniqueResults.values.forEachIndexed { index, result ->
-                    val details = runCatching {
+                    val parsedDetail = runCatching {
                         val detailHtml = request(result.url)
-                        SiteParser.parseEpisode(Jsoup.parse(detailHtml, result.url), result.url)
+                        val detailDoc = Jsoup.parse(detailHtml, result.url)
+                        val episodeDetails = SiteParser.parseEpisode(detailDoc, result.url)
+                        episodeDetails to extractEpisodeThumbnails(detailDoc, episodeDetails.episodes, result)
                     }.getOrNull()
+                    val details = parsedDetail?.first
+                    val thumbnails = parsedDetail?.second.orEmpty()
                     val subEng = Regex("(?i)\\[\\s*sub\\s*[- ]?\\s*eng\\s*]")
                         .containsMatchIn(result.title)
-                    groups.add(AnimeGroup(animeName(result.title), result, details, subEng))
+                    groups.add(AnimeGroup(animeName(result.title), result, details, thumbnails, subEng))
                     main.post {
                         progress.progress = index + 1
                         status.text = "Checking anime ${index + 1} of ${uniqueResults.size}..."
@@ -253,7 +257,7 @@ class MainActivity : Activity() {
         runSearch(append = true)
     }
 
-    private data class AnimeGroup(val name: String, val firstResult: SearchResult, val details: EpisodeDetails?, val hasSubEng: Boolean)
+    private data class AnimeGroup(val name: String, val firstResult: SearchResult, val details: EpisodeDetails?, val thumbnails: List<String>, val hasSubEng: Boolean)
 
     private fun animeName(title: String): String = title
         .replace(Regex("(?i)\\s*\\[\\s*sub\\s*[- ]?\\s*eng\\s*]"), "")
@@ -269,9 +273,8 @@ class MainActivity : Activity() {
         }
         groups.forEach { group ->
             val card = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(15), dp(15), dp(15), dp(15))
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(13), dp(13), dp(13), dp(13))
                 background = rounded(surface, 18)
                 isClickable = true
                 isFocusable = true
@@ -280,20 +283,97 @@ class MainActivity : Activity() {
                     if (episodeDetails != null) showEpisode(episodeDetails) else openEpisode(group.firstResult.url)
                 }
             }
-            val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            details.addView(label(group.name, 15, white, true).apply { maxLines = 2 })
-            val count = group.details?.episodes?.size
-            details.addView(label(
-                if (count != null && count > 0) "$count Episodes" else "Episode count unavailable",
-                12, muted, false
-            ).apply { setPadding(0, dp(6), 0, 0) })
-            card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-            if (group.hasSubEng) card.addView(label("SUB-ENG", 9, pink, true).apply {
+            val heading = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            heading.addView(label(group.name, 15, white, true).apply { maxLines = 2 },
+                LinearLayout.LayoutParams(0, -2, 1f))
+            if (group.hasSubEng) heading.addView(label("SUB-ENG", 9, pink, true).apply {
                 setPadding(dp(9), dp(6), dp(9), dp(6))
                 background = rounded(surface2, 10)
             })
-            content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+            card.addView(heading)
+
+            val episodes = group.details?.episodes.orEmpty()
+            val gallery = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            episodes.take(4).forEachIndexed { index, episode ->
+                val tile = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    background = rounded(surface2, 10)
+                    clipToOutline = true
+                }
+                val image = ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    background = rounded(surface2, 10)
+                    layoutParams = LinearLayout.LayoutParams(-1, dp(72))
+                }
+                tile.addView(image)
+                val number = episode.number.takeIf { it > 0 }?.let { "EP $it" } ?: "EP " + (index + 1)
+                tile.addView(label(number, 9, muted, true).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(5), 0, dp(5))
+                })
+                gallery.addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    if (index > 0) marginStart = dp(7)
+                })
+                group.thumbnails.getOrNull(index)?.takeIf { it.isNotBlank() }?.let { loadImage(it, image) }
+            }
+            if (episodes.isEmpty()) {
+                val image = ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    background = rounded(surface2, 10)
+                    layoutParams = LinearLayout.LayoutParams(-1, dp(72))
+                }
+                gallery.addView(image, LinearLayout.LayoutParams(0, dp(72), 1f))
+                if (group.firstResult.thumbnail.isNotBlank()) loadImage(group.firstResult.thumbnail, image)
+            }
+            card.addView(gallery, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(11)
+            })
+
+            val footer = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val count = episodes.size
+            footer.addView(label(
+                if (count > 0) "$count Episodes" else "Episode count unavailable",
+                12, muted, false
+            ), LinearLayout.LayoutParams(0, -2, 1f))
+            if (count > 4) footer.addView(label("+" + (count - 4) + " MORE", 10, accent, true))
+            card.addView(footer, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(10)
+            })
+            content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(11) })
         }
+    }
+
+    private fun extractEpisodeThumbnails(
+        doc: org.jsoup.nodes.Document,
+        episodes: List<EpisodeLink>,
+        firstResult: SearchResult
+    ): List<String> {
+        val byUrl = LinkedHashMap<String, String>()
+        doc.select(".su-tabs-pane[data-title=Episodes] a[href]").forEach { anchor ->
+            val image = anchor.selectFirst("img") ?: anchor.parent()?.selectFirst("img")
+            val thumbnail = image?.let {
+                sequenceOf("data-lazy-src", "data-src", "data-original", "src", "data-thumb")
+                    .map { key -> it.absUrl(key) }
+                    .firstOrNull { value -> value.startsWith("https://") || value.startsWith("http://") }
+            }.orEmpty()
+            if (thumbnail.isNotBlank()) {
+                byUrl[anchor.absUrl("href").trimEnd('/')] = thumbnail
+            }
+        }
+        if (firstResult.thumbnail.isNotBlank()) {
+            byUrl[firstResult.url.trimEnd('/')] = firstResult.thumbnail
+        }
+        return episodes.map { byUrl[it.url.trimEnd('/')] .orEmpty() }
     }
 
 
