@@ -256,8 +256,8 @@ class MainActivity : Activity() {
                         completion.submit(Callable {
                             val cached = if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)) detailCache[result.url] else null
                             val data = if (cached != null) cached else {
-                                if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("fast_search", true)) detailSlots.acquire(3)
-                                else detailSlots.acquire()
+                                val permits = if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("fast_search", true)) 1 else 2
+                                detailSlots.acquire(permits)
                                 try {
                                     runCatching {
                                         val detailHtml = request(result.url)
@@ -266,7 +266,7 @@ class MainActivity : Activity() {
                                         episodeDetails to extractEpisodeThumbnails(detailDoc, episodeDetails.episodes, result)
                                     }.getOrElse { null to emptyList() }
                                 } finally {
-                                    detailSlots.release(if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("fast_search", true)) 3 else 1)
+                                    detailSlots.release(permits)
                                 }.also { if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)) detailCache[result.url] = it }
                             }
                             AnimeGroup(
@@ -607,7 +607,6 @@ class MainActivity : Activity() {
     }
 
     private fun openEpisode(url: String) {
-        if (busy) return
         showLoadingDetail()
         worker.execute {
             try {
@@ -710,7 +709,8 @@ class MainActivity : Activity() {
 
     private fun loadImage(url: String, target: ImageView) {
         target.tag = url
-        imageCache.get(url)?.let {
+        val cacheEnabled = getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)
+        if (cacheEnabled) imageCache.get(url)?.let {
             target.setImageBitmap(it)
             return
         }
@@ -734,7 +734,7 @@ class MainActivity : Activity() {
                     connection.disconnect()
                 }
                 if (bitmap != null) {
-                    imageCache.put(url, bitmap)
+                    if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)) imageCache.put(url, bitmap)
                     main.post {
                         if (!isFinishing && target.tag == url) target.setImageBitmap(bitmap)
                     }
