@@ -1,6 +1,10 @@
 package com.xanime.app
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.widget.CheckBox
+import android.graphics.Bitmap
+import android.util.LruCache
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -29,6 +33,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorCompletionService
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Semaphore
+import java.util.concurrent.Callable
 import org.jsoup.Jsoup
 
 class MainActivity : Activity() {
@@ -39,7 +47,14 @@ class MainActivity : Activity() {
     private val pink = Color.rgb(255, 76, 164)
     private val muted = Color.rgb(174, 163, 193)
     private val white = Color.WHITE
-    private val worker = Executors.newFixedThreadPool(4)
+    private val worker = Executors.newFixedThreadPool(2)
+    private val detailWorker = Executors.newFixedThreadPool(4)
+    private val imageWorker = Executors.newFixedThreadPool(3)
+    private val detailCache = ConcurrentHashMap<String, Pair<EpisodeDetails?, List<String>>>()
+    private val detailSlots = Semaphore(4)
+    private val imageCache = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
     private val main = Handler(Looper.getMainLooper())
 
     private var query = ""
@@ -73,6 +88,8 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         worker.shutdownNow()
+        detailWorker.shutdownNow()
+        imageWorker.shutdownNow()
         super.onDestroy()
     }
 
@@ -118,6 +135,8 @@ class MainActivity : Activity() {
         titles.addView(label("XANIME", 22, white, true))
         titles.addView(label("ADULT-ONLY LIBRARY", 10, muted, true))
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(actionButton("⚙", false) { showSettings() },
+            LinearLayout.LayoutParams(dp(48), dp(44)))
         root.addView(header)
 
         search = EditText(this).apply {
@@ -212,28 +231,63 @@ class MainActivity : Activity() {
                     it.name.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
                 }.toSet() else emptySet()
                 val newUniqueResults = uniqueResults.filterKeys { it !in existingNames }
-                val groups = mutableListOf<AnimeGroup>()
-                main.post {
-                    progress.max = newUniqueResults.size.coerceAtLeast(1)
-                    progress.progress = 0
-                    status.text = "Found ${parsed.size} results • checking ${uniqueResults.size} unique anime"
-                    pageText.text = "READING EPISODE COUNTS FROM PAGE 1 RESULTS"
+                val resultList = newUniqueResults.values.toList()
+                val placeholders = resultList.map { result ->
+                    AnimeGroup(
+                        animeName(result.title), result, null, emptyList(),
+                        Regex("(?i)\\\\[\\\\s*sub\\\\s*[- ]?\\\\s*eng\\\\s*]")
+                            .containsMatchIn(result.title)
+                    )
                 }
-                newUniqueResults.values.forEachIndexed { index, result ->
-                    val parsedDetail = runCatching {
-                        val detailHtml = request(result.url)
-                        val detailDoc = Jsoup.parse(detailHtml, result.url)
-                        val episodeDetails = SiteParser.parseEpisode(detailDoc, result.url)
-                        episodeDetails to extractEpisodeThumbnails(detailDoc, episodeDetails.episodes, result)
-                    }.getOrNull()
-                    val details = parsedDetail?.first
-                    val thumbnails = parsedDetail?.second.orEmpty()
-                    val subEng = Regex("(?i)\\[\\s*sub\\s*[- ]?\\s*eng\\s*]")
-                        .containsMatchIn(result.title)
-                    groups.add(AnimeGroup(animeName(result.title), result, details, thumbnails, subEng))
-                    main.post {
-                        progress.progress = index + 1
-                        status.text = "Checking anime ${index + 1} of ${newUniqueResults.size}..."
+                main.post {
+                    progress.max = resultList.size.coerceAtLeast(1)
+                    progress.progress = 0
+                    if (append) cachedAnimeGroups = cachedAnimeGroups + placeholders
+                    else cachedAnimeGroups = placeholders
+                    hasCachedSearch = true
+                    status.text = "Found ${parsed.size} results • loading ${resultList.size} anime"
+                    pageText.text = "LOADING DETAILS • PAGE $requestedPage"
+                    renderAnimeGroups(cachedAnimeGroups)
+                }
+
+                if (resultList.isNotEmpty()) {
+                    val completion = ExecutorCompletionService<AnimeGroup>(detailWorker)
+                    resultList.forEach { result ->
+                        completion.submit(Callable {
+                            val cached = if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)) detailCache[result.url] else null
+                            val data = if (cached != null) cached else {
+                                if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("fast_search", true)) detailSlots.acquire(3)
+                                else detailSlots.acquire()
+                                try {
+                                    runCatching {
+                                        val detailHtml = request(result.url)
+                                        val detailDoc = Jsoup.parse(detailHtml, result.url)
+                                        val episodeDetails = SiteParser.parseEpisode(detailDoc, result.url)
+                                        episodeDetails to extractEpisodeThumbnails(detailDoc, episodeDetails.episodes, result)
+                                    }.getOrElse { null to emptyList() }
+                                } finally {
+                                    detailSlots.release(if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("fast_search", true)) 3 else 1)
+                                }.also { if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)) detailCache[result.url] = it }
+                            }
+                            AnimeGroup(
+                                animeName(result.title), result, data.first, data.second,
+                                Regex("(?i)\\\\[\\\\s*sub\\\\s*[- ]?\\\\s*eng\\\\s*]")
+                                    .containsMatchIn(result.title)
+                            )
+                        })
+                    }
+                    resultList.indices.forEach { index ->
+                        val completed = runCatching { completion.take().get() }.getOrNull()
+                        if (completed != null) {
+                            main.post {
+                                cachedAnimeGroups = cachedAnimeGroups.map {
+                                    if (it.firstResult.url == completed.firstResult.url) completed else it
+                                }
+                                progress.progress = index + 1
+                                status.text = "Loaded anime details ${index + 1} of ${resultList.size}"
+                                renderAnimeGroups(cachedAnimeGroups)
+                            }
+                        }
                     }
                 }
                 main.post {
@@ -246,13 +300,10 @@ class MainActivity : Activity() {
                         content.removeAllViews()
                         content.addView(infoCard("No matching adult-only results were found. Try another search term."))
                     } else {
-                        if (append) {
-                            allSearchResults.addAll(parsed)
-                            cachedAnimeGroups = cachedAnimeGroups + groups
-                        } else {
+                        if (append) allSearchResults.addAll(parsed)
+                        else {
                             allSearchResults.clear()
                             allSearchResults.addAll(parsed)
-                            cachedAnimeGroups = groups.toList()
                         }
                         hasCachedSearch = true
                         status.text = "${allSearchResults.size} search results • ${cachedAnimeGroups.size} unique anime"
@@ -434,6 +485,7 @@ class MainActivity : Activity() {
                 topMargin = dp(10)
             })
             content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(11) })
+            animateEntrance(card, content.childCount - 1)
         }
         renderNextPageButton()
         scroll.post { scroll.scrollTo(0, previousScrollY) }
@@ -657,17 +709,81 @@ class MainActivity : Activity() {
     }
 
     private fun loadImage(url: String, target: ImageView) {
-        worker.execute {
+        target.tag = url
+        imageCache.get(url)?.let {
+            target.setImageBitmap(it)
+            return
+        }
+        imageWorker.execute {
             try {
                 val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 9000; readTimeout = 9000
+                    connectTimeout = 7000
+                    readTimeout = 7000
                     setRequestProperty("User-Agent", "Mozilla/5.0")
+                    setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
                 }
-                val bitmap = connection.inputStream.use { BitmapFactory.decodeStream(it) }
-                connection.disconnect()
-                if (bitmap != null) main.post { if (!isFinishing) target.setImageBitmap(bitmap) }
+                val bitmap = try {
+                    connection.inputStream.use { stream ->
+                        val options = BitmapFactory.Options().apply {
+                            inSampleSize = if (getSharedPreferences("xanime", MODE_PRIVATE)
+                                    .getBoolean("high_quality_thumbnails", false)) 1 else 2
+                        }
+                        BitmapFactory.decodeStream(stream, null, options)
+                    }
+                } finally {
+                    connection.disconnect()
+                }
+                if (bitmap != null) {
+                    imageCache.put(url, bitmap)
+                    main.post {
+                        if (!isFinishing && target.tag == url) target.setImageBitmap(bitmap)
+                    }
+                }
             } catch (_: Exception) { }
         }
+    }
+
+    private fun showSettings() {
+        val prefs = getSharedPreferences("xanime", MODE_PRIVATE)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        fun option(title: String, key: String, default: Boolean) {
+            panel.addView(CheckBox(this).apply {
+                text = title
+                textSize = 14f
+                setTextColor(white)
+                buttonTintList = android.content.res.ColorStateList.valueOf(accent)
+                isChecked = prefs.getBoolean(key, default)
+                setOnCheckedChangeListener { _, checked ->
+                    prefs.edit().putBoolean(key, checked).apply()
+                }
+            })
+        }
+        option("Smooth animations", "smooth_animations", true)
+        option("Fast search (up to 4 concurrent detail requests)", "fast_search", true)
+        option("High-quality thumbnails (uses more data)", "high_quality_thumbnails", false)
+        option("Cache search details and thumbnails", "cache_enabled", true)
+        AlertDialog.Builder(this)
+            .setTitle("XAnime settings")
+            .setView(panel)
+            .setPositiveButton("DONE", null)
+            .setNeutralButton("CLEAR CACHE") { _, _ ->
+                detailCache.clear()
+                imageCache.evictAll()
+                Toast.makeText(this, "Cache cleared", Toast.LENGTH_SHORT).show()
+            }
+            .show()
+    }
+
+    private fun animateEntrance(view: View, index: Int) {
+        if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("smooth_animations", true)) return
+        view.alpha = 0f
+        view.translationY = dp(9).toFloat()
+        view.animate().alpha(1f).translationY(0f)
+            .setStartDelay((index.coerceAtMost(5) * 25).toLong())
+            .setDuration(180).start()
     }
 
     private fun infoCard(message: String) = TextView(this).apply {
@@ -679,7 +795,14 @@ class MainActivity : Activity() {
         Button(this).apply {
             this.text = text; textSize = 11f; isAllCaps = false; typeface = Typeface.DEFAULT_BOLD
             setTextColor(white); background = rounded(if (primary) accent else surface2, 14)
-            setOnClickListener { action() }
+            setOnClickListener {
+                if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("smooth_animations", true)) {
+                    animate().scaleX(0.97f).scaleY(0.97f).setDuration(65).withEndAction {
+                        animate().scaleX(1f).scaleY(1f).setDuration(85).start()
+                    }.start()
+                }
+                action()
+            }
         }
 
     private fun label(text: String, size: Int, color: Int, bold: Boolean) = TextView(this).apply {
