@@ -191,24 +191,26 @@ class MainActivity : Activity() {
         }
         categoryScroller.addView(categoryRow)
         root.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(42)))
-        root.addView(label("SORT BY", 10, muted, true).apply {
-            setPadding(0, dp(12), 0, dp(7))
-        })
-        val sortScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf(
-            "latest" to "Latest",
-            "views" to "Most Viewed",
-            "longest" to "Longest",
-            "rate" to "Top Rated",
-            "random" to "Random"
-        ).forEach { (filter, title) ->
-            sortRow.addView(actionButton(title, selectedSort == filter) {
-                selectSort(filter)
-            }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
+        if (query.isBlank()) {
+            root.addView(label("SORT BY", 10, muted, true).apply {
+                setPadding(0, dp(12), 0, dp(7))
+            })
+            val sortScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+            val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            listOf(
+                "latest" to "Latest",
+                "views" to "Most Viewed",
+                "longest" to "Longest",
+                "rate" to "Top Rated",
+                "random" to "Random"
+            ).forEach { (filter, title) ->
+                sortRow.addView(actionButton(title, selectedSort == filter) {
+                    selectSort(filter)
+                }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
+            }
+            sortScroller.addView(sortRow)
+            root.addView(sortScroller, LinearLayout.LayoutParams(-1, dp(42)))
         }
-        sortScroller.addView(sortRow)
-        root.addView(sortScroller, LinearLayout.LayoutParams(-1, dp(42)))
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) { startSearch(true); true } else false
         }
