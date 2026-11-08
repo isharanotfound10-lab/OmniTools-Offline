@@ -646,7 +646,10 @@ class MainActivity : Activity() {
                     hentainiSelectedSeries?.id != series.id) return@post
                 streams.removeAllViews()
                 val resolvedThumbnail = details?.thumbnailUrl.orEmpty()
-                if (episode.thumbnailUrl.isBlank() && resolvedThumbnail.isNotBlank()) {
+                // The series-list image can still be a shared cover even
+                // when it is non-empty. Always prefer the per-episode
+                // VideoObject thumbnail resolved from this episode page.
+                if (resolvedThumbnail.isNotBlank() && resolvedThumbnail != episode.thumbnailUrl) {
                     loadImage(resolvedThumbnail, thumbnail)
                 }
                 val available = details?.streams.orEmpty()
