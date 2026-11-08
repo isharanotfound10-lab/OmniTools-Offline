@@ -44,7 +44,7 @@ class MainActivity : Activity() {
 
     private var query = ""
     private var page = 1
-    private val maxSearchPages = 5
+    private val maxSearchPages = 1
     private val seenResultUrls = mutableSetOf<String>()
     private val allSearchResults = mutableListOf<SearchResult>()
     private var busy = false
@@ -148,7 +148,7 @@ class MainActivity : Activity() {
         if (query.isBlank()) content.addView(infoCard("Search for an adult title to discover its available episodes."))
         scroll.addView(content)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        pageText = label("AUTOMATICALLY LOADING UP TO 5 PAGES", 10, muted, true).apply {
+        pageText = label("SEARCH RESULTS FROM PAGE 1 ONLY", 10, muted, true).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(4))
         }
@@ -177,41 +177,52 @@ class MainActivity : Activity() {
         progress.visibility = View.VISIBLE
         progress.progress = requestedPage
         if (!append) content.removeAllViews()
-        pageText.text = "LOADING PAGE $requestedPage OF $maxSearchPages"
+        pageText.text = "SEARCHING PAGE 1 ONLY"
         worker.execute {
             try {
                 val encoded = URLEncoder.encode(query, "UTF-8")
                 val address = "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
                 val html = request(address)
                 val parsed = SiteParser.parseSearch(Jsoup.parse(html, address))
+                val uniqueResults = LinkedHashMap<String, SearchResult>()
+                parsed.forEach { result ->
+                    val key = animeName(result.title).lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
+                    if (key.isNotBlank() && !uniqueResults.containsKey(key)) uniqueResults[key] = result
+                }
+                val groups = mutableListOf<AnimeGroup>()
+                main.post {
+                    progress.max = uniqueResults.size.coerceAtLeast(1)
+                    progress.progress = 0
+                    status.text = "Found ${parsed.size} results • checking ${uniqueResults.size} unique anime"
+                    pageText.text = "READING EPISODE COUNTS FROM PAGE 1 RESULTS"
+                }
+                uniqueResults.values.forEachIndexed { index, result ->
+                    val details = runCatching {
+                        val detailHtml = request(result.url)
+                        SiteParser.parseEpisode(Jsoup.parse(detailHtml, result.url), result.url)
+                    }.getOrNull()
+                    val subEng = Regex("(?i)\\[\\s*sub\\s*[- ]?\\s*eng\\s*]")
+                        .containsMatchIn(result.title)
+                    groups.add(AnimeGroup(animeName(result.title), result, details, subEng))
+                    main.post {
+                        progress.progress = index + 1
+                        status.text = "Checking anime ${index + 1} of ${uniqueResults.size}..."
+                    }
+                }
                 main.post {
                     busy = false
+                    progress.visibility = View.GONE
                     if (parsed.isEmpty()) {
-                        progress.visibility = View.GONE
-                        if (!append) {
-                            status.text = "No safe results found"
-                            content.addView(infoCard("No matching adult-only results were found. Try another search term."))
-                            pageText.text = "NO RESULTS"
-                        } else {
-                            page = (requestedPage - 1).coerceAtLeast(1)
-                            status.text = "${seenResultUrls.size} results for “$query”"
-                            renderAnimeGroups()
-                            pageText.text = "ALL AVAILABLE RESULTS LOADED • PAGE $page"
-                        }
+                        status.text = "No safe results found"
+                        content.removeAllViews()
+                        content.addView(infoCard("No matching adult-only results were found. Try another search term."))
+                        pageText.text = "NO RESULTS • PAGE 1"
                     } else {
-                        val fresh = parsed.filter { seenResultUrls.add(it.url) }
-                        allSearchResults.addAll(fresh)
-                        status.text = "Loading results for “$query” • ${seenResultUrls.size} found"
-                        if (requestedPage < maxSearchPages) {
-                            pageText.text = "LOADING ALL RESULTS • PAGE $requestedPage OF $maxSearchPages"
-                            // Fetch every available page automatically; the user only scrolls the combined list.
-                            scroll.post { loadNextPage() }
-                        } else {
-                            progress.visibility = View.GONE
-                            status.text = "${seenResultUrls.size} results for “$query”"
-                            renderAnimeGroups()
-                            pageText.text = "ALL RESULTS LOADED • 5 PAGES"
-                        }
+                        allSearchResults.clear()
+                        allSearchResults.addAll(parsed)
+                        status.text = "${parsed.size} search results • ${groups.size} unique anime"
+                        renderAnimeGroups(groups)
+                        pageText.text = "PAGE 1 COMPLETE • ${groups.size} UNIQUE ANIME"
                     }
                 }
             } catch (error: Exception) {
@@ -220,7 +231,7 @@ class MainActivity : Activity() {
                     progress.visibility = View.GONE
                     if (append) {
                         page = (requestedPage - 1).coerceAtLeast(1)
-                        renderAnimeGroups()
+                        content.removeAllViews()
                     }
                     status.text = "Search unavailable"
                     pageText.text = if (append) "COULD NOT LOAD PAGE ${requestedPage} • PARTIAL RESULTS SHOWN" else "SEARCH FAILED"
@@ -242,7 +253,7 @@ class MainActivity : Activity() {
         runSearch(append = true)
     }
 
-    private data class AnimeGroup(val name: String, val episodes: List<SearchResult>, val hasSubEng: Boolean)
+    private data class AnimeGroup(val name: String, val firstResult: SearchResult, val details: EpisodeDetails?, val hasSubEng: Boolean)
 
     private fun animeName(title: String): String = title
         .replace(Regex("(?i)\\s*\\[\\s*sub\\s*[- ]?\\s*eng\\s*]"), "")
@@ -250,24 +261,8 @@ class MainActivity : Activity() {
         .replace(Regex("\\s*[-–—:]\\s*$"), "")
         .trim().ifBlank { title.trim() }
 
-    private fun renderAnimeGroups() {
+    private fun renderAnimeGroups(groups: List<AnimeGroup>) {
         content.removeAllViews()
-        val groups = allSearchResults.groupBy {
-            animeName(it.title).lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
-        }.values.map { entries ->
-            val sorted = entries.distinctBy { it.url }.sortedWith(
-                compareBy<SearchResult> {
-                    Regex("(?i)episode\\s*#?\\s*(\\d+)").find(it.title)
-                        ?.groupValues?.getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE
-                }.thenBy { it.title }
-            )
-            AnimeGroup(
-                animeName(sorted.first().title),
-                sorted,
-                sorted.any { Regex("(?i)\\[\\s*sub\\s*[- ]?\\s*eng\\s*]").containsMatchIn(it.title) }
-            )
-        }.sortedBy { it.name.lowercase() }
-
         if (groups.isEmpty()) {
             content.addView(infoCard("No matching results were found."))
             return
@@ -280,13 +275,18 @@ class MainActivity : Activity() {
                 background = rounded(surface, 18)
                 isClickable = true
                 isFocusable = true
-                setOnClickListener { showAnimeGroup(group) }
+                setOnClickListener {
+                    val episodeDetails = group.details
+                    if (episodeDetails != null) showEpisode(episodeDetails) else openEpisode(group.firstResult.url)
+                }
             }
             val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             details.addView(label(group.name, 15, white, true).apply { maxLines = 2 })
-            details.addView(label("${group.episodes.size} Episodes", 12, muted, false).apply {
-                setPadding(0, dp(6), 0, 0)
-            })
+            val count = group.details?.episodes?.size
+            details.addView(label(
+                if (count != null && count > 0) "$count Episodes" else "Episode count unavailable",
+                12, muted, false
+            ).apply { setPadding(0, dp(6), 0, 0) })
             card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
             if (group.hasSubEng) card.addView(label("SUB-ENG", 9, pink, true).apply {
                 setPadding(dp(9), dp(6), dp(9), dp(6))
@@ -296,47 +296,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showAnimeGroup(group: AnimeGroup) {
-        val pageView = baseLayout()
-        pageView.addView(actionButton("‹ BACK TO SEARCH", false) { showHome() })
-        pageView.addView(label(group.name, 21, white, true).apply { setPadding(0, dp(20), 0, dp(5)) })
-        pageView.addView(label("${group.episodes.size} Episodes", 12, muted, false).apply {
-            setPadding(0, 0, 0, dp(12))
-        })
-        val listScroll = ScrollView(this)
-        val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        group.episodes.forEach { item ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(10), dp(10), dp(10), dp(10))
-                background = rounded(surface, 16)
-                isClickable = true
-                isFocusable = true
-                setOnClickListener { openEpisode(item.url) }
-            }
-            val thumb = ImageView(this).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                background = rounded(surface2, 10)
-                layoutParams = LinearLayout.LayoutParams(dp(92), dp(64))
-            }
-            row.addView(thumb)
-            val info = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(dp(12), 0, 0, 0)
-            }
-            info.addView(label(item.title, 13, white, true).apply { maxLines = 2 })
-            if (item.duration.isNotBlank()) info.addView(label(item.duration, 11, muted, false).apply {
-                setPadding(0, dp(5), 0, 0)
-            })
-            row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
-            list.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(9) })
-            if (item.thumbnail.isNotBlank()) loadImage(item.thumbnail, thumb)
-        }
-        listScroll.addView(list)
-        pageView.addView(listScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(pageView)
-    }
 
     private fun addResultCard(item: SearchResult) {
         val card = LinearLayout(this).apply {
