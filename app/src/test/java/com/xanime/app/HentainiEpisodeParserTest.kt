@@ -73,6 +73,24 @@ class HentainiEpisodeParserTest {
     }
 
     @Test
+    fun readsHentainiEpisodeScreenshotFromOgImageProxyUrl() {
+        val html = """
+            <html><head>
+              <meta property="og:image" content="https://hentaini.com/_ipx/_/https://admin.hentaini.com/uploads/Kyonyuu_Kazoku_Saimin_screenshot_88f7f8cede.jpeg">
+            </head><body><main><h1>Episode 1</h1></main></body></html>
+        """.trimIndent()
+
+        val page = HentainiEpisodeParser.parseEpisode(
+            html, "https://hentaini.com/h/kyonyuu-kazoku-saimin/1"
+        )
+
+        assertEquals(
+            "https://hentaini.com/_ipx/_/https://admin.hentaini.com/uploads/Kyonyuu_Kazoku_Saimin_screenshot_88f7f8cede.jpeg",
+            page.thumbnailUrl
+        )
+    }
+
+    @Test
     fun selectsOnlyVideoObjectMatchingCurrentEpisodePage() {
         val html = """
             <html><head>
