@@ -21,12 +21,6 @@ data class EpisodeDetails(
 )
 
 object SiteParser {
-    private val blockedTerms = listOf(
-        "shotacon", "lolicon", "loli", "shota", "underage", "minor",
-        "child", "children", "kid", "kids", "schoolgirl", "schoolboy",
-        "teen", "toddler", "elementary",
-        "middle-school", "high-school"
-    )
     private val ignoredSlugs = setOf(
         "tag", "tags", "category", "categories", "author", "page",
         "wp-content", "wp-admin", "search", "feed", "hentai-series",
