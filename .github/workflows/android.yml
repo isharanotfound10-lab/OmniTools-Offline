@@ -1,7 +1,7 @@
 name: XAnime Android Build
 on:
   push:
-    branches: [main, xanime-app, feature/catalog-sorting, feature/xanime-visual-refresh, feature/xanime-logo, feature/xanime-favorites-logo-polish]
+    branches: [main, xanime-app, feature/catalog-sorting, feature/xanime-visual-refresh, feature/xanime-logo, feature/xanime-favorites-logo-polish, feature/xanime-hentaini-search]
   pull_request:
     branches: [main, xanime-app, feature/catalog-sorting, feature/xanime-visual-refresh, feature/xanime-logo, feature/xanime-favorites-logo-polish]
   workflow_dispatch:

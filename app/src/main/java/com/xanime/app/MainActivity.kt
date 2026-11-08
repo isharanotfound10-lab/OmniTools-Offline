@@ -24,6 +24,8 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.AdapterView
@@ -99,6 +101,13 @@ class MainActivity : Activity() {
     private var searchScrollY = 0
     private var isDetailScreen = false
     private var showingFavorites = false
+    private var showingHentaini = false
+    private var hentainiQuery = ""
+    private var hentainiOffset = 0
+    private var hentainiTotal = 0
+    private var hentainiRequestId = 0
+    private var hentainiLoading = false
+    private val hentainiResults = mutableListOf<HentainiSeries>()
     private val expandedAnimeNames = mutableSetOf<String>()
     private val loadingExtraThumbnails = mutableSetOf<String>()
     private lateinit var root: LinearLayout
@@ -190,14 +199,32 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(1), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(actionButton(if (showingFavorites) "‹ Home" else "♥ Favorites", false) {
-            showingFavorites = !showingFavorites
-            showHome()
-        },
-            LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
+        if (!showingHentaini) {
+            header.addView(actionButton(if (showingFavorites) "‹ Home" else "♥ Favorites", false) {
+                showingFavorites = !showingFavorites
+                showHome()
+            }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
+        }
         header.addView(actionButton("⚙", false) { showSettings() },
             LinearLayout.LayoutParams(dp(44), dp(44)))
         root.addView(header)
+
+        val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        sourceTabs.addView(actionButton("XAnime", !showingHentaini) {
+            showingHentaini = false
+            showHome()
+        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(8) })
+        sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
+            showingHentaini = true
+            showingFavorites = false
+            showHome()
+        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        root.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+
+        if (showingHentaini) {
+            showHentainiHome()
+            return
+        }
 
         search = EditText(this).apply {
             hint = "Search titles..."; setHintTextColor(muted); setTextColor(white)
@@ -291,7 +318,215 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (isDetailScreen && (hasCachedSearch || showingFavorites)) showHome() else super.onBackPressed()
+        if (showingHentaini) {
+            showingHentaini = false
+            showHome()
+        } else if (isDetailScreen && (hasCachedSearch || showingFavorites)) showHome() else super.onBackPressed()
+    }
+
+
+    private fun showHentainiHome() {
+        root.addView(label("HENTAINI", 22, white, true).apply {
+            setPadding(0, dp(22), 0, dp(8))
+        })
+        root.addView(label("LIVE SEARCH", 10, accent, true).apply {
+            letterSpacing = .12f
+            setPadding(0, 0, 0, dp(12))
+        })
+
+        val input = EditText(this).apply {
+            hint = "Search Hentaini titles..."
+            setHintTextColor(muted)
+            setTextColor(white)
+            textSize = 15f
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(15), 0, dp(15), 0)
+            background = ripple(glassDrawable(16))
+            setText(hentainiQuery)
+        }
+        root.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
+
+        val statusView = label(
+            if (hentainiQuery.isBlank()) "Search Hentaini titles" else "Results for: " + hentainiQuery,
+            13, muted, true
+        ).apply { setPadding(0, dp(14), 0, dp(8)) }
+        root.addView(statusView)
+
+        val progressView = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            visibility = View.GONE
+            isIndeterminate = true
+        }
+        root.addView(progressView, LinearLayout.LayoutParams(-1, dp(4)))
+
+        val results = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, dp(12))
+        }
+        val resultsScroll = ScrollView(this).apply { isFillViewport = false }
+        resultsScroll.addView(results)
+        root.addView(resultsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val loadMore = actionButton("LOAD MORE RESULTS", false) { }
+        loadMore.setOnClickListener {
+            hentainiSearch(hentainiQuery, false, statusView, progressView, results, loadMore)
+        }
+        loadMore.visibility = View.GONE
+        root.addView(loadMore, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
+
+        fun submitSearch() {
+            hentainiQuery = input.text.toString().trim()
+            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore)
+        }
+        val debounce = Runnable { submitSearch() }
+        input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                main.removeCallbacks(debounce)
+                main.postDelayed(debounce, 500)
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                main.removeCallbacks(debounce)
+                submitSearch()
+                true
+            } else false
+        }
+        if (hentainiQuery.isNotBlank()) {
+            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore)
+        } else {
+            results.addView(infoCard("Type a title to search the Hentaini catalogue."))
+        }
+
+        setContentView(root)
+        animateScreen(root)
+        isDetailScreen = false
+    }
+
+    private fun hentainiSearch(
+        term: String,
+        reset: Boolean,
+        statusView: TextView,
+        progressView: ProgressBar,
+        output: LinearLayout,
+        loadMoreButton: Button?
+    ) {
+        if (term.isBlank()) {
+            hentainiRequestId++
+            hentainiLoading = false
+            hentainiResults.clear()
+            hentainiOffset = 0
+            hentainiTotal = 0
+            statusView.text = "Enter a title to search."
+            output.removeAllViews()
+            loadMoreButton?.visibility = View.GONE
+            progressView.visibility = View.GONE
+            return
+        }
+        if (hentainiLoading && !reset) return
+
+        val requestId = ++hentainiRequestId
+        if (reset) {
+            hentainiOffset = 0
+            hentainiTotal = 0
+            hentainiResults.clear()
+            output.removeAllViews()
+        }
+        hentainiLoading = true
+        statusView.text = if (reset) "Searching Hentaini..." else "Loading more results..."
+        progressView.visibility = View.VISIBLE
+        loadMoreButton?.isEnabled = false
+
+        val requestedOffset = hentainiOffset
+        worker.execute {
+            try {
+                val page = HentainiApi.search(term, requestedOffset, 10)
+                main.post {
+                    if (isFinishing || requestId != hentainiRequestId || !showingHentaini) return@post
+                    hentainiLoading = false
+                    progressView.visibility = View.GONE
+                    loadMoreButton?.isEnabled = true
+                    hentainiResults.addAll(page.results)
+                    hentainiOffset = page.offset + page.results.size
+                    hentainiTotal = page.total
+                    statusView.text = if (hentainiResults.isEmpty()) {
+                        "No results for: " + term
+                    } else {
+                        hentainiResults.size.toString() + " of " + hentainiTotal + " results"
+                    }
+                    page.results.forEach { series -> addHentainiCard(series, output) }
+                    loadMoreButton?.visibility =
+                        if (hentainiOffset < hentainiTotal && page.results.isNotEmpty()) View.VISIBLE else View.GONE
+                    if (page.results.isEmpty() && hentainiResults.isEmpty()) {
+                        output.addView(infoCard("No matching series were found."))
+                    }
+                }
+            } catch (error: Exception) {
+                main.post {
+                    if (isFinishing || requestId != hentainiRequestId || !showingHentaini) return@post
+                    hentainiLoading = false
+                    progressView.visibility = View.GONE
+                    loadMoreButton?.isEnabled = true
+                    statusView.text = "Hentaini search failed."
+                    if (hentainiResults.isEmpty()) {
+                        output.removeAllViews()
+                        output.addView(infoCard("Could not load live results. Check your connection and try again."))
+                    } else {
+                        Toast.makeText(this, "Could not load more results.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun addHentainiCard(series: HentainiSeries, output: LinearLayout) {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(11), dp(11), dp(13), dp(11))
+            background = ripple(glassDrawable(16))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(series.pageUrl)))
+            }
+        }
+        val thumbnail = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = rounded(surface2, 10)
+            contentDescription = "Series thumbnail"
+        }
+        card.addView(thumbnail, LinearLayout.LayoutParams(dp(88), dp(118)))
+        val details = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(13), 0, 0, 0)
+        }
+        details.addView(label(series.title, 14, white, true).apply { maxLines = 3 })
+        val episodeCount = label(
+            "Checking episodes...",
+            12, muted, false
+        ).apply { setPadding(0, dp(8), 0, 0) }
+        episodeCount.tag = series.id
+        details.addView(episodeCount)
+        card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+        card.addView(label("OPEN  ›", 9, accent, true))
+        output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        if (series.thumbnailUrl.isNotBlank()) loadImage(series.thumbnailUrl, thumbnail)
+
+        // Look up the real count for every series; hasEpisodes can be stale.
+        detailWorker.execute {
+            val count = HentainiApi.countEpisodes(series)
+            main.post {
+                if (isFinishing || episodeCount.tag != series.id) return@post
+                episodeCount.text = when {
+                    count != null -> count.toString() + " Episodes"
+                    else -> "Episode count unavailable"
+                }
+            }
+        }
     }
 
     private fun startSearch(reset: Boolean) {
