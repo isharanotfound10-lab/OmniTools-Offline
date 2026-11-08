@@ -506,7 +506,7 @@ class MainActivity : Activity() {
         }
         details.addView(label(series.title, 14, white, true).apply { maxLines = 3 })
         val episodeCount = label(
-            if (series.hasEpisodes) "Checking episodes..." else "0 Episodes",
+            "Checking episodes...",
             12, muted, false
         ).apply { setPadding(0, dp(8), 0, 0) }
         episodeCount.tag = series.id
@@ -516,15 +516,14 @@ class MainActivity : Activity() {
         output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
         if (series.thumbnailUrl.isNotBlank()) loadImage(series.thumbnailUrl, thumbnail)
 
-        if (series.hasEpisodes) {
-            detailWorker.execute {
-                val count = HentainiApi.countEpisodes(series)
-                main.post {
-                    if (isFinishing || episodeCount.tag != series.id) return@post
-                    episodeCount.text = when {
-                        count != null -> count.toString() + " Episodes"
-                        else -> "Episodes available"
-                    }
+        // Look up the real count for every series; hasEpisodes can be stale.
+        detailWorker.execute {
+            val count = HentainiApi.countEpisodes(series)
+            main.post {
+                if (isFinishing || episodeCount.tag != series.id) return@post
+                episodeCount.text = when {
+                    count != null -> count.toString() + " Episodes"
+                    else -> "Episode count unavailable"
                 }
             }
         }
