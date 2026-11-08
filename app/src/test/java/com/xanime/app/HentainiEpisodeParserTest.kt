@@ -29,9 +29,10 @@ class HentainiEpisodeParserTest {
     @Test
     fun extractsKnownProviderLinksAndKeepsOnlyDownloadHosts() {
         val html = """
-            <html><head><meta property="og:image" content="https://cdn.example/episode.jpg"></head>
+            <html><head><meta property="og:image" content="https://cdn.example/series-cover.jpg"></head>
             <body>
               <h1>Episode 01</h1>
+              <main><img src="https://cdn.example/episode-content.jpg"></main>
               <a href="https://1024terabox.com/s/example">1024terabox</a>
               <a href="https://www.fireload.com/example">Fireload</a>
               <a href="https://www.mediafire.com/file/example">Mediafire</a>
@@ -49,6 +50,6 @@ class HentainiEpisodeParserTest {
         assertTrue(page.streams.any { it.host == "Fireload" })
         assertTrue(page.streams.any { it.host == "Mediafire" })
         assertTrue(page.streams.any { it.host == "1fichier" })
-        assertEquals("https://cdn.example/episode.jpg", page.thumbnailUrl)
+        assertEquals("https://cdn.example/episode-content.jpg", page.thumbnailUrl)
     }
 }
