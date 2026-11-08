@@ -23,7 +23,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.EditorInfo\nimport android.text.Editable\nimport android.text.TextWatcher
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.AdapterView
@@ -242,6 +242,10 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 setPadding(0, dp(12), 0, 0)
             }
+            root.addView(actionButton("SEARCH HENTAINI") {
+                hentainiQuery = hentainiInput.text.toString().trim()
+                hentainiSearch(hentainiQuery, hentainiStatus, hentainiProgress, hentainiOutput)
+            }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) })
             root.addView(hentainiOutput, LinearLayout.LayoutParams(-1, 0, 1f))
             root.addView(infoCard(
                 "All 25 genres you supplied are blocked. Results with missing or unverified age information are also hidden. Search requests still run; filtered entries are never displayed."
@@ -254,8 +258,15 @@ class MainActivity : Activity() {
                 hentainiQuery = hentainiInput.text.toString().trim()
                 hentainiSearch(hentainiQuery, hentainiStatus, hentainiProgress, hentainiOutput)
             }
-            root.addView(actionButton("SEARCH HENTAINI") { submitHentainiSearch() },
-                LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) })
+            val liveSearch = Runnable { submitHentainiSearch() }
+            hentainiInput.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(text: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(text: CharSequence?, start: Int, before: Int, count: Int) {
+                    main.removeCallbacks(liveSearch)
+                    main.postDelayed(liveSearch, 550)
+                }
+                override fun afterTextChanged(editable: Editable?) = Unit
+            })
             hentainiInput.setOnEditorActionListener { _, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                     submitHentainiSearch()
