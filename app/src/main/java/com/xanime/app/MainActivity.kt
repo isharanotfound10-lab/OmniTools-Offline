@@ -359,21 +359,62 @@ class MainActivity : Activity() {
         firstResult: SearchResult
     ): List<String> {
         val byUrl = LinkedHashMap<String, String>()
+
+        // Some themes put thumbnails directly beside the episode links.
         doc.select(".su-tabs-pane[data-title=Episodes] a[href]").forEach { anchor ->
             val image = anchor.selectFirst("img") ?: anchor.parent()?.selectFirst("img")
-            val thumbnail = image?.let {
-                sequenceOf("data-lazy-src", "data-src", "data-original", "src", "data-thumb")
-                    .map { key -> it.absUrl(key) }
-                    .firstOrNull { value -> value.startsWith("https://") || value.startsWith("http://") }
-            }.orEmpty()
+            val thumbnail = image?.let { imageUrl(it) }.orEmpty()
             if (thumbnail.isNotBlank()) {
                 byUrl[anchor.absUrl("href").trimEnd('/')] = thumbnail
             }
         }
-        if (firstResult.thumbnail.isNotBlank()) {
-            byUrl[firstResult.url.trimEnd('/')] = firstResult.thumbnail
+
+        // The episode list often contains text-only links. In that case each
+        // episode page has its own featured/preview image, so read those pages.
+        episodes.take(4).forEach { episode ->
+            val key = episode.url.trimEnd('/')
+            if (byUrl[key].isNullOrBlank()) {
+                val thumbnail = if (key == firstResult.url.trimEnd('/')) {
+                    extractEpisodePageThumbnail(doc)
+                } else {
+                    runCatching {
+                        val episodeHtml = request(episode.url)
+                        extractEpisodePageThumbnail(Jsoup.parse(episodeHtml, episode.url))
+                    }.getOrNull().orEmpty()
+                }
+                if (thumbnail.isNotBlank()) byUrl[key] = thumbnail
+            }
         }
-        return episodes.map { byUrl[it.url.trimEnd('/')] .orEmpty() }
+
+        if (firstResult.thumbnail.isNotBlank()) {
+            byUrl.putIfAbsent(firstResult.url.trimEnd('/'), firstResult.thumbnail)
+        }
+        return episodes.take(4).map { byUrl[it.url.trimEnd('/')].orEmpty() }
+    }
+
+    private fun extractEpisodePageThumbnail(doc: org.jsoup.nodes.Document): String {
+        val candidates = sequenceOf(
+            doc.selectFirst("meta[property=og:image]")?.absUrl("content"),
+            doc.selectFirst("meta[name=twitter:image]")?.absUrl("content"),
+            doc.selectFirst("video[poster]")?.absUrl("poster"),
+            doc.selectFirst(".post-thumbnail img")?.let { imageUrl(it) },
+            doc.selectFirst(".wp-post-image")?.let { imageUrl(it) },
+            doc.selectFirst(".entry-content img")?.let { imageUrl(it) },
+            doc.selectFirst("article img")?.let { imageUrl(it) }
+        )
+        return candidates.filterNotNull().firstOrNull {
+            (it.startsWith("https://") || it.startsWith("http://")) &&
+                !it.contains("logo", ignoreCase = true) &&
+                !it.contains("avatar", ignoreCase = true) &&
+                !it.contains("icon", ignoreCase = true)
+        }.orEmpty()
+    }
+
+    private fun imageUrl(image: org.jsoup.nodes.Element): String {
+        return sequenceOf("data-lazy-src", "data-src", "data-original", "src", "data-thumb")
+            .map { key -> image.absUrl(key) }
+            .firstOrNull { it.startsWith("https://") || it.startsWith("http://") }
+            .orEmpty()
     }
 
 
