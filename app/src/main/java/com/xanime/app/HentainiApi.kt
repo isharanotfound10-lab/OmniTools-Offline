@@ -201,11 +201,23 @@ object HentainiApi {
         // the host choices. Follow only same-site download pages.
         val downloadPage = runCatching {
             val document = Jsoup.parse(html, episode.url)
-            document.select("a[href]").firstOrNull { anchor ->
-                anchor.text().contains("download", ignoreCase = true) &&
-                    anchor.absUrl("href").contains("hentaini.com", ignoreCase = true) &&
-                    anchor.absUrl("href") != episode.url
-            }?.absUrl("href")
+            val episodeUri = java.net.URI(episode.url)
+            val episodePath = episodeUri.path.orEmpty().trimEnd('/')
+            val episodeSegment = episodePath.substringAfterLast('/')
+            document.select("main a[href], article a[href], .entry-content a[href], .download a[href], a[href]")
+                .firstOrNull { anchor ->
+                    val target = anchor.absUrl("href")
+                    val targetUri = runCatching { java.net.URI(target) }.getOrNull()
+                        ?: return@firstOrNull false
+                    val sameSite = targetUri.host.orEmpty().lowercase() in
+                        setOf("hentaini.com", "www.hentaini.com")
+                    val targetPath = targetUri.path.orEmpty()
+                    val belongsToEpisode = targetPath.startsWith(episodePath + "/") ||
+                        targetPath.contains("/" + episodeSegment + "/") ||
+                        targetUri.rawQuery.orEmpty().contains(episodeSegment)
+                    anchor.text().contains("download", ignoreCase = true) &&
+                        sameSite && target != episode.url && belongsToEpisode
+                }?.absUrl("href")
         }.getOrNull()
         if (downloadPage.isNullOrBlank()) return parsed
 
