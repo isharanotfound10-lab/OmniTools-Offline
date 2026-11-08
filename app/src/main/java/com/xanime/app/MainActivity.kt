@@ -199,11 +199,12 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(1), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(actionButton(if (showingFavorites) "‹ Home" else "♥ Favorites", false) {
-            showingFavorites = !showingFavorites
-            showHome()
-        },
-            LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
+        if (!showingHentaini) {
+            header.addView(actionButton(if (showingFavorites) "‹ Home" else "♥ Favorites", false) {
+                showingFavorites = !showingFavorites
+                showHome()
+            }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
+        }
         header.addView(actionButton("⚙", false) { showSettings() },
             LinearLayout.LayoutParams(dp(44), dp(44)))
         root.addView(header)
