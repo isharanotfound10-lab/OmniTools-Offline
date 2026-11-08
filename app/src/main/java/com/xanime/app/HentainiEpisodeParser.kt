@@ -33,7 +33,7 @@ object HentainiEpisodeParser {
         doc.select("a[href]").forEach { anchor ->
             val absolute = anchor.absUrl("href").substringBefore('#').trimEnd('/')
             val uri = runCatching { URI(absolute) }.getOrNull() ?: return@forEach
-            if (!uri.host.orEmpty().endsWith("hentaini.com", true)) return@forEach
+            if (uri.host.orEmpty().lowercase() !in setOf("hentaini.com", "www.hentaini.com")) return@forEach
             val path = uri.path.orEmpty()
             if (!path.startsWith(pathPrefix)) return@forEach
             val number = path.removePrefix(pathPrefix).trim('/').toIntOrNull() ?: return@forEach
@@ -78,6 +78,8 @@ object HentainiEpisodeParser {
             if (host.isBlank() || host.endsWith("hentaini.com")) return
             val text = label.orEmpty().lowercase()
             val known = knownHosts.firstOrNull { host.contains(it) || text.contains(it) }
+            val genericLabels = setOf("download", "download now", "stream", "open", "click here", "about us", "home", "contact", "privacy policy", "terms")
+            if (known == null && (text.isBlank() || text in genericLabels || text.length > 40)) return
             val provider = known?.let {
                 when {
                     it.contains("terabox") -> "1024terabox"
