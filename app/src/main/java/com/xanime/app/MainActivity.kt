@@ -366,8 +366,8 @@ class MainActivity : Activity() {
         resultsScroll.addView(results)
         root.addView(resultsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        lateinit var loadMore: Button
-        loadMore = actionButton("LOAD MORE RESULTS", false) {
+        val loadMore = actionButton("LOAD MORE RESULTS", false) { }
+        loadMore.setOnClickListener {
             hentainiSearch(hentainiQuery, false, statusView, progressView, results, loadMore)
         }
         loadMore.visibility = View.GONE
