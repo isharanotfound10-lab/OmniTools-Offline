@@ -50,7 +50,7 @@ object HentainiEpisodeParser {
             // Episode-card text often includes counters and unrelated labels
             // (for example "67 AnimeEpisode 1"). Use the URL's episode number
             // as the stable, clean title instead of polluted wrapper text.
-            val title = "Episode " + number.toString().padStart(2, '0')
+            val title = "Episode " + number
             episodes[absolute] = HentainiEpisode(number, title, absolute, thumbnail)
         }
 
