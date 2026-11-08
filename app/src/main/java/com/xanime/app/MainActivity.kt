@@ -44,7 +44,7 @@ class MainActivity : Activity() {
 
     private var query = ""
     private var page = 1
-    private val maxSearchPages = 1
+    private val maxSearchPages = 10
     private val seenResultUrls = mutableSetOf<String>()
     private val allSearchResults = mutableListOf<SearchResult>()
     private var busy = false
@@ -145,10 +145,6 @@ class MainActivity : Activity() {
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(5) })
         scroll = ScrollView(this).apply {
             isFillViewport = true
-            setOnScrollChangeListener { _, _, scrollY, _, _ ->
-                val child = getChildAt(0)
-                if (child != null && child.bottom - (scrollY + height) <= dp(320)) loadNextPage()
-            }
         }
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(10)) }
         if (query.isBlank()) content.addView(infoCard("Search for an adult title to discover its available episodes."))
@@ -164,7 +160,7 @@ class MainActivity : Activity() {
             status.text = if (cachedAnimeGroups.isEmpty()) "No results for: $query" else
                 "${cachedAnimeGroups.size} unique anime • cached results"
             renderAnimeGroups(cachedAnimeGroups)
-            pageText.text = "PAGE 1 COMPLETE • ${cachedAnimeGroups.size} UNIQUE ANIME"
+            pageText.text = "PAGE $page COMPLETE • ${cachedAnimeGroups.size} UNIQUE ANIME"
             scroll.post { scroll.scrollTo(0, searchScrollY) }
         } else if (query.isNotBlank()) {
             runSearch()
@@ -212,14 +208,18 @@ class MainActivity : Activity() {
                     val key = animeName(result.title).lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
                     if (key.isNotBlank() && !uniqueResults.containsKey(key)) uniqueResults[key] = result
                 }
+                val existingNames = if (append) cachedAnimeGroups.map {
+                    it.name.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
+                }.toSet() else emptySet()
+                val newUniqueResults = uniqueResults.filterKeys { it !in existingNames }
                 val groups = mutableListOf<AnimeGroup>()
                 main.post {
-                    progress.max = uniqueResults.size.coerceAtLeast(1)
+                    progress.max = newUniqueResults.size.coerceAtLeast(1)
                     progress.progress = 0
                     status.text = "Found ${parsed.size} results • checking ${uniqueResults.size} unique anime"
                     pageText.text = "READING EPISODE COUNTS FROM PAGE 1 RESULTS"
                 }
-                uniqueResults.values.forEachIndexed { index, result ->
+                newUniqueResults.values.forEachIndexed { index, result ->
                     val parsedDetail = runCatching {
                         val detailHtml = request(result.url)
                         val detailDoc = Jsoup.parse(detailHtml, result.url)
@@ -233,39 +233,44 @@ class MainActivity : Activity() {
                     groups.add(AnimeGroup(animeName(result.title), result, details, thumbnails, subEng))
                     main.post {
                         progress.progress = index + 1
-                        status.text = "Checking anime ${index + 1} of ${uniqueResults.size}..."
+                        status.text = "Checking anime ${index + 1} of ${newUniqueResults.size}..."
                     }
                 }
                 main.post {
                     busy = false
                     progress.visibility = View.GONE
-                    if (parsed.isEmpty()) {
+                    if (parsed.isEmpty() && !append) {
                         hasCachedSearch = true
                         cachedAnimeGroups = emptyList()
-                        status.text = "No safe results found"
+                        status.text = "No results found"
                         content.removeAllViews()
                         content.addView(infoCard("No matching adult-only results were found. Try another search term."))
-                        pageText.text = "NO RESULTS • PAGE 1"
                     } else {
-                        allSearchResults.clear()
-                        allSearchResults.addAll(parsed)
-                        cachedAnimeGroups = groups.toList()
+                        if (append) {
+                            allSearchResults.addAll(parsed)
+                            cachedAnimeGroups = cachedAnimeGroups + groups
+                        } else {
+                            allSearchResults.clear()
+                            allSearchResults.addAll(parsed)
+                            cachedAnimeGroups = groups.toList()
+                        }
                         hasCachedSearch = true
-                        status.text = "${parsed.size} search results • ${groups.size} unique anime"
+                        status.text = "${allSearchResults.size} search results • ${cachedAnimeGroups.size} unique anime"
                         renderAnimeGroups(cachedAnimeGroups)
-                        pageText.text = "PAGE 1 COMPLETE • ${groups.size} UNIQUE ANIME"
+                    }
+                    pageText.text = if (page >= maxSearchPages) {
+                        "PAGE $page COMPLETE • END OF AVAILABLE PAGES"
+                    } else {
+                        "PAGE $page COMPLETE • ${cachedAnimeGroups.size} UNIQUE ANIME"
                     }
                 }
             } catch (error: Exception) {
                 main.post {
                     busy = false
                     progress.visibility = View.GONE
-                    if (append) {
-                        page = (requestedPage - 1).coerceAtLeast(1)
-                        content.removeAllViews()
-                    }
+                    if (append) page = (requestedPage - 1).coerceAtLeast(1)
                     status.text = "Search unavailable"
-                    pageText.text = if (append) "COULD NOT LOAD PAGE ${requestedPage} • PARTIAL RESULTS SHOWN" else "SEARCH FAILED"
+                    pageText.text = if (append) "COULD NOT LOAD PAGE ${requestedPage} • PREVIOUS RESULTS KEPT" else "SEARCH FAILED"
                     if (!append) content.addView(infoCard("Could not load search results. Check your connection and try again."))
                 }
             }
@@ -282,6 +287,16 @@ class MainActivity : Activity() {
         if (busy || page >= maxSearchPages || query.isBlank()) return
         page += 1
         runSearch(append = true)
+    }
+
+    private fun renderNextPageButton() {
+        if (page >= maxSearchPages) return
+        content.addView(actionButton("NEXT PAGE  →") {
+            loadNextPage()
+        }, LinearLayout.LayoutParams(-1, dp(46)).apply {
+            topMargin = dp(8)
+            bottomMargin = dp(12)
+        })
     }
 
     private data class AnimeGroup(val name: String, val firstResult: SearchResult, val details: EpisodeDetails?, val thumbnails: List<String>, val hasSubEng: Boolean)
@@ -420,6 +435,7 @@ class MainActivity : Activity() {
             })
             content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(11) })
         }
+        renderNextPageButton()
         scroll.post { scroll.scrollTo(0, previousScrollY) }
     }
 
