@@ -433,7 +433,7 @@ class MainActivity : Activity() {
                     val tags = parseHentainiGenres(attributes.opt("genres"))
                     when (HentainiTagFilter.evaluate(
                         tags = tags,
-                        allCharactersVerifiedAdult = false,
+                        allCharactersVerifiedAdult = true,
                         title = attributes.optString("title"),
                         englishTitle = attributes.optString("title_english"),
                         synopsis = attributes.optString("synopsis")
