@@ -108,6 +108,9 @@ class MainActivity : Activity() {
     private var hentainiRequestId = 0
     private var hentainiLoading = false
     private val hentainiResults = mutableListOf<HentainiSeries>()
+    private var hentainiSelectedSeries: HentainiSeries? = null
+    private var hentainiDetailRequestId = 0
+    private val hentainiEpisodeCache = ConcurrentHashMap<String, HentainiEpisodePage>()
     private val expandedAnimeNames = mutableSetOf<String>()
     private val loadingExtraThumbnails = mutableSetOf<String>()
     private lateinit var root: LinearLayout
@@ -318,7 +321,11 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (showingHentaini) {
+        if (showingHentaini && hentainiSelectedSeries != null) {
+            hentainiDetailRequestId++
+            hentainiSelectedSeries = null
+            showHome()
+        } else if (showingHentaini) {
             showingHentaini = false
             showHome()
         } else if (isDetailScreen && (hasCachedSearch || showingFavorites)) showHome() else super.onBackPressed()
@@ -490,7 +497,8 @@ class MainActivity : Activity() {
             isClickable = true
             isFocusable = true
             setOnClickListener {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(series.pageUrl)))
+                hentainiSelectedSeries = series
+                showHentainiSeries(series)
             }
         }
         val thumbnail = ImageView(this).apply {
@@ -524,6 +532,139 @@ class MainActivity : Activity() {
                 episodeCount.text = when {
                     count != null -> count.toString() + " Episodes"
                     else -> "Episode count unavailable"
+                }
+            }
+        }
+    }
+
+
+    private fun showHentainiSeries(series: HentainiSeries) {
+        showingHentaini = true
+        isDetailScreen = true
+        val requestId = ++hentainiDetailRequestId
+        val page = baseLayout()
+        page.addView(actionButton("‹ BACK TO HENTAINI SEARCH", false) {
+            hentainiDetailRequestId++
+            hentainiSelectedSeries = null
+            showHome()
+        })
+        page.addView(label(series.title, 20, white, true).apply {
+            setPadding(0, dp(18), 0, dp(7))
+        })
+        val statusView = label("Loading episode list...", 12, muted, false).apply {
+            setPadding(0, 0, 0, dp(12))
+        }
+        page.addView(statusView)
+        val progressView = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = true
+        }
+        page.addView(progressView, LinearLayout.LayoutParams(-1, dp(4)))
+        val scrollView = ScrollView(this)
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, dp(12))
+        }
+        scrollView.addView(list)
+        page.addView(scrollView, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(page)
+        animateScreen(page)
+
+        worker.execute {
+            val episodes = runCatching { HentainiApi.loadEpisodes(series) }.getOrNull()
+            main.post {
+                if (isFinishing || requestId != hentainiDetailRequestId ||
+                    hentainiSelectedSeries?.id != series.id) return@post
+                progressView.visibility = View.GONE
+                if (episodes.isNullOrEmpty()) {
+                    statusView.text = "Could not find episodes"
+                    list.addView(infoCard("No episode links were found on this series page."))
+                    return@post
+                }
+                statusView.text = episodes.size.toString() + " EPISODES • CHECKING DOWNLOAD STREAMS"
+                episodes.forEach { episode ->
+                    addHentainiEpisodeCard(episode, series, list, requestId)
+                }
+            }
+        }
+    }
+
+    private fun addHentainiEpisodeCard(
+        episode: HentainiEpisode,
+        series: HentainiSeries,
+        output: LinearLayout,
+        requestId: Int
+    ) {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(11), dp(11), dp(11), dp(11))
+            background = glassDrawable(16)
+        }
+        val heading = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val thumbnail = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = rounded(surface2, 10)
+            contentDescription = episode.title + " thumbnail"
+        }
+        heading.addView(thumbnail, LinearLayout.LayoutParams(dp(104), dp(72)))
+        val titleBlock = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), 0, 0, 0)
+        }
+        titleBlock.addView(label(
+            episode.title.ifBlank { "Episode " + episode.number.toString().padStart(2, '0') },
+            14, white, true
+        ).apply { maxLines = 2 })
+        titleBlock.addView(label(
+            "EPISODE " + episode.number.toString().padStart(2, '0'),
+            10, muted, true
+        ).apply { setPadding(0, dp(5), 0, 0) })
+        heading.addView(titleBlock, LinearLayout.LayoutParams(0, -2, 1f))
+        card.addView(heading)
+
+        val streams = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(10), 0, 0)
+        }
+        streams.addView(label("Finding available download streams...", 11, muted, false))
+        card.addView(streams)
+        output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+
+        val imageUrl = episode.thumbnailUrl.ifBlank { series.thumbnailUrl }
+        if (imageUrl.isNotBlank()) loadImage(imageUrl, thumbnail)
+
+        detailWorker.execute {
+            val details = hentainiEpisodeCache[episode.url] ?: runCatching {
+                HentainiApi.loadEpisodePage(episode)
+            }.getOrNull()?.also { hentainiEpisodeCache[episode.url] = it }
+            main.post {
+                if (isFinishing || requestId != hentainiDetailRequestId ||
+                    hentainiSelectedSeries?.id != series.id) return@post
+                streams.removeAllViews()
+                val resolvedThumbnail = details?.thumbnailUrl.orEmpty()
+                if (episode.thumbnailUrl.isBlank() && resolvedThumbnail.isNotBlank()) {
+                    loadImage(resolvedThumbnail, thumbnail)
+                }
+                val available = details?.streams.orEmpty()
+                if (available.isEmpty()) {
+                    streams.addView(label("No download streams found for this episode.", 11, muted, false))
+                    return@post
+                }
+                streams.addView(label(
+                    available.size.toString() + " AVAILABLE DOWNLOAD STREAMS",
+                    9, accent, true
+                ).apply { setPadding(0, 0, 0, dp(8)) })
+                available.forEach { stream ->
+                    streams.addView(actionButton("COPY " + stream.host.uppercase(), false) {
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText(
+                            stream.host + " download link", stream.url
+                        ))
+                        Toast.makeText(this, stream.host + " link copied!", Toast.LENGTH_SHORT).show()
+                    }, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(7) })
                 }
             }
         }
