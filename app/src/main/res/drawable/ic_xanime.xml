@@ -5,56 +5,37 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Deep AMOLED base with a clean rounded silhouette. -->
-    <path
-        android:fillColor="#090817"
-        android:pathData="M18,3h72a15,15 0,0 1,15 15v72a15,15 0,0 1,-15 15h-72a15,15 0,0 1,-15 -15v-72a15,15 0,0 1,15 -15z" />
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#49316F"
-        android:strokeWidth="1.4"
-        android:pathData="M18,5h72a13,13 0,0 1,13 13v72a13,13 0,0 1,-13 13h-72a13,13 0,0 1,-13 -13v-72a13,13 0,0 1,13 -13z" />
+    <!-- Full-bleed AMOLED canvas: no inset tile or pale outer border. -->
+    <path android:fillColor="#080713" android:pathData="M0,0h108v108h-108z" />
+    <path android:fillColor="#17102D" android:fillAlpha="0.9"
+        android:pathData="M0,0h108v5h-108z M0,103h108v5h-108z" />
+    <path android:fillColor="#251344" android:fillAlpha="0.55"
+        android:pathData="M0,0h108v2h-108z" />
 
-    <!-- Custom geometric XAnime wordmark. -->
-    <group
-        android:translateX="0"
-        android:translateY="0">
-        <path
-            android:fillColor="#00000000"
-            android:strokeColor="#F5F1FF"
-            android:strokeWidth="3.4"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round"
-            android:pathData="M13,29 L22,49 M22,29 L13,49
-                M26,49 L33,29 L40,49 M29,41 H37
-                M44,49 V29 L57,49 V29
-                M63,29 V49
-                M68,49 V29 L77,40 L86,29 V49
-                M91,29 H100 M91,29 V49 H100 M91,39 H98" />
-    </group>
+    <!-- Bold, clean custom XAnime wordmark. -->
+    <path android:fillColor="#F7F4FF" android:strokeColor="#F7F4FF"
+        android:strokeWidth="4.1" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M8,27 L20,47 M20,27 L8,47
+            M26,47 L34,27 L42,47 M29,40 H39
+            M48,47 V27 L62,47 V27
+            M69,27 V47
+            M77,47 V27 L91,47 V27
+            M98,27 V47 M98,27 H107 M98,37 H105 M98,47 H107" />
 
-    <!-- Short cyan divider anchors the signature beneath the name. -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#27DDF4"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:pathData="M25,59 H83" />
+    <!-- Neon separator gives the stacked wordmark a deliberate lockup. -->
+    <path android:fillColor="#00000000" android:strokeColor="#24DDF4"
+        android:strokeWidth="2.2" android:strokeLineCap="round"
+        android:pathData="M23,57 H85" />
 
-    <!-- Large, unmistakable :| signature, kept horizontal below XAnime. -->
-    <path
-        android:fillColor="#25DDF4"
-        android:pathData="M45,72a3,3 0,1 1,-6 0a3,3 0,1 1,6 0z M45,85a3,3 0,1 1,-6 0a3,3 0,1 1,6 0z" />
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#B66BFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M65,68 V86" />
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#25DDF4"
-        android:strokeWidth="1.5"
-        android:strokeLineCap="round"
-        android:pathData="M32,94 H76" />
+    <!-- The signature is intentionally large and horizontal: two dots, then a bar. -->
+    <path android:fillColor="#28E4F6"
+        android:pathData="M43,69a4,4 0,1 1,-8 0a4,4 0,1 1,8 0z M43,84a4,4 0,1 1,-8 0a4,4 0,1 1,8 0z" />
+    <path android:fillColor="#00000000" android:strokeColor="#B86BFF"
+        android:strokeWidth="8" android:strokeLineCap="round"
+        android:pathData="M69,65 V88" />
+
+    <!-- Subtle baseline, not an enclosing border. -->
+    <path android:fillColor="#00000000" android:strokeColor="#24DDF4"
+        android:strokeWidth="1.4" android:strokeLineCap="round"
+        android:pathData="M29,98 H79" />
 </vector>
