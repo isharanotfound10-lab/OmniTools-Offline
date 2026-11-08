@@ -23,7 +23,9 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo\nimport android.text.Editable\nimport android.text.TextWatcher
+import android.view.inputmethod.EditorInfo
+import android.text.Editable
+import android.text.TextWatcher
 import android.widget.Button
 import android.widget.Spinner
 import android.widget.AdapterView
@@ -46,7 +48,9 @@ import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.Callable
-import org.jsoup.Jsoup\nimport org.json.JSONArray\nimport org.json.JSONObject
+import org.jsoup.Jsoup
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : Activity() {
     private val prefs get() = getSharedPreferences("xanime", MODE_PRIVATE)
@@ -99,7 +103,9 @@ class MainActivity : Activity() {
     private var searchScrollY = 0
     private var isDetailScreen = false
     private var showingFavorites = false
-    private var showingHentaini = false\n    private var hentainiQuery = ""\n    private var hentainiRequestId = 0
+    private var showingHentaini = false
+    private var hentainiQuery = ""
+    private var hentainiRequestId = 0
     private val expandedAnimeNames = mutableSetOf<String>()
     private val loadingExtraThumbnails = mutableSetOf<String>()
     private lateinit var root: LinearLayout
@@ -480,7 +486,8 @@ class MainActivity : Activity() {
             emptyList()
         }
     }
-\n    private fun startSearch(reset: Boolean) {
+
+    private fun startSearch(reset: Boolean) {
         val value = search.text.toString().trim()
         if (value.isBlank()) { status.text = "Enter a search term or choose a category."; return }
         selectedCategory = null
