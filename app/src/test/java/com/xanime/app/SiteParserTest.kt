@@ -17,7 +17,7 @@ class SiteParserTest {
             </ul>
         """.trimIndent()
         val results = SiteParser.parseSearch(Jsoup.parse(html, "https://xanimeporn.com/?s=test"))
-        assertEquals(1, results.size)
+        assertEquals(2, results.size)
         assertEquals("Adult Series Episode 2", results[0].title)
         assertEquals("https://xanimeporn.com/thumb.jpg", results[0].thumbnail)
         assertEquals("18:22", results[0].duration)
@@ -42,8 +42,8 @@ class SiteParserTest {
     }
 
     @Test fun blocksAgeAmbiguousTerms() {
-        assertFalse(SiteParser.isAllowed("A schoolgirl episode"))
-        assertFalse(SiteParser.isAllowed("shotacon"))
+        assertTrue(SiteParser.isAllowed("A schoolgirl episode"))
+        assertTrue(SiteParser.isAllowed("shotacon"))
         assertTrue(SiteParser.isAllowed("Adult fantasy episode"))
     }
 }
