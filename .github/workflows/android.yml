@@ -1,9 +1,9 @@
 name: XAnime Android Build
 on:
   push:
-    branches: [main, xanime-app, feature/catalog-sorting]
+    branches: [main, xanime-app, feature/catalog-sorting, feature/xanime-visual-refresh]
   pull_request:
-    branches: [main, xanime-app]
+    branches: [main, xanime-app, feature/catalog-sorting]
   workflow_dispatch:
 permissions:
   contents: read
