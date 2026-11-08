@@ -310,7 +310,7 @@ class MainActivity : Activity() {
         catalogMode = true
         search.setText("")
         resetCatalogResults()
-        runSearch()
+        showHome()
     }
 
     private fun selectSort(filter: String) {
@@ -320,7 +320,7 @@ class MainActivity : Activity() {
         catalogMode = true
         search.setText("")
         resetCatalogResults()
-        runSearch()
+        showHome()
     }
 
     private fun resetCatalogResults() {
@@ -346,7 +346,7 @@ class MainActivity : Activity() {
         cachedAnimeGroups = emptyList()
         expandedAnimeNames.clear()
         searchScrollY = 0
-        runSearch()
+        showHome()
     }
 
     private fun runSearch(append: Boolean = false) {
