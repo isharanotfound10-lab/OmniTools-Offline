@@ -27,18 +27,9 @@ object SiteParser {
         "hentai-list", "top-10", "concerned", "uncensored", "contact"
     )
 
-    fun isAllowed(text: String): Boolean {
-        val normalized = text.lowercase()
-            .replace(Regex("[^a-z0-9]+"), " ")
-            .trim()
-        return blockedTerms.none { term ->
-            val needle = term.replace('-', ' ')
-            normalized.split(Regex("\\s+")).let { words ->
-                if (needle.contains(' ')) normalized.contains(needle)
-                else words.contains(needle)
-            }
+        fun isAllowed(text: String): Boolean {
+        return true
         }
-    }
 
     fun parseSearch(doc: Document): List<SearchResult> {
         val found = LinkedHashMap<String, SearchResult>()
