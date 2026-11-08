@@ -46,7 +46,7 @@ import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.Callable
-import org.jsoup.Jsoup
+import org.jsoup.Jsoup\nimport org.json.JSONArray\nimport org.json.JSONObject
 
 class MainActivity : Activity() {
     private val prefs get() = getSharedPreferences("xanime", MODE_PRIVATE)
@@ -99,7 +99,7 @@ class MainActivity : Activity() {
     private var searchScrollY = 0
     private var isDetailScreen = false
     private var showingFavorites = false
-    private var showingHentaini = false
+    private var showingHentaini = false\n    private var hentainiQuery = ""\n    private var hentainiRequestId = 0
     private val expandedAnimeNames = mutableSetOf<String>()
     private val loadingExtraThumbnails = mutableSetOf<String>()
     private lateinit var root: LinearLayout
@@ -216,21 +216,55 @@ class MainActivity : Activity() {
 
         if (showingHentaini) {
             root.addView(label("HENTAINI", 22, white, true).apply {
-                setPadding(0, dp(28), 0, dp(8))
+                setPadding(0, dp(24), 0, dp(8))
             })
-            root.addView(label("SOURCE NOT CONNECTED", 10, accent, true).apply {
-                letterSpacing = .12f
+            root.addView(label("LIVE SEARCH • GENRE FILTER ACTIVE", 10, accent, true).apply {
+                letterSpacing = .10f
                 setPadding(0, 0, 0, dp(12))
             })
+            val hentainiInput = EditText(this).apply {
+                hint = "Search Hentaini titles..."
+                setHintTextColor(muted); setTextColor(white)
+                textSize = 15f; isSingleLine = true
+                imeOptions = EditorInfo.IME_ACTION_SEARCH
+                setPadding(dp(15), 0, dp(15), 0)
+                background = ripple(glassDrawable(16))
+                setText(hentainiQuery)
+            }
+            root.addView(hentainiInput, LinearLayout.LayoutParams(-1, dp(52)))
+            val hentainiStatus = label("Enter a title to search Hentaini live.", 13, muted, false).apply {
+                setPadding(0, dp(14), 0, dp(8))
+            }
+            root.addView(hentainiStatus)
+            val hentainiProgress = ProgressBar(this).apply { visibility = View.GONE }
+            root.addView(hentainiProgress, LinearLayout.LayoutParams(-1, dp(4)))
+            val hentainiOutput = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, dp(12), 0, 0)
+            }
+            root.addView(hentainiOutput, LinearLayout.LayoutParams(-1, 0, 1f))
             root.addView(infoCard(
-                "Hentaini search is paused. Its homepage, search results, and recommendations can include age-ambiguous sexual content. A title-only filter cannot reliably identify every such result, so this tab will not load external content until a verified adult-only source filter is available."
+                "All 25 genres you supplied are blocked. Results with missing or unverified age information are also hidden. Search requests still run; filtered entries are never displayed."
             ))
-            root.addView(label("Your existing XAnime source and its parser are unchanged.", 12, muted, false).apply {
-                setPadding(dp(4), dp(14), dp(4), 0)
-            })
             setContentView(root)
             animateScreen(root)
             isDetailScreen = false
+
+            fun submitHentainiSearch() {
+                hentainiQuery = hentainiInput.text.toString().trim()
+                hentainiSearch(hentainiQuery, hentainiStatus, hentainiProgress, hentainiOutput)
+            }
+            root.addView(actionButton("SEARCH HENTAINI") { submitHentainiSearch() },
+                LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(8) })
+            hentainiInput.setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                    submitHentainiSearch()
+                    true
+                } else false
+            }
+            if (hentainiQuery.isNotBlank()) {
+                hentainiSearch(hentainiQuery, hentainiStatus, hentainiProgress, hentainiOutput)
+            }
             return
         }
 
@@ -332,7 +366,110 @@ class MainActivity : Activity() {
         } else if (isDetailScreen && (hasCachedSearch || showingFavorites)) showHome() else super.onBackPressed()
     }
 
-    private fun startSearch(reset: Boolean) {
+ 
+    /**
+     * Fetch Hentaini's JSON search endpoint. Only aggregate counts are rendered:
+     * every supplied genre is blocked and the API has no trusted per-series
+     * all-characters-adult verification field, so no result card can pass.
+     */
+    private fun hentainiSearch(
+        term: String,
+        statusView: TextView,
+        progressView: ProgressBar,
+        output: LinearLayout
+    ) {
+        if (term.isBlank()) {
+            statusView.text = "Enter a title to search."
+            output.removeAllViews()
+            progressView.visibility = View.GONE
+            return
+        }
+        val requestId = ++hentainiRequestId
+        statusView.text = "Searching Hentaini live..."
+        progressView.visibility = View.VISIBLE
+        output.removeAllViews()
+        worker.execute {
+            try {
+                val encoded = URLEncoder.encode(term, "UTF-8")
+                val address = "https://admin.hentaini.com/api/series?filters%5Btitle%5D%5B%24containsi%5D=$encoded&populate%5B0%5D=images&populate%5B1%5D=images.image_type&pagination%5Blimit%5D=10"
+                val connection = (URL(address).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 20000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
+                    setRequestProperty("Accept", "application/json")
+                }
+                val body = try {
+                    val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+                    stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                } finally {
+                    connection.disconnect()
+                }
+                val json = JSONObject(body)
+                val data = json.optJSONArray("data") ?: JSONArray()
+                var blockedByGenre = 0
+                var unverified = 0
+                for (i in 0 until data.length()) {
+                    val attributes = data.optJSONObject(i)?.optJSONObject("attributes")
+                        ?: data.optJSONObject(i) ?: continue
+                    val tags = parseHentainiGenres(attributes.opt("genres"))
+                    when (HentainiTagFilter.evaluate(
+                        tags = tags,
+                        allCharactersVerifiedAdult = false,
+                        title = attributes.optString("title"),
+                        englishTitle = attributes.optString("title_english"),
+                        synopsis = attributes.optString("synopsis")
+                    )) {
+                        HentainiTagFilter.Result.BLOCKED_MINOR_RELATED_TAG,
+                        HentainiTagFilter.Result.BLOCKED_MINOR_RELATED_METADATA -> blockedByGenre++
+                        HentainiTagFilter.Result.UNVERIFIED -> unverified++
+                        HentainiTagFilter.Result.ELIGIBLE -> Unit
+                    }
+                }
+                val total = json.optJSONObject("meta")?.optJSONObject("pagination")?.optInt("total", data.length())
+                    ?: data.length()
+                main.post {
+                    if (isFinishing || requestId != hentainiRequestId || !showingHentaini) return@post
+                    progressView.visibility = View.GONE
+                    statusView.text = "Live search complete: $total matching entries checked."
+                    output.removeAllViews()
+                    output.addView(infoCard(
+                        "No entries displayed. $blockedByGenre result(s) matched blocked genres or minor-related metadata; $unverified result(s) could not be independently verified as adult-only. All results are hidden by the active filters."
+                    ))
+                }
+            } catch (error: Exception) {
+                main.post {
+                    if (isFinishing || requestId != hentainiRequestId || !showingHentaini) return@post
+                    progressView.visibility = View.GONE
+                    statusView.text = "Hentaini search failed."
+                    output.removeAllViews()
+                    output.addView(infoCard("Could not load live results. Check your connection and try again."))
+                }
+            }
+        }
+    }
+
+    private fun parseHentainiGenres(raw: Any?): List<String> {
+        if (raw == null || raw == JSONObject.NULL) return emptyList()
+        val value = raw.toString().trim()
+        if (value.isEmpty() || value == "null") return emptyList()
+        return try {
+            val array = JSONArray(value)
+            (0 until array.length()).mapNotNull { index ->
+                when (val item = array.opt(index)) {
+                    is JSONObject -> item.optString("name").ifBlank { item.optString("title") }.takeIf { it.isNotBlank() }
+                    null, JSONObject.NULL -> null
+                    else -> item.toString()
+                }
+            }
+        } catch (_: Exception) {
+            // An unparseable genre payload yields no verified tags; the caller
+            // therefore treats the entry as UNVERIFIED and hides it.
+            emptyList()
+        }
+    }
+\n    private fun startSearch(reset: Boolean) {
         val value = search.text.toString().trim()
         if (value.isBlank()) { status.text = "Enter a search term or choose a category."; return }
         selectedCategory = null
