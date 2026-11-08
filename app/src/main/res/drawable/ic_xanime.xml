@@ -44,7 +44,7 @@
     <!-- Large, unmistakable :| signature, kept horizontal below XAnime. -->
     <path
         android:fillColor="#25DDF4"
-        android:pathData="M42,69a3.1,3.1 0,1 0,0.1 0z M42,82a3.1,3.1 0,1 0,0.1 0z" />
+        android:pathData="M45,72a3,3 0,1 1,-6 0a3,3 0,1 1,6 0z M45,85a3,3 0,1 1,-6 0a3,3 0,1 1,6 0z" />
     <path
         android:fillColor="#00000000"
         android:strokeColor="#B66BFF"
