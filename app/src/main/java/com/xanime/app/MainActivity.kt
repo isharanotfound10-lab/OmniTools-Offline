@@ -680,7 +680,7 @@ class MainActivity : Activity() {
             content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(11) })
             animateEntrance(card, content.childCount - 1)
         }
-        renderNextPageButton()
+        if (!showingFavorites) renderNextPageButton()
         scroll.post { scroll.scrollTo(0, previousScrollY) }
     }
 
