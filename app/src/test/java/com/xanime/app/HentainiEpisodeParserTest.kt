@@ -73,6 +73,44 @@ class HentainiEpisodeParserTest {
     }
 
     @Test
+    fun selectsOnlyVideoObjectMatchingCurrentEpisodePage() {
+        val html = """
+            <html><head>
+              <script type="application/ld+json">
+                {
+                  "@context":"https://schema.org",
+                  "@graph":[
+                    {
+                      "@type":"VideoObject",
+                      "url":"https://hentaini.com/h/sample-series",
+                      "name":"Sample Series",
+                      "thumbnailUrl":"https://cdn.example/shared-series-frame.jpeg",
+                      "contentUrl":"https://1024terabox.com/s/shared-series-stream"
+                    },
+                    {
+                      "@type":"VideoObject",
+                      "url":"https://hentaini.com/h/sample-series/2",
+                      "name":"Episode Two",
+                      "thumbnailUrl":"https://cdn.example/episode-two-frame.jpeg",
+                      "contentUrl":"https://www.fireload.com/episode-two-stream"
+                    }
+                  ]
+                }
+              </script>
+            </head><body><main><h1>Episode Two</h1></main></body></html>
+        """.trimIndent()
+
+        val page = HentainiEpisodeParser.parseEpisode(
+            html, "https://hentaini.com/h/sample-series/2"
+        )
+
+        assertEquals("Episode Two", page.title)
+        assertEquals("https://cdn.example/episode-two-frame.jpeg", page.thumbnailUrl)
+        assertEquals(1, page.streams.size)
+        assertEquals("https://www.fireload.com/episode-two-stream", page.streams.single().url)
+    }
+
+    @Test
     fun supportsArrayAndImageObjectThumbnailsAndPlayerScriptLinks() {
         val html = """
             <html><head>
