@@ -99,6 +99,7 @@ class MainActivity : Activity() {
     private var searchScrollY = 0
     private var isDetailScreen = false
     private var showingFavorites = false
+    private var showingHentaini = false
     private val expandedAnimeNames = mutableSetOf<String>()
     private val loadingExtraThumbnails = mutableSetOf<String>()
     private lateinit var root: LinearLayout
@@ -190,14 +191,48 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(1), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(actionButton(if (showingFavorites) "‹ Home" else "♥ Favorites", false) {
-            showingFavorites = !showingFavorites
-            showHome()
-        },
-            LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
+        if (!showingHentaini) {
+            header.addView(actionButton(if (showingFavorites) "‹ Home" else "♥ Favorites", false) {
+                showingFavorites = !showingFavorites
+                showHome()
+            }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
+        }
         header.addView(actionButton("⚙", false) { showSettings() },
             LinearLayout.LayoutParams(dp(44), dp(44)))
         root.addView(header)
+
+        val sourceTabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        sourceTabs.addView(actionButton("XAnime", !showingHentaini) {
+            showingHentaini = false
+            showHome()
+        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(8) })
+        sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
+            showingHentaini = true
+            showHome()
+        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        root.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+
+        if (showingHentaini) {
+            root.addView(label("HENTAINI", 22, white, true).apply {
+                setPadding(0, dp(28), 0, dp(8))
+            })
+            root.addView(label("SOURCE NOT CONNECTED", 10, accent, true).apply {
+                letterSpacing = .12f
+                setPadding(0, 0, 0, dp(12))
+            })
+            root.addView(infoCard(
+                "Hentaini search is paused. Its homepage, search results, and recommendations can include age-ambiguous sexual content. A title-only filter cannot reliably identify every such result, so this tab will not load external content until a verified adult-only source filter is available."
+            ))
+            root.addView(label("Your existing XAnime source and its parser are unchanged.", 12, muted, false).apply {
+                setPadding(dp(4), dp(14), dp(4), 0)
+            })
+            setContentView(root)
+            animateScreen(root)
+            isDetailScreen = false
+            return
+        }
 
         search = EditText(this).apply {
             hint = "Search titles..."; setHintTextColor(muted); setTextColor(white)
@@ -291,7 +326,10 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (isDetailScreen && (hasCachedSearch || showingFavorites)) showHome() else super.onBackPressed()
+        if (showingHentaini) {
+            showingHentaini = false
+            showHome()
+        } else if (isDetailScreen && (hasCachedSearch || showingFavorites)) showHome() else super.onBackPressed()
     }
 
     private fun startSearch(reset: Boolean) {
