@@ -633,8 +633,9 @@ class MainActivity : Activity() {
         card.addView(streams)
         output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
 
-        val imageUrl = episode.thumbnailUrl.ifBlank { series.thumbnailUrl }
-        if (imageUrl.isNotBlank()) loadImage(imageUrl, thumbnail)
+        // Never substitute the series cover for a missing episode image:
+        // that makes every episode appear to have the same thumbnail.
+        if (episode.thumbnailUrl.isNotBlank()) loadImage(episode.thumbnailUrl, thumbnail)
 
         detailWorker.execute {
             val details = hentainiEpisodeCache[episode.url] ?: runCatching {
