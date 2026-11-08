@@ -16,11 +16,11 @@ object HentainiTagFilter {
     }
 
     // All 25 tags supplied by the user are blocked for Hentaini results.
-    private val blockedTags = setOf()
+    private val blockedTags: Set<String> = setOf()
 
     // These are risk flags, not an exhaustive classifier. No match does not
     // establish that the characters are adults.
-    private val minorRelatedPatterns = listOf()
+    private val minorRelatedPatterns: List<Regex> = listOf()
 
     /**
      * The Hentaini API does not provide trusted per-series verification that
