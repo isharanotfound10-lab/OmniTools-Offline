@@ -73,6 +73,37 @@ class HentainiEpisodeParserTest {
     }
 
     @Test
+    fun supportsArrayAndImageObjectThumbnailsAndPlayerScriptLinks() {
+        val html = """
+            <html><head>
+              <script type="application/ld+json">
+                {
+                  "@type":"https://schema.org/VideoObject",
+                  "name":"Episode One",
+                  "thumbnailUrl":[
+                    {"@type":"ImageObject","url":"https://cdn.example/ep-one-frame.jpeg"}
+                  ]
+                }
+              </script>
+              <script>
+                window.playerConfig = {
+                  "mirror1":"https:\\/\\/www.fireload.com\\/episode-one",
+                  "mirror2":"https:\\/\\/www.mediafire.com\\/file\\/episode-one"
+                };
+              </script>
+            </head><body><main><h1>Episode One</h1></main></body></html>
+        """.trimIndent()
+
+        val page = HentainiEpisodeParser.parseEpisode(
+            html, "https://hentaini.com/h/sample-series/1"
+        )
+
+        assertEquals("https://cdn.example/ep-one-frame.jpeg", page.thumbnailUrl)
+        assertTrue(page.streams.any { it.url.contains("fireload.com") })
+        assertTrue(page.streams.any { it.url.contains("mediafire.com") })
+    }
+
+    @Test
     fun ignoresNoisyEpisodeCardTextAndUsesEpisodeNumberForTitle() {
         val html = """
             <html><body>
