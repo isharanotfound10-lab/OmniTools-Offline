@@ -48,6 +48,12 @@ class MainActivity : Activity() {
     private val seenResultUrls = mutableSetOf<String>()
     private val allSearchResults = mutableListOf<SearchResult>()
     private var busy = false
+    private var hasCachedSearch = false
+    private var cachedAnimeGroups: List<AnimeGroup> = emptyList()
+    private var searchScrollY = 0
+    private var isDetailScreen = false
+    private val expandedAnimeNames = mutableSetOf<String>()
+    private val loadingExtraThumbnails = mutableSetOf<String>()
     private lateinit var root: LinearLayout
     private lateinit var content: LinearLayout
     private lateinit var scroll: ScrollView
@@ -154,7 +160,20 @@ class MainActivity : Activity() {
         }
         root.addView(pageText)
         setContentView(root)
-        if (query.isNotBlank()) runSearch()
+        if (hasCachedSearch) {
+            status.text = if (cachedAnimeGroups.isEmpty()) "No results for: $query" else
+                "${cachedAnimeGroups.size} unique anime • cached results"
+            renderAnimeGroups(cachedAnimeGroups)
+            pageText.text = "PAGE 1 COMPLETE • ${cachedAnimeGroups.size} UNIQUE ANIME"
+            scroll.post { scroll.scrollTo(0, searchScrollY) }
+        } else if (query.isNotBlank()) {
+            runSearch()
+        }
+        isDetailScreen = false
+    }
+
+    override fun onBackPressed() {
+        if (isDetailScreen && hasCachedSearch) showHome() else super.onBackPressed()
     }
 
     private fun startSearch(reset: Boolean) {
@@ -165,6 +184,10 @@ class MainActivity : Activity() {
             page = 1
             seenResultUrls.clear()
             allSearchResults.clear()
+            hasCachedSearch = false
+            cachedAnimeGroups = emptyList()
+            expandedAnimeNames.clear()
+            searchScrollY = 0
         }
         runSearch()
     }
@@ -217,6 +240,8 @@ class MainActivity : Activity() {
                     busy = false
                     progress.visibility = View.GONE
                     if (parsed.isEmpty()) {
+                        hasCachedSearch = true
+                        cachedAnimeGroups = emptyList()
                         status.text = "No safe results found"
                         content.removeAllViews()
                         content.addView(infoCard("No matching adult-only results were found. Try another search term."))
@@ -224,8 +249,10 @@ class MainActivity : Activity() {
                     } else {
                         allSearchResults.clear()
                         allSearchResults.addAll(parsed)
+                        cachedAnimeGroups = groups.toList()
+                        hasCachedSearch = true
                         status.text = "${parsed.size} search results • ${groups.size} unique anime"
-                        renderAnimeGroups(groups)
+                        renderAnimeGroups(cachedAnimeGroups)
                         pageText.text = "PAGE 1 COMPLETE • ${groups.size} UNIQUE ANIME"
                     }
                 }
@@ -266,12 +293,15 @@ class MainActivity : Activity() {
         .trim().ifBlank { title.trim() }
 
     private fun renderAnimeGroups(groups: List<AnimeGroup>) {
+        val previousScrollY = if (::scroll.isInitialized) scroll.scrollY else searchScrollY
         content.removeAllViews()
         if (groups.isEmpty()) {
             content.addView(infoCard("No matching results were found."))
             return
         }
         groups.forEach { group ->
+            val groupKey = group.name.lowercase()
+            val expanded = groupKey in expandedAnimeNames
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(13), dp(13), dp(13), dp(13))
@@ -279,6 +309,7 @@ class MainActivity : Activity() {
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
+                    searchScrollY = scroll.scrollY
                     val episodeDetails = group.details
                     if (episodeDetails != null) showEpisode(episodeDetails) else openEpisode(group.firstResult.url)
                 }
@@ -296,32 +327,49 @@ class MainActivity : Activity() {
             card.addView(heading)
 
             val episodes = group.details?.episodes.orEmpty()
+            val visibleEpisodes = if (expanded) episodes else episodes.take(4)
             val gallery = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+                orientation = LinearLayout.VERTICAL
             }
-            episodes.take(4).forEachIndexed { index, episode ->
-                val tile = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER
-                    background = rounded(surface2, 10)
-                    clipToOutline = true
+            visibleEpisodes.chunked(4).forEachIndexed { rowIndex, rowEpisodes ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
                 }
-                val image = ImageView(this).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    background = rounded(surface2, 10)
-                    layoutParams = LinearLayout.LayoutParams(-1, dp(72))
+                rowEpisodes.forEachIndexed { columnIndex, episode ->
+                    val episodeIndex = rowIndex * 4 + columnIndex
+                    val tile = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        gravity = Gravity.CENTER
+                        background = rounded(surface2, 10)
+                        clipToOutline = true
+                    }
+                    val image = ImageView(this).apply {
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        background = rounded(surface2, 10)
+                        layoutParams = LinearLayout.LayoutParams(-1, dp(72))
+                    }
+                    tile.addView(image)
+                    val number = episode.number.takeIf { it > 0 }?.let { "EP $it" } ?: "EP " + (episodeIndex + 1)
+                    tile.addView(label(number, 9, muted, true).apply {
+                        gravity = Gravity.CENTER
+                        setPadding(0, dp(5), 0, dp(5))
+                    })
+                    row.addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                        if (columnIndex > 0) marginStart = dp(7)
+                    })
+                    group.thumbnails.getOrNull(episodeIndex)?.takeIf { it.isNotBlank() }?.let {
+                        loadImage(it, image)
+                    }
                 }
-                tile.addView(image)
-                val number = episode.number.takeIf { it > 0 }?.let { "EP $it" } ?: "EP " + (index + 1)
-                tile.addView(label(number, 9, muted, true).apply {
-                    gravity = Gravity.CENTER
-                    setPadding(0, dp(5), 0, dp(5))
+                repeat(4 - rowEpisodes.size) {
+                    row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f).apply {
+                        if (row.childCount > 0) marginStart = dp(7)
+                    })
+                }
+                gallery.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                    if (rowIndex > 0) topMargin = dp(8)
                 })
-                gallery.addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                    if (index > 0) marginStart = dp(7)
-                })
-                group.thumbnails.getOrNull(index)?.takeIf { it.isNotBlank() }?.let { loadImage(it, image) }
             }
             if (episodes.isEmpty()) {
                 val image = ImageView(this).apply {
@@ -329,7 +377,7 @@ class MainActivity : Activity() {
                     background = rounded(surface2, 10)
                     layoutParams = LinearLayout.LayoutParams(-1, dp(72))
                 }
-                gallery.addView(image, LinearLayout.LayoutParams(0, dp(72), 1f))
+                gallery.addView(image)
                 if (group.firstResult.thumbnail.isNotBlank()) loadImage(group.firstResult.thumbnail, image)
             }
             card.addView(gallery, LinearLayout.LayoutParams(-1, -2).apply {
@@ -345,11 +393,62 @@ class MainActivity : Activity() {
                 if (count > 0) "$count Episodes" else "Episode count unavailable",
                 12, muted, false
             ), LinearLayout.LayoutParams(0, -2, 1f))
-            if (count > 4) footer.addView(label("+" + (count - 4) + " MORE", 10, accent, true))
+            if (count > 4) {
+                val more = label(
+                    if (expanded) "SHOW LESS  ↑" else "+${count - 4} MORE  ↓",
+                    10, accent, true
+                ).apply {
+                    setPadding(dp(10), dp(7), dp(10), dp(7))
+                    background = rounded(surface2, 10)
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener {
+                        if (expanded) {
+                            expandedAnimeNames.remove(groupKey)
+                            renderAnimeGroups(cachedAnimeGroups)
+                        } else {
+                            expandedAnimeNames.add(groupKey)
+                            renderAnimeGroups(cachedAnimeGroups)
+                            fetchRemainingThumbnails(group)
+                        }
+                    }
+                }
+                footer.addView(more)
+            }
             card.addView(footer, LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(10)
             })
             content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(11) })
+        }
+        scroll.post { scroll.scrollTo(0, previousScrollY) }
+    }
+
+    private fun fetchRemainingThumbnails(group: AnimeGroup) {
+        val episodes = group.details?.episodes.orEmpty()
+        val key = group.name.lowercase()
+        if (episodes.size <= 4 || !loadingExtraThumbnails.add(key)) return
+        worker.execute {
+            val thumbnails = group.thumbnails.toMutableList()
+            while (thumbnails.size < episodes.size) thumbnails.add("")
+            for (index in 4 until episodes.size) {
+                if (thumbnails[index].isNotBlank()) continue
+                val thumbnail = runCatching {
+                    val episodeHtml = request(episodes[index].url)
+                    extractEpisodePageThumbnail(Jsoup.parse(episodeHtml, episodes[index].url))
+                }.getOrNull().orEmpty()
+                if (thumbnail.isNotBlank()) thumbnails[index] = thumbnail
+            }
+            main.post {
+                loadingExtraThumbnails.remove(key)
+                cachedAnimeGroups = cachedAnimeGroups.map {
+                    if (it.name.lowercase() == key) it.copy(thumbnails = thumbnails) else it
+                }
+                if (expandedAnimeNames.contains(key)) {
+                    val y = scroll.scrollY
+                    renderAnimeGroups(cachedAnimeGroups)
+                    scroll.post { scroll.scrollTo(0, y) }
+                }
+            }
         }
     }
 
@@ -454,6 +553,7 @@ class MainActivity : Activity() {
     }
 
     private fun showLoadingDetail() {
+        isDetailScreen = true
         val page = baseLayout()
         page.addView(actionButton("‹ BACK", false) { showHome() })
         page.addView(label("Loading episode...", 16, white, true).apply { setPadding(0, dp(28), 0, 0) })
@@ -461,6 +561,7 @@ class MainActivity : Activity() {
     }
 
     private fun showEpisode(item: EpisodeDetails) {
+        isDetailScreen = true
         val page = baseLayout()
         page.addView(actionButton("‹ BACK TO SEARCH", false) { showHome() })
         page.addView(label(item.title, 21, white, true).apply { setPadding(0, dp(20), 0, dp(8)) })
@@ -510,6 +611,7 @@ class MainActivity : Activity() {
     }
 
     private fun showErrorDetail(message: String) {
+        isDetailScreen = true
         val page = baseLayout()
         page.addView(actionButton("‹ BACK", false) { showHome() })
         page.addView(infoCard(message))
