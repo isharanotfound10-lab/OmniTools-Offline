@@ -39,7 +39,11 @@ object HentainiEpisodeParser {
             val number = path.removePrefix(pathPrefix).trim('/').toIntOrNull() ?: return@forEach
             if (number <= 0) return@forEach
 
-            val image = anchor.selectFirst("img") ?: anchor.parent()?.selectFirst("img")
+            // Prefer an image belonging to this episode card. Only inspect a
+            // nearby wrapper when it contains exactly one episode link.
+            val image = anchor.selectFirst("img") ?: anchor.parents().firstOrNull { parent ->
+                parent.select("a[href]").size == 1 && parent.select("img").isNotEmpty()
+            }?.selectFirst("img")
             val thumbnail = image?.let { imageUrl(it) }.orEmpty()
             val title = sequenceOf(
                 anchor.text().trim(),
@@ -62,13 +66,19 @@ object HentainiEpisodeParser {
         val doc = Jsoup.parse(html, pageUrl)
         val title = doc.selectFirst("h1")?.text()?.trim()
             ?.takeIf { it.isNotBlank() } ?: doc.title().substringBefore("|").trim()
+        // Social preview metadata is commonly the SERIES cover on every
+        // episode page. Use only media embedded in the episode content itself.
         val thumbnail = sequenceOf(
-            doc.selectFirst("meta[property=og:image]")?.absUrl("content"),
-            doc.selectFirst("meta[name=twitter:image]")?.absUrl("content"),
             doc.selectFirst("video[poster]")?.absUrl("poster"),
             doc.selectFirst("article img")?.let { imageUrl(it) },
-            doc.selectFirst("main img")?.let { imageUrl(it) }
-        ).filterNotNull().firstOrNull { it.startsWith("http://") || it.startsWith("https://") }.orEmpty()
+            doc.selectFirst("main img")?.let { imageUrl(it) },
+            doc.selectFirst("[class*=episode] img")?.let { imageUrl(it) },
+            doc.selectFirst("[class*=thumbnail] img")?.let { imageUrl(it) }
+        ).filterNotNull().firstOrNull {
+            (it.startsWith("http://") || it.startsWith("https://")) &&
+                !it.substringAfterLast('/').contains("logo", true) &&
+                !it.substringAfterLast('/').contains("avatar", true)
+        }.orEmpty()
 
         val found = linkedMapOf<String, HentainiStream>()
         fun add(raw: String?, label: String?) {
