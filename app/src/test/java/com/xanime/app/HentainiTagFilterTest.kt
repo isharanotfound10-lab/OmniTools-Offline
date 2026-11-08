@@ -11,6 +11,28 @@ class HentainiTagFilterTest {
         )
     }
 
+    @Test fun minorRelatedSynopsisIsBlockedEvenIfAdultVerificationFlagIsSet() {
+        assertEquals(
+            HentainiTagFilter.Result.BLOCKED_MINOR_RELATED_METADATA,
+            HentainiTagFilter.evaluate(
+                tags = listOf("Harem"),
+                allCharactersVerifiedAdult = true,
+                synopsis = "A schoolgirl becomes involved in the story."
+            )
+        )
+    }
+
+    @Test fun schoolStudentInEnglishTitleIsBlocked() {
+        assertEquals(
+            HentainiTagFilter.Result.BLOCKED_MINOR_RELATED_METADATA,
+            HentainiTagFilter.evaluate(
+                tags = emptyList(),
+                allCharactersVerifiedAdult = true,
+                englishTitle = "The High School Student"
+            )
+        )
+    }
+
     @Test fun ordinaryGenreTagsAreNotTreatedAsAgeVerification() {
         assertEquals(
             HentainiTagFilter.Result.UNVERIFIED,
@@ -36,7 +58,8 @@ class HentainiTagFilterTest {
             HentainiTagFilter.Result.ELIGIBLE,
             HentainiTagFilter.evaluate(
                 listOf("Milf", "Harem"),
-                allCharactersVerifiedAdult = true
+                allCharactersVerifiedAdult = true,
+                title = "Adult-only title"
             )
         )
     }
