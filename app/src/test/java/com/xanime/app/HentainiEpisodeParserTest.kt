@@ -27,17 +27,35 @@ class HentainiEpisodeParserTest {
     }
 
     @Test
-    fun extractsKnownProviderLinksAndKeepsOnlyDownloadHosts() {
+    fun extractsOnlyCurrentVideoObjectProviderLinksAndThumbnail() {
         val html = """
-            <html><head><meta property="og:image" content="https://cdn.example/series-cover.jpg"></head>
-            <body>
-              <h1>Episode 01</h1>
-              <main><img src="https://cdn.example/episode-content.jpg"></main>
-              <a href="https://1024terabox.com/s/example">1024terabox</a>
-              <a href="https://www.fireload.com/example">Fireload</a>
-              <a href="https://www.mediafire.com/file/example">Mediafire</a>
-              <a href="https://example.org/about">About us</a>
-              <script>var share = "https://1fichier.com/?example";</script>
+            <html><head>
+              <meta property="og:image" content="https://cdn.example/series-cover.jpg">
+              <script type="application/ld+json">
+                {
+                  "@context":"https://schema.org",
+                  "@graph":[
+                    {
+                      "@type":"VideoObject",
+                      "name":"Episode 01",
+                      "thumbnailUrl":"https://cdn.example/episode-01-frame.jpeg",
+                      "contentUrl":"https://1024terabox.com/s/episode01",
+                      "distribution":{"contentUrl":"https://www.fireload.com/episode01"},
+                      "embedUrl":"https://www.mediafire.com/file/episode01",
+                      "sameAs":"https://1fichier.com/?episode01"
+                    },
+                    {
+                      "@type":"Organization",
+                      "name":"Site",
+                      "sameAs":"https://1024terabox.com/s/shared-series-link"
+                    }
+                  ]
+                }
+              </script>
+            </head><body>
+              <header><a href="https://1024terabox.com/s/header-shared">1024terabox</a></header>
+              <main><h1>Episode 01</h1><img src="https://cdn.example/episode-content.jpg"></main>
+              <footer><a href="https://www.mediafire.com/file/footer-shared">Mediafire</a></footer>
             </body></html>
         """.trimIndent()
 
@@ -45,11 +63,30 @@ class HentainiEpisodeParserTest {
             html, "https://hentaini.com/h/sample-series/1"
         )
 
+        assertEquals("https://cdn.example/episode-01-frame.jpeg", page.thumbnailUrl)
         assertEquals(4, page.streams.size)
-        assertTrue(page.streams.any { it.host == "1024terabox" })
-        assertTrue(page.streams.any { it.host == "Fireload" })
-        assertTrue(page.streams.any { it.host == "Mediafire" })
-        assertTrue(page.streams.any { it.host == "1fichier" })
-        assertEquals("https://cdn.example/episode-content.jpg", page.thumbnailUrl)
+        assertTrue(page.streams.any { it.url == "https://1024terabox.com/s/episode01" })
+        assertTrue(page.streams.any { it.url == "https://www.fireload.com/episode01" })
+        assertTrue(page.streams.any { it.url == "https://www.mediafire.com/file/episode01" })
+        assertTrue(page.streams.any { it.url == "https://1fichier.com/?episode01" })
+        assertTrue(page.streams.none { it.url.contains("shared") })
+    }
+
+    @Test
+    fun ignoresNoisyEpisodeCardTextAndUsesEpisodeNumberForTitle() {
+        val html = """
+            <html><body>
+              <div class="episode-card">
+                <span>67 Anime</span>
+                <a href="/h/sample-series/1">Episode 1</a>
+              </div>
+            </body></html>
+        """.trimIndent()
+
+        val episode = HentainiEpisodeParser.parseSeries(
+            html, "https://hentaini.com/h/sample-series", "sample-series"
+        ).single()
+
+        assertEquals("Episode 01", episode.title)
     }
 }
