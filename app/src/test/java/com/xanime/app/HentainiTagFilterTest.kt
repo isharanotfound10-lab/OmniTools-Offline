@@ -15,7 +15,7 @@ class HentainiTagFilterTest {
         assertEquals(
             HentainiTagFilter.Result.BLOCKED_MINOR_RELATED_METADATA,
             HentainiTagFilter.evaluate(
-                tags = listOf("Harem"),
+                tags = emptyList(),
                 allCharactersVerifiedAdult = true,
                 synopsis = "A schoolgirl becomes involved in the story."
             )
