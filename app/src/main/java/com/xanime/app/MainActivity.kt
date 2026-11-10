@@ -384,7 +384,7 @@ class MainActivity : Activity() {
 
         val genreScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("Ahegao" to "ahegao", "MILF" to "milf").forEach { (name, slug) ->
+        listOf("Action" to "action","Comedy" to "comedy","Fantasy" to "fantasy","Ahegao" to "ahegao","Anal" to "anal","BBW" to "bbw","Big Breast" to "big breast","Blackmail" to "blackmail","Bondage" to "bondage","Chikan" to "chikan","Cosplay" to "cosplay","Futanari" to "futanari","Garyu" to "garyu","Harem" to "harem","Incest" to "incest","Maid" to "maid","Milf" to "milf","Netorare" to "netorare","Nurse" to "nurse","Orgy" to "orgy","Oyakodon" to "oyakodon","Paizuri" to "paizuri","Rape" to "rape","Scholar" to "scholar","Shotacon" to "shotacon","Small Breasts" to "small breasts","Succubus" to "succubus","Tentacles" to "tentacles",).forEach { (name, slug) ->
             genreRow.addView(actionButton(name, hentainiGenre == slug) {
                 hentainiGenre = if (hentainiGenre == slug) null else slug
                 hentainiQuery = ""
