@@ -239,7 +239,7 @@ class MainActivity : Activity() {
 
         // Keep the search controls compact so results get most of the screen.
         search = EditText(this).apply {
-            hint = "Search anime titles..."; setHintTextColor(muted); setTextColor(white)
+            hint = "Search Hanime Titles..."; setHintTextColor(muted); setTextColor(white)
             textSize = 14f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
             setPadding(dp(13), 0, dp(10), 0); background = ripple(glassDrawable(14))
             setText(query)
@@ -387,7 +387,7 @@ class MainActivity : Activity() {
 
         val genreScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("Ahegao" to "ahegao", "MILF" to "milf").forEach { (name, slug) ->
+        listOf("Action" to "action","Comedy" to "comedy","Fantasy" to "fantasy","Ahegao" to "ahegao","Anal" to "anal","BBW" to "bbw","Big Breast" to "big breast","Blackmail" to "blackmail","Bondage" to "bondage","Chikan" to "chikan","Cosplay" to "cosplay","Futanari" to "futanari","Garyu" to "garyu","Harem" to "harem","Incest" to "incest","Maid" to "maid","Milf" to "milf","Netorare" to "netorare","Nurse" to "nurse","Orgy" to "orgy","Oyakodon" to "oyakodon","Paizuri" to "paizuri","Rape" to "rape","Scholar" to "scholar","Shotacon" to "shotacon","Small Breasts" to "small breasts","Succubus" to "succubus","Tentacles" to "tentacles",).forEach { (name, slug) ->
             genreRow.addView(actionButton(name, hentainiGenre == slug) {
                 hentainiGenre = if (hentainiGenre == slug) null else slug
                 hentainiQuery = ""
@@ -398,7 +398,7 @@ class MainActivity : Activity() {
         pageContent.addView(genreScroller, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(9) })
 
         val statusView = label(
-            if (hentainiQuery.isBlank()) "Search Hentaini titles" else "Results for: " + hentainiQuery,
+            if (hentainiQuery.isBlank()) "Search Hentaini Titles" else "Results for: " + hentainiQuery,
             13, muted, true
         ).apply { setPadding(0, dp(14), 0, dp(8)) }
         pageContent.addView(statusView)
