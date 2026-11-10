@@ -117,6 +117,7 @@ class MainActivity : Activity() {
     private lateinit var root: LinearLayout
     private lateinit var content: LinearLayout
     private lateinit var scroll: ScrollView
+    private lateinit var pageContent: LinearLayout
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
     private lateinit var search: EditText
@@ -195,6 +196,12 @@ class MainActivity : Activity() {
         window.statusBarColor = bgColor
         window.navigationBarColor = bgColor
         root = baseLayout()
+        // One page-level scroll view keeps the search controls and every result
+        // in the same scrollable area instead of trapping scrolling in results.
+        scroll = ScrollView(this).apply { isFillViewport = false }
+        pageContent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(pageContent, ScrollView.LayoutParams(-1, -2))
+        pageContent.addView(scroll, LinearLayout.LayoutParams(-1, -1))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label("XAnime", 25, white, true))
@@ -211,7 +218,7 @@ class MainActivity : Activity() {
         }
         header.addView(actionButton("⚙", false) { showSettings() },
             LinearLayout.LayoutParams(dp(44), dp(44)))
-        root.addView(header)
+        pageContent.addView(header)
 
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         sourceTabs.addView(actionButton("XAnime", !showingHentaini) {
@@ -223,7 +230,7 @@ class MainActivity : Activity() {
             showingFavorites = false
             showHome()
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        root.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
 
         if (showingHentaini) {
             showHentainiHome()
@@ -246,7 +253,7 @@ class MainActivity : Activity() {
         })
         searchRow.addView(actionButton("SEARCH ↗") { startSearch(true) },
             LinearLayout.LayoutParams(dp(88), dp(44)))
-        root.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
+        pageContent.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
 
         val filtersPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -297,10 +304,10 @@ class MainActivity : Activity() {
         ) {
             val opening = filtersPanel.visibility != View.VISIBLE
             filtersPanel.visibility = if (opening) View.VISIBLE else View.GONE
-            filtersToggle.text = if (opening) "HIDE FILTERS ▴" else "FILTERS ▾"
+            filtersToggle.text = if (opening) "HIDE FILTERS ▴" else if (selectedCategory != null || catalogMode || selectedSort != "latest") "FILTERS • ACTIVE ▾" else "FILTERS ▾"
         }
-        root.addView(filtersToggle, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(4) })
-        root.addView(filtersPanel, LinearLayout.LayoutParams(-1, -2))
+        pageContent.addView(filtersToggle, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(4) })
+        pageContent.addView(filtersPanel, LinearLayout.LayoutParams(-1, -2))
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) { startSearch(true); true } else false
         }
@@ -308,26 +315,22 @@ class MainActivity : Activity() {
         status = label(if (query.isBlank()) "Search the catalogue" else "Results for: $query", 14, muted, true).apply {
             setPadding(0, dp(18), 0, dp(8))
         }
-        root.addView(status)
+        pageContent.addView(status)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             visibility = View.GONE
             max = maxSearchPages
             progress = 0
             isIndeterminate = false
         }
-        root.addView(progress, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(5) })
-        scroll = ScrollView(this).apply {
-            isFillViewport = true
-        }
+        pageContent.addView(progress, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(5) })
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(10)) }
         if (query.isBlank() && selectedCategory == null && !catalogMode) content.addView(infoCard("Search titles, choose a category, or select a sort filter to browse the full catalogue."))
-        scroll.addView(content)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        pageContent.addView(content, LinearLayout.LayoutParams(-1, -2))
         pageText = label("SEARCH RESULTS FROM PAGE 1 ONLY", 10, muted, true).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(4))
         }
-        root.addView(pageText)
+        pageContent.addView(pageText)
         setContentView(root)
         animateScreen(root)
         scroll.setOnScrollChangeListener { _, _, scrollY, _, _ -> ambientBackground?.setScrollOffset(scrollY) }
@@ -361,10 +364,10 @@ class MainActivity : Activity() {
 
 
     private fun showHentainiHome() {
-        root.addView(label("HENTAINI", 22, white, true).apply {
+        pageContent.addView(label("HENTAINI", 22, white, true).apply {
             setPadding(0, dp(22), 0, dp(8))
         })
-        root.addView(label("LIVE SEARCH", 10, accent, true).apply {
+        pageContent.addView(label("LIVE SEARCH", 10, accent, true).apply {
             letterSpacing = .12f
             setPadding(0, 0, 0, dp(12))
         })
@@ -380,11 +383,11 @@ class MainActivity : Activity() {
             background = ripple(glassDrawable(16))
             setText(hentainiQuery)
         }
-        root.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
+        pageContent.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
 
         val genreScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("Action" to "action","Comedy" to "comedy","Fantasy" to "fantasy","Ahegao" to "ahegao","Anal" to "anal","BBW" to "bbw","Big Breast" to "big breast","Blackmail" to "blackmail","Bondage" to "bondage","Chikan" to "chikan","Cosplay" to "cosplay","Futanari" to "futanari","Garyu" to "garyu","Harem" to "harem","Incest" to "incest","Maid" to "maid","Milf" to "milf","Netorare" to "netorare","Nurse" to "nurse","Orgy" to "orgy","Oyakodon" to "oyakodon","Paizuri" to "paizuri","Rape" to "rape","Scholar" to "scholar","Shotacon" to "shotacon","Small Breasts" to "small breasts","Succubus" to "succubus","Tentacles" to "tentacles",).forEach { (name, slug) ->
+        listOf("Ahegao" to "ahegao", "MILF" to "milf").forEach { (name, slug) ->
             genreRow.addView(actionButton(name, hentainiGenre == slug) {
                 hentainiGenre = if (hentainiGenre == slug) null else slug
                 hentainiQuery = ""
@@ -392,34 +395,32 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(8) })
         }
         genreScroller.addView(genreRow)
-        root.addView(genreScroller, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(9) })
+        pageContent.addView(genreScroller, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(9) })
 
         val statusView = label(
             if (hentainiQuery.isBlank()) "Search Hentaini titles" else "Results for: " + hentainiQuery,
             13, muted, true
         ).apply { setPadding(0, dp(14), 0, dp(8)) }
-        root.addView(statusView)
+        pageContent.addView(statusView)
 
         val progressView = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             visibility = View.GONE
             isIndeterminate = true
         }
-        root.addView(progressView, LinearLayout.LayoutParams(-1, dp(4)))
+        pageContent.addView(progressView, LinearLayout.LayoutParams(-1, dp(4)))
 
         val results = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(12), 0, dp(12))
         }
-        val resultsScroll = ScrollView(this).apply { isFillViewport = false }
-        resultsScroll.addView(results)
-        root.addView(resultsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        pageContent.addView(results, LinearLayout.LayoutParams(-1, -2))
 
         val loadMore = actionButton("LOAD MORE RESULTS", false) { }
         loadMore.setOnClickListener {
             hentainiSearch(hentainiQuery, false, statusView, progressView, results, loadMore, hentainiGenre)
         }
         loadMore.visibility = View.GONE
-        root.addView(loadMore, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
+        pageContent.addView(loadMore, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
 
         fun submitSearch() {
             hentainiQuery = input.text.toString().trim()
