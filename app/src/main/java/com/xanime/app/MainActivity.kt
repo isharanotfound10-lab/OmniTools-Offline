@@ -103,6 +103,7 @@ class MainActivity : Activity() {
     private var showingFavorites = false
     private var showingHentaini = false
     private var hentainiQuery = ""
+    private var hentainiGenre: String? = null
     private var hentainiOffset = 0
     private var hentainiTotal = 0
     private var hentainiRequestId = 0
@@ -376,6 +377,18 @@ class MainActivity : Activity() {
         }
         root.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
 
+        val genreScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("Ahegao" to "ahegao", "MILF" to "milf").forEach { (name, slug) ->
+            genreRow.addView(actionButton(name, hentainiGenre == slug) {
+                hentainiGenre = if (hentainiGenre == slug) null else slug
+                hentainiQuery = ""
+                showHome()
+            }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(8) })
+        }
+        genreScroller.addView(genreRow)
+        root.addView(genreScroller, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(9) })
+
         val statusView = label(
             if (hentainiQuery.isBlank()) "Search Hentaini titles" else "Results for: " + hentainiQuery,
             13, muted, true
@@ -398,14 +411,15 @@ class MainActivity : Activity() {
 
         val loadMore = actionButton("LOAD MORE RESULTS", false) { }
         loadMore.setOnClickListener {
-            hentainiSearch(hentainiQuery, false, statusView, progressView, results, loadMore)
+            hentainiSearch(hentainiQuery, false, statusView, progressView, results, loadMore, hentainiGenre)
         }
         loadMore.visibility = View.GONE
         root.addView(loadMore, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
 
         fun submitSearch() {
             hentainiQuery = input.text.toString().trim()
-            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore)
+            hentainiGenre = null
+            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore, null)
         }
         val debounce = Runnable { submitSearch() }
         input.addTextChangedListener(object : TextWatcher {
@@ -423,10 +437,12 @@ class MainActivity : Activity() {
                 true
             } else false
         }
-        if (hentainiQuery.isNotBlank()) {
-            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore)
+        if (hentainiGenre != null) {
+            hentainiSearch("", true, statusView, progressView, results, loadMore, hentainiGenre)
+        } else if (hentainiQuery.isNotBlank()) {
+            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore, null)
         } else {
-            results.addView(infoCard("Type a title to search the Hentaini catalogue."))
+            results.addView(infoCard("Search titles or choose Ahegao or MILF to browse by genre."))
         }
 
         setContentView(root)
@@ -440,9 +456,10 @@ class MainActivity : Activity() {
         statusView: TextView,
         progressView: ProgressBar,
         output: LinearLayout,
-        loadMoreButton: Button?
+        loadMoreButton: Button?,
+        genre: String? = null
     ) {
-        if (term.isBlank()) {
+        if (term.isBlank() && genre.isNullOrBlank()) {
             hentainiRequestId++
             hentainiLoading = false
             hentainiResults.clear()
@@ -464,14 +481,17 @@ class MainActivity : Activity() {
             output.removeAllViews()
         }
         hentainiLoading = true
-        statusView.text = if (reset) "Searching Hentaini..." else "Loading more results..."
+        statusView.text = if (reset) {
+            if (genre != null) "Loading " + genre.uppercase() + " titles..." else "Searching Hentaini..."
+        } else "Loading more results..."
         progressView.visibility = View.VISIBLE
         loadMoreButton?.isEnabled = false
 
         val requestedOffset = hentainiOffset
         worker.execute {
             try {
-                val page = HentainiApi.search(term, requestedOffset, 10)
+                val page = if (!genre.isNullOrBlank()) HentainiApi.searchGenre(genre, requestedOffset, 10)
+                    else HentainiApi.search(term, requestedOffset, 10)
                 main.post {
                     if (isFinishing || requestId != hentainiRequestId || !showingHentaini) return@post
                     hentainiLoading = false
@@ -481,7 +501,7 @@ class MainActivity : Activity() {
                     hentainiOffset = page.offset + page.results.size
                     hentainiTotal = page.total
                     statusView.text = if (hentainiResults.isEmpty()) {
-                        "No results for: " + term
+                        if (genre != null) "No titles found in " + genre.uppercase() else "No results for: " + term
                     } else {
                         hentainiResults.size.toString() + " of " + hentainiTotal + " results"
                     }
