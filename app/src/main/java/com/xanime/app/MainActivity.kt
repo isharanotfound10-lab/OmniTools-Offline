@@ -669,14 +669,49 @@ class MainActivity : Activity() {
                     available.size.toString() + " AVAILABLE DOWNLOAD STREAMS",
                     9, accent, true
                 ).apply { setPadding(0, 0, 0, dp(8)) })
-                available.forEach { stream ->
-                    streams.addView(actionButton("COPY " + stream.host.uppercase(), false) {
+                val collapsedHosts = setOf(
+                    "1fichier.com",
+                    "burstcloud.co",
+                    "mp4upload.com",
+                    "streamwish.to",
+                    "yourupload.com"
+                )
+                fun isCollapsedProvider(stream: HentainiStream): Boolean {
+                    val host = Uri.parse(stream.url).host.orEmpty().lowercase()
+                    return collapsedHosts.any { host == it || host.endsWith("." + it) }
+                }
+                fun addStreamButton(stream: HentainiStream, target: LinearLayout) {
+                    target.addView(actionButton("COPY " + stream.host.uppercase(), false) {
                         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText(
                             stream.host + " download link", stream.url
                         ))
                         Toast.makeText(this, stream.host + " link copied!", Toast.LENGTH_SHORT).show()
                     }, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(7) })
+                }
+
+                val regularStreams = available.filterNot { isCollapsedProvider(it) }
+                val moreStreams = available.filter { isCollapsedProvider(it) }
+                regularStreams.forEach { addStreamButton(it, streams) }
+
+                if (moreStreams.isNotEmpty()) {
+                    val hiddenLinks = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        visibility = View.GONE
+                    }
+                    moreStreams.forEach { addStreamButton(it, hiddenLinks) }
+
+                    lateinit var moreButton: Button
+                    moreButton = actionButton("MORE LINKS ⬇︎", false) {
+                        val expanded = hiddenLinks.visibility != View.VISIBLE
+                        hiddenLinks.visibility = if (expanded) View.VISIBLE else View.GONE
+                        moreButton.text = if (expanded) "LESS LINKS ⬆︎" else "MORE LINKS ⬇︎"
+                    }
+                    streams.addView(moreButton, LinearLayout.LayoutParams(-1, dp(42)).apply {
+                        topMargin = dp(2)
+                        bottomMargin = dp(7)
+                    })
+                    streams.addView(hiddenLinks)
                 }
             }
         }
