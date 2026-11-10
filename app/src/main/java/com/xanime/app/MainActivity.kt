@@ -858,11 +858,14 @@ class MainActivity : Activity() {
                                         if (detailDoc == null) {
                                             null to emptyList()
                                         } else {
-                                            val episodeDetails = if (htmlDoc != null) {
+                                            val parsedDetails = if (htmlDoc != null) {
                                                 SiteParser.parseEpisode(htmlDoc, result.url)
                                             } else {
                                                 apiDetails!!
                                             }
+                                            val episodeDetails = if (parsedDetails.title.isBlank()) {
+                                                parsedDetails.copy(title = result.title)
+                                            } else parsedDetails
                                             episodeDetails to extractEpisodeThumbnails(
                                                 detailDoc, episodeDetails.episodes, result
                                             )
