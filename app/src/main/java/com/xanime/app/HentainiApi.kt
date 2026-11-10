@@ -194,7 +194,9 @@ object HentainiApi {
 
     fun loadEpisodePage(episode: HentainiEpisode): HentainiEpisodePage {
         val html = request(episode.url, "text/html")
-        val parsed = HentainiEpisodeParser.parseEpisode(html, episode.url)
+        // Exclude the series-list image so it cannot silently stand in for
+        // a missing screenshot belonging to the current episode.
+        val parsed = HentainiEpisodeParser.parseEpisode(html, episode.url, episode.thumbnailUrl)
         if (parsed.streams.isNotEmpty()) return parsed
 
         // The site's Download control can lead to a separate page containing
@@ -212,9 +214,9 @@ object HentainiApi {
                     val sameSite = targetUri.host.orEmpty().lowercase() in
                         setOf("hentaini.com", "www.hentaini.com")
                     val targetPath = targetUri.path.orEmpty()
-                    val belongsToEpisode = targetPath.startsWith(episodePath + "/") ||
-                        targetPath.contains("/" + episodeSegment + "/") ||
-                        targetUri.rawQuery.orEmpty().contains(episodeSegment)
+                    // Only accept a download page nested under this exact
+                    // episode URL; a matching numeric segment elsewhere is ambiguous.
+                    val belongsToEpisode = targetPath.startsWith(episodePath + "/")
                     anchor.text().contains("download", ignoreCase = true) &&
                         sameSite && target != episode.url && belongsToEpisode
                 }?.absUrl("href")
