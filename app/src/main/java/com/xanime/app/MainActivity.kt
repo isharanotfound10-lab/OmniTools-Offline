@@ -273,15 +273,41 @@ class MainActivity : Activity() {
         pageText.text = "SEARCHING PAGE $requestedPage"
         worker.execute {
             try {
-                val address = selectedCategory?.let { (_, slug) ->
+                val htmlAddress = selectedCategory?.let { (_, slug) ->
                     if (requestedPage == 1) "https://xanimeporn.com/$slug/"
                     else "https://xanimeporn.com/$slug/page/$requestedPage/"
                 } ?: run {
                     val encoded = URLEncoder.encode(query, "UTF-8")
                     "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
                 }
-                val html = request(address)
-                val parsed = SiteParser.parseSearch(Jsoup.parse(html, address))
+                val parsed = if (selectedCategory != null) {
+                    val html = request(htmlAddress)
+                    SiteParser.parseSearch(Jsoup.parse(html, htmlAddress))
+                } else {
+                    val encoded = URLEncoder.encode(query, "UTF-8")
+                    val apiAddress = "https://xanimeporn.com/wp-json/wp/v2/posts" +
+                        "?search=$encoded&per_page=20&page=$requestedPage" +
+                        "&_embed=wp:featuredmedia&_fields=id,date,link,title,content,featured_media,_embedded"
+                    val apiResults = runCatching {
+                        SiteParser.parseApiSearch(request(apiAddress))
+                    }.getOrNull()
+                    if (apiResults == null) {
+                        // Keep the old HTML search as a compatibility fallback.
+                        val html = request(htmlAddress)
+                        SiteParser.parseSearch(Jsoup.parse(html, htmlAddress))
+                    } else {
+                        // Duration is only present in the site's HTML listing cards.
+                        // Fetch that one page to retain it, while all episode data and
+                        // thumbnails come from the API response itself.
+                        val durations = runCatching {
+                            SiteParser.parseSearch(Jsoup.parse(request(htmlAddress), htmlAddress))
+                                .associate { it.url to it.duration }
+                        }.getOrDefault(emptyMap())
+                        apiResults.map { result ->
+                            result.copy(duration = durations[result.url].orEmpty())
+                        }
+                    }
+                }
                 val uniqueResults = LinkedHashMap<String, SearchResult>()
                 parsed.forEach { result ->
                     val key = animeName(result.title).lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
@@ -320,8 +346,9 @@ class MainActivity : Activity() {
                                 detailSlots.acquire(permits)
                                 try {
                                     runCatching {
-                                        val detailHtml = request(result.url)
-                                        val detailDoc = Jsoup.parse(detailHtml, result.url)
+                                        val detailDoc = result.detailHtml?.let { embeddedHtml ->
+                                            Jsoup.parse(embeddedHtml, result.url)
+                                        } ?: Jsoup.parse(request(result.url), result.url)
                                         val episodeDetails = SiteParser.parseEpisode(detailDoc, result.url)
                                         episodeDetails to extractEpisodeThumbnails(detailDoc, episodeDetails.episodes, result)
                                     }.getOrElse { null to emptyList() }
