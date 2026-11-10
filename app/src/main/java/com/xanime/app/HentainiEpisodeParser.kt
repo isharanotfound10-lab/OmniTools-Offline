@@ -24,7 +24,7 @@ object HentainiEpisodeParser {
     private val knownHosts = listOf(
         "1024terabox", "terabox", "fireload", "mediafire", "1fichier",
         "mega.nz", "drive.google", "gofile", "pixeldrain", "mixdrop",
-        "streamtape", "vidoza", "voe", "dood"
+        "streamtape", "vidoza", "voe", "dood", "yesterdaymail.com", "yourupload.com", "streamwish.to", "mp4upload.com", "burstcloud.co"
     )
 
     fun parseSeries(html: String, pageUrl: String, slug: String): List<HentainiEpisode> {
@@ -157,6 +157,9 @@ object HentainiEpisodeParser {
             if (found.values.none { it.url == url }) found[key] = HentainiStream(provider, url)
         }
 
+        // Read players/downloads from the Nuxt SSR episode object, scoped by this page's exact contentUrl.
+        extractNuxtEpisodeLinks(html, videoObjects).forEach { (url, label) -> add(url, label) }
+
         // Extract links from the current VideoObject only. This prevents
         // links belonging to a related episode/series JSON-LD block leaking
         // into every episode card.
@@ -189,6 +192,84 @@ object HentainiEpisodeParser {
         // Trust only episode-identified structured data and episode-content DOM links.
 
         return HentainiEpisodePage(title, thumbnail, found.values.sortedBy { it.host.lowercase() })
+    }
+
+
+    private fun extractNuxtEpisodeLinks(html: String, videoObjects: List<JSONObject>): List<Pair<String, String>> {
+        val currentContentUrls = videoObjects.flatMap { findJsonValues(it, "contentUrl") }
+            .mapNotNull { (it as? String)?.trim()?.takeIf { value -> value.isNotBlank() } }.toSet()
+        if (currentContentUrls.isEmpty()) return emptyList()
+        val doc = Jsoup.parse(html)
+        val payloadText = doc.selectFirst("script#__NUXT_DATA__")?.data()
+            ?.ifBlank { doc.selectFirst("script#__NUXT_DATA__")?.html() }?.trim().orEmpty()
+        val payload = runCatching { JSONArray(payloadText) }.getOrNull() ?: return emptyList()
+        val cache = mutableMapOf<Int, Any?>()
+        for (index in 0 until payload.length()) {
+            if (payload.opt(index) !is JSONObject) continue
+            val episode = resolveNuxtNode(index, payload, cache, mutableSetOf()) as? JSONObject ?: continue
+            val players = runCatching { JSONArray(episode.optString("players")) }.getOrNull() ?: continue
+            val urls = (0 until players.length()).mapNotNull { players.optJSONObject(it)?.optString("url") }
+            if (currentContentUrls.none { it in urls }) continue
+            val result = mutableListOf<Pair<String, String>>()
+            for (i in 0 until players.length()) {
+                val player = players.optJSONObject(i) ?: continue
+                val url = player.optString("url").trim()
+                if (url.isNotBlank()) result.add(url to player.optString("name", "Stream"))
+            }
+            val downloads = runCatching { JSONArray(episode.optString("downloads")) }.getOrNull()
+            if (downloads != null) for (i in 0 until downloads.length()) {
+                val url = downloads.optJSONObject(i)?.optString("url")?.trim().orEmpty()
+                if (url.isNotBlank()) result.add(url to "Download")
+            }
+            return result
+        }
+        return emptyList()
+    }
+
+    private fun resolveNuxtNode(
+        index: Int,
+        payload: JSONArray,
+        cache: MutableMap<Int, Any?>,
+        visiting: MutableSet<Int>
+    ): Any? {
+        if (index !in 0 until payload.length()) return null
+        if (cache.containsKey(index)) return cache[index]
+        if (!visiting.add(index)) return null
+        val node = payload.opt(index)
+        val result: Any? = when (node) {
+            is JSONObject -> JSONObject().apply {
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    put(key, resolveNuxtValue(node.opt(key), payload, cache, visiting))
+                }
+            }
+            is JSONArray -> {
+                val marker = if (node.length() > 0) node.opt(0) as? String else null
+                if (marker in setOf("ShallowReactive", "Reactive", "Ref", "ShallowRef", "ComputedRef", "ReadonlyReactive", "ShallowReadonly")) {
+                    resolveNuxtValue(node.opt(1), payload, cache, visiting)
+                } else {
+                    JSONArray().apply {
+                        for (i in 0 until node.length()) put(resolveNuxtValue(node.opt(i), payload, cache, visiting))
+                    }
+                }
+            }
+            else -> node
+        }
+        visiting.remove(index)
+        cache[index] = result
+        return result
+    }
+
+    private fun resolveNuxtValue(
+        value: Any?,
+        payload: JSONArray,
+        cache: MutableMap<Int, Any?>,
+        visiting: MutableSet<Int>
+    ): Any? = when (value) {
+        is Int -> resolveNuxtNode(value, payload, cache, visiting)
+        is Long -> if (value >= 0 && value < payload.length()) resolveNuxtNode(value.toInt(), payload, cache, visiting) else value
+        else -> value
     }
 
     private fun videoObjectBelongsToPage(video: JSONObject, pageUrl: String): Boolean {
