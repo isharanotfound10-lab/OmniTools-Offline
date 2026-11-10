@@ -5,6 +5,45 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HentainiEpisodeParserTest {
+
+    @Test
+    fun extractsOnlyTheCurrentEpisodePlayersAndDownloadsFromNuxtPayload() {
+        val hls = "https://vs1.yesterdaymail.com/series/147/1358/147-1358.m3u8"
+        val html = """
+            <html><head>
+              <script type="application/ld+json">
+                {"@type":"VideoObject","url":"https://hentaini.com/h/sample-series/1","contentUrl":"$hls"}
+              </script>
+              <script id="__NUXT_DATA__" type="application/json">[
+                ["ShallowReactive",1],
+                {"data":2},
+                ["ShallowReactive",3],
+                {"episode":4},
+                {"data":5},
+                [6],
+                {"id":7,"episode_number":8,"players":9,"downloads":10},
+                1358,
+                1,
+                "[{\\"name\\":\\"HLS\\",\\"url\\":\\"$hls\\"},{\\"name\\":\\"Yourupload\\",\\"url\\":\\"https://www.yourupload.com/embed/ep1\\"}]",
+                "[{\\"url\\":\\"https://www.fireload.com/ep1.mp4\\"},{\\"url\\":\\"https://www.mediafire.com/file/ep1/file\\"}]"
+              ]</script>
+            </head><body><main><h1>Episode 1</h1></main></body></html>
+        """.trimIndent()
+
+        val page = HentainiEpisodeParser.parseEpisode(html, "https://hentaini.com/h/sample-series/1")
+        assertTrue(page.streams.any { it.url == hls })
+        assertTrue(page.streams.any { it.url == "https://www.yourupload.com/embed/ep1" })
+        assertTrue(page.streams.any { it.url == "https://www.fireload.com/ep1.mp4" })
+        assertTrue(page.streams.any { it.url == "https://www.mediafire.com/file/ep1/file" })
+
+        val otherEpisode = HentainiEpisodeParser.parseEpisode(
+            html.replace(hls, "https://vs1.yesterdaymail.com/series/147/1359/147-1359.m3u8")
+                .replace("/sample-series/1", "/sample-series/2"),
+            "https://hentaini.com/h/sample-series/2"
+        )
+        assertTrue(otherEpisode.streams.isEmpty())
+    }
+
     @Test
     fun parsesNumberedEpisodesAndThumbnails() {
         val html = """
