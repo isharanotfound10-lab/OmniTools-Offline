@@ -37,8 +37,7 @@ class HentainiEpisodeParserTest {
         assertTrue(page.streams.any { it.url == "https://www.mediafire.com/file/ep1/file" })
 
         val otherEpisode = HentainiEpisodeParser.parseEpisode(
-            html.replace(hls, "https://vs1.yesterdaymail.com/series/147/1359/147-1359.m3u8")
-                .replace("/sample-series/1", "/sample-series/2"),
+            html,
             "https://hentaini.com/h/sample-series/2"
         )
         assertTrue(otherEpisode.streams.isEmpty())
