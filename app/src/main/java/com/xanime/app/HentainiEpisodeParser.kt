@@ -123,7 +123,7 @@ object HentainiEpisodeParser {
             doc.selectFirst("link[rel=image_src]")?.attr("href")
         ).filterNotNull()
             .mapNotNull { normalizeUrl(it, pageUrl) }
-            .firstOrNull { isEpisodeImage(it) }
+            .firstOrNull { isEpisodeImage(it, thumbnailToExclude) }
         val thumbnail = sequenceOf(
             structuredThumbnail,
             metadataThumbnail,
