@@ -24,8 +24,8 @@ class HentainiEpisodeParserTest {
                 {"id":7,"episode_number":8,"players":9,"downloads":10},
                 1358,
                 1,
-                "[{\\"name\\":\\"HLS\\",\\"url\\":\\"$hls\\"},{\\"name\\":\\"Yourupload\\",\\"url\\":\\"https://www.yourupload.com/embed/ep1\\"}]",
-                "[{\\"url\\":\\"https://www.fireload.com/ep1.mp4\\"},{\\"url\\":\\"https://www.mediafire.com/file/ep1/file\\"}]"
+                "[{\"name\":\"HLS\",\"url\":\"$hls\"},{\"name\":\"Yourupload\",\"url\":\"https://www.yourupload.com/embed/ep1\"}]",
+                "[{\"url\":\"https://www.fireload.com/ep1.mp4\"},{\"url\":\"https://www.mediafire.com/file/ep1/file\"}]"
               ]</script>
             </head><body><main><h1>Episode 1</h1></main></body></html>
         """.trimIndent()
