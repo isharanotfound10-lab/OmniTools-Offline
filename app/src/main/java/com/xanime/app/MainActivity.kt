@@ -480,92 +480,59 @@ class MainActivity : Activity() {
             card.addView(heading)
 
             val episodes = group.details?.episodes.orEmpty()
-            if (prefs.getString("layout_mode", "Gallery") == "Compact") {
-                val previewRow = LinearLayout(this).apply {
+            val gallery = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            episodes.chunked(4).forEachIndexed { rowIndex, rowEpisodes ->
+                val row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(0, dp(10), 0, 0)
                 }
-                val preview = ImageView(this).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    background = rounded(surface2, 10)
-                    layoutParams = LinearLayout.LayoutParams(dp(104), dp(72))
-                }
-                previewRow.addView(preview)
-                val previewUrl = group.thumbnails.firstOrNull()?.takeIf { it.isNotBlank() }
-                    ?: group.firstResult.thumbnail
-                if (previewUrl.isNotBlank()) loadImage(previewUrl, preview)
-                val previewInfo = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(dp(12), 0, 0, 0)
-                }
-                previewInfo.addView(label(
-                    if (episodes.isNotEmpty()) "${episodes.size} Episodes" else "Episode count loading",
-                    12, white, true
-                ))
-                previewInfo.addView(label(
-                    if (group.hasSubEng) "SUB-ENG" else "Anime episode list",
-                    10, muted, false
-                ).apply { setPadding(0, dp(5), 0, 0) })
-                previewRow.addView(previewInfo, LinearLayout.LayoutParams(0, -2, 1f))
-                card.addView(previewRow)
-            } else {
-                val expanded = group.name.lowercase() in expandedAnimeNames
-                val visibleEpisodes = if (expanded) episodes else episodes.take(4)
-                val gallery = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                visibleEpisodes.chunked(4).forEachIndexed { rowIndex, rowEpisodes ->
-                    val row = LinearLayout(this).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
+                rowEpisodes.forEachIndexed { columnIndex, episode ->
+                    val episodeIndex = rowIndex * 4 + columnIndex
+                    val tile = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        gravity = Gravity.CENTER
+                        background = rounded(surface2, 10)
+                        clipToOutline = true
                     }
-                    rowEpisodes.forEachIndexed { columnIndex, episode ->
-                        val episodeIndex = rowIndex * 4 + columnIndex
-                        val tile = LinearLayout(this).apply {
-                            orientation = LinearLayout.VERTICAL
-                            gravity = Gravity.CENTER
-                            background = rounded(surface2, 10)
-                            clipToOutline = true
-                        }
-                        val image = ImageView(this).apply {
-                            scaleType = ImageView.ScaleType.CENTER_CROP
-                            background = rounded(surface2, 10)
-                            layoutParams = LinearLayout.LayoutParams(-1, dp(72))
-                        }
-                        tile.addView(image)
-                        val number = episode.number.takeIf { it > 0 }?.let { "EP $it" } ?: "EP " + (episodeIndex + 1)
-                        tile.addView(label(number, 9, muted, true).apply {
-                            gravity = Gravity.CENTER
-                            setPadding(0, dp(5), 0, dp(5))
-                        })
-                        row.addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                            if (columnIndex > 0) marginStart = dp(7)
-                        })
-                        group.thumbnails.getOrNull(episodeIndex)?.takeIf { it.isNotBlank() }?.let {
-                            loadImage(it, image)
-                        }
-                    }
-                    repeat(4 - rowEpisodes.size) {
-                        row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f).apply {
-                            if (row.childCount > 0) marginStart = dp(7)
-                        })
-                    }
-                    gallery.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
-                        if (rowIndex > 0) topMargin = dp(8)
-                    })
-                }
-                if (episodes.isEmpty()) {
                     val image = ImageView(this).apply {
                         scaleType = ImageView.ScaleType.CENTER_CROP
                         background = rounded(surface2, 10)
                         layoutParams = LinearLayout.LayoutParams(-1, dp(72))
                     }
-                    gallery.addView(image)
-                    if (group.firstResult.thumbnail.isNotBlank()) loadImage(group.firstResult.thumbnail, image)
+                    tile.addView(image)
+                    val number = episode.number.takeIf { it > 0 }?.let { "EP $it" } ?: "EP " + (episodeIndex + 1)
+                    tile.addView(label(number, 9, muted, true).apply {
+                        gravity = Gravity.CENTER
+                        setPadding(0, dp(5), 0, dp(5))
+                    })
+                    row.addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                        if (columnIndex > 0) marginStart = dp(7)
+                    })
+                    group.thumbnails.getOrNull(episodeIndex)?.takeIf { it.isNotBlank() }?.let {
+                        loadImage(it, image)
+                    }
                 }
-                card.addView(gallery, LinearLayout.LayoutParams(-1, -2).apply {
-                    topMargin = dp(11)
+                repeat(4 - rowEpisodes.size) {
+                    row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f).apply {
+                        if (row.childCount > 0) marginStart = dp(7)
+                    })
+                }
+                gallery.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                    if (rowIndex > 0) topMargin = dp(8)
                 })
             }
+            if (episodes.isEmpty()) {
+                val image = ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    background = rounded(surface2, 10)
+                    layoutParams = LinearLayout.LayoutParams(-1, dp(72))
+                }
+                gallery.addView(image)
+                if (group.firstResult.thumbnail.isNotBlank()) loadImage(group.firstResult.thumbnail, image)
+            }
+            card.addView(gallery, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(11)
+            })
 
             val footer = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -576,32 +543,11 @@ class MainActivity : Activity() {
                 if (count > 0) "$count Episodes" else "Episode count unavailable",
                 12, muted, false
             ), LinearLayout.LayoutParams(0, -2, 1f))
-            if (count > 4) {
-                val more = label(
-                    if (expanded) "SHOW LESS  ↑" else "+${count - 4} MORE  ↓",
-                    10, accent, true
-                ).apply {
-                    setPadding(dp(10), dp(7), dp(10), dp(7))
-                    background = rounded(surface2, 10)
-                    isClickable = true
-                    isFocusable = true
-                    setOnClickListener {
-                        if (expanded) {
-                            expandedAnimeNames.remove(groupKey)
-                            renderAnimeGroups(cachedAnimeGroups)
-                        } else {
-                            expandedAnimeNames.add(groupKey)
-                            renderAnimeGroups(cachedAnimeGroups)
-                            fetchRemainingThumbnails(group)
-                        }
-                    }
-                }
-                footer.addView(more)
-            }
             card.addView(footer, LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(10)
             })
             content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(11) })
+            fetchRemainingThumbnails(group)
             animateEntrance(card, content.childCount - 1)
         }
         renderNextPageButton()
@@ -611,24 +557,25 @@ class MainActivity : Activity() {
     private fun fetchRemainingThumbnails(group: AnimeGroup) {
         val episodes = group.details?.episodes.orEmpty()
         val key = group.name.lowercase()
-        if (episodes.size <= 4 || !loadingExtraThumbnails.add(key)) return
+        if (episodes.size <= 4 || (4 until episodes.size).none { group.thumbnails.getOrNull(it).isNullOrBlank() } || !loadingExtraThumbnails.add(key)) return
         worker.execute {
             val thumbnails = group.thumbnails.toMutableList()
             while (thumbnails.size < episodes.size) thumbnails.add("")
+            var addedThumbnail = false
             for (index in 4 until episodes.size) {
                 if (thumbnails[index].isNotBlank()) continue
                 val thumbnail = runCatching {
                     val episodeHtml = request(episodes[index].url)
                     extractEpisodePageThumbnail(Jsoup.parse(episodeHtml, episodes[index].url))
                 }.getOrNull().orEmpty()
-                if (thumbnail.isNotBlank()) thumbnails[index] = thumbnail
+                if (thumbnail.isNotBlank()) { thumbnails[index] = thumbnail; addedThumbnail = true }
             }
             main.post {
                 loadingExtraThumbnails.remove(key)
                 cachedAnimeGroups = cachedAnimeGroups.map {
                     if (it.name.lowercase() == key) it.copy(thumbnails = thumbnails) else it
                 }
-                if (expandedAnimeNames.contains(key)) {
+                if (addedThumbnail) {
                     val y = scroll.scrollY
                     renderAnimeGroups(cachedAnimeGroups)
                     scroll.post { scroll.scrollTo(0, y) }
