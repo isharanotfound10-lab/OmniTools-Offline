@@ -33,9 +33,18 @@ object HentainiApi {
     private const val IMAGE_ROOT = "https://admin.hentaini.com/uploads/"
 
     fun searchGenre(slug: String, offset: Int, limit: Int = 10): HentainiSearchPage {
-        require(slug == "ahegao" || slug == "milf") { "Unsupported Hentaini genre" }
+        // MainActivity supplies genre slugs for every visible chip. Convert labels
+        // such as "big breast" or "small breasts" to the site's hyphenated URL form.
+        // Do not maintain a hard-coded allow-list: newly added chips should work too.
+        val normalizedSlug = slug.trim()
+            .lowercase()
+            .replace(Regex("\\s+"), "-")
+            .replace(Regex("-+"), "-")
+        require(normalizedSlug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) {
+            "Invalid Hentaini genre slug: " + slug
+        }
         val pageNumber = offset / limit + 1
-        val address = "https://hentaini.com/genres/" + slug + "?page=" + pageNumber
+        val address = "https://hentaini.com/genres/" + normalizedSlug + "?page=" + pageNumber
         val document = Jsoup.parse(request(address, "text/html"), address)
         val results = linkedMapOf<String, HentainiSeries>()
         document.select("a[href]").forEach { anchor ->
