@@ -1,13 +1,16 @@
 package com.xanime.app
 
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.json.JSONArray
 import java.net.URI
 
 data class SearchResult(
     val title: String,
     val url: String,
     val thumbnail: String,
-    val duration: String
+    val duration: String,
+    val detailHtml: String? = null
 )
 
 data class EpisodeLink(val title: String, val url: String, val number: Int)
@@ -21,6 +24,39 @@ data class EpisodeDetails(
 )
 
 object SiteParser {
+    /**
+     * Parses the WordPress REST API response used for title search.
+     * The embedded featured-media object supplies the result thumbnail and
+     * rendered post content can supply the existing episode/download panes.
+     */
+    fun parseApiSearch(json: String): List<SearchResult> {
+        val posts = JSONArray(json)
+        val found = LinkedHashMap<String, SearchResult>()
+        for (index in 0 until posts.length()) {
+            val post = posts.optJSONObject(index) ?: continue
+            val titleHtml = post.optJSONObject("title")?.optString("rendered").orEmpty()
+            val title = Jsoup.parse(titleHtml).text().trim()
+            val url = canonicalContentUrl(post.optString("link")) ?: continue
+            if (title.isBlank() || !isAllowed("$title $url")) continue
+
+            val contentHtml = post.optJSONObject("content")
+                ?.optString("rendered")
+                ?.takeIf { it.isNotBlank() }
+            val media = post.optJSONObject("_embedded")
+                ?.optJSONArray("wp:featuredmedia")
+                ?.optJSONObject(0)
+            val sizes = media?.optJSONObject("media_details")?.optJSONObject("sizes")
+            val thumbnail = sequenceOf(
+                sizes?.optJSONObject("thumb_site")?.optString("source_url").orEmpty(),
+                sizes?.optJSONObject("thumb_admin")?.optString("source_url").orEmpty(),
+                media?.optString("source_url").orEmpty()
+            ).firstOrNull { it.startsWith("https://") || it.startsWith("http://") }.orEmpty()
+
+            found[url] = SearchResult(title, url, thumbnail, "", contentHtml)
+        }
+        return found.values.toList()
+    }
+
     private val ignoredSlugs = setOf(
         "tag", "tags", "category", "categories", "author", "page",
         "wp-content", "wp-admin", "search", "feed", "hentai-series",
