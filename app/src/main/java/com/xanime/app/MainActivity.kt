@@ -693,6 +693,7 @@ class MainActivity : Activity() {
         streams.addView(label("Finding available download streams...", 11, muted, false))
         card.addView(streams)
         output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        animateEntrance(card, output.childCount - 1)
 
         // Wait for the episode page's own image. The thumbnail attached to
         // a series-list card may be the shared series/search image.
@@ -1504,7 +1505,12 @@ class MainActivity : Activity() {
                     view.animate().cancel()
                     stopThumbnailShimmer(view)
                     if (completedBitmap != null) {
+                        view.alpha = 0f
                         view.setImageBitmap(completedBitmap)
+                        if (animationsEnabled()) {
+                            view.animate().alpha(1f).setDuration(220)
+                                .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                        } else view.alpha = 1f
                         view.contentDescription = "Episode thumbnail"
                         view.setOnClickListener(null)
                     } else {
