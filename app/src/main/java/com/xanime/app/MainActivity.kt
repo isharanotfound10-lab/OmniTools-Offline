@@ -200,7 +200,7 @@ class MainActivity : Activity() {
         // in the same scrollable area instead of trapping scrolling in results.
         scroll = ScrollView(this).apply { isFillViewport = false }
         pageContent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        scroll.addView(pageContent, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(pageContent, ViewGroup.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, -1))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
