@@ -201,7 +201,7 @@ class MainActivity : Activity() {
         scroll = ScrollView(this).apply { isFillViewport = false }
         pageContent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(pageContent, ScrollView.LayoutParams(-1, -2))
-        pageContent.addView(scroll, LinearLayout.LayoutParams(-1, -1))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, -1))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label("XAnime", 25, white, true))
@@ -524,10 +524,10 @@ class MainActivity : Activity() {
                     hentainiLoading = false
                     progressView.visibility = View.GONE
                     loadMoreButton?.isEnabled = true
-                    statusView.text = "Hentaini search failed."
+                    statusView.text = "Hentaini search failed: " + (error.message ?: error.javaClass.simpleName)
                     if (hentainiResults.isEmpty()) {
                         output.removeAllViews()
-                        output.addView(infoCard("Could not load live results. Check your connection and try again."))
+                        output.addView(infoCard("Could not load live results. " + (error.message ?: "Please try again.")))
                     } else {
                         Toast.makeText(this, "Could not load more results.", Toast.LENGTH_SHORT).show()
                     }
