@@ -53,9 +53,9 @@ import org.jsoup.Jsoup
 class MainActivity : Activity() {
     private val prefs get() = getSharedPreferences("xanime", MODE_PRIVATE)
     private val amoled get() = prefs.getBoolean("amoled_mode", false)
-    private val bgColor: Int get() = if (amoled) Color.BLACK else Color.rgb(7, 6, 15)
-    private val surface: Int get() = if (amoled) Color.rgb(13, 13, 17) else Color.rgb(24, 19, 36)
-    private val surface2: Int get() = if (amoled) Color.rgb(24, 24, 29) else Color.rgb(34, 26, 49)
+    private val bgColor: Int get() = if (amoled) Color.BLACK else Color.rgb(2, 6, 9)
+    private val surface: Int get() = if (amoled) Color.rgb(8, 16, 20) else Color.rgb(5, 23, 32)
+    private val surface2: Int get() = if (amoled) Color.rgb(13, 27, 33) else Color.rgb(7, 39, 51)
     private val accent: Int get() = when (prefs.getString("accent_color", "Purple")) {
         "Pink" -> Color.rgb(255, 76, 164)
         "Cyan" -> Color.rgb(0, 190, 210)
@@ -303,7 +303,17 @@ class MainActivity : Activity() {
             false
         ) {
             val opening = filtersPanel.visibility != View.VISIBLE
-            filtersPanel.visibility = if (opening) View.VISIBLE else View.GONE
+            if (opening) {
+                filtersPanel.visibility = View.VISIBLE
+                animateReveal(filtersPanel)
+            } else {
+                filtersPanel.animate().alpha(0f).translationY(-dp(5).toFloat()).setDuration(130)
+                    .withEndAction {
+                        filtersPanel.visibility = View.GONE
+                        filtersPanel.alpha = 1f
+                        filtersPanel.translationY = 0f
+                    }.start()
+            }
             filtersToggle.text = if (opening) "HIDE FILTERS ▴" else if (selectedCategory != null || catalogMode || selectedSort != "latest") "FILTERS • ACTIVE ▾" else "FILTERS ▾"
         }
         pageContent.addView(filtersToggle, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(4) })
@@ -570,6 +580,8 @@ class MainActivity : Activity() {
         card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
         card.addView(label("OPEN  ›", 9, accent, true))
         output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        animateEntrance(card, output.childCount - 1)
+        addPressFeedback(card)
         if (series.thumbnailUrl.isNotBlank()) loadImage(series.thumbnailUrl, thumbnail)
 
         // Look up the real count for every series; hasEpisodes can be stale.
@@ -1315,6 +1327,8 @@ class MainActivity : Activity() {
         if (item.duration.isNotBlank()) details.addView(label(item.duration, 11, muted, false).apply { setPadding(0, dp(6), 0, 0) })
         card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
         content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        animateEntrance(card, content.childCount - 1)
+        addPressFeedback(card)
         if (item.thumbnail.isNotBlank()) loadImage(item.thumbnail, image)
     }
 
@@ -1589,13 +1603,48 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun animateEntrance(view: View, index: Int) {
-        if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("smooth_animations", true)) return
+    private fun animationsEnabled(): Boolean =
+        prefs.getBoolean("smooth_animations", true)
+
+    private fun animateReveal(view: View) {
+        if (!animationsEnabled()) {
+            view.alpha = 1f
+            view.translationY = 0f
+            return
+        }
         view.alpha = 0f
-        view.translationY = dp(9).toFloat()
-        view.animate().alpha(1f).translationY(0f)
-            .setStartDelay((index.coerceAtMost(5) * 25).toLong())
-            .setDuration(180).start()
+        view.translationY = -dp(5).toFloat()
+        view.animate().alpha(1f).translationY(0f).setDuration(190)
+            .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+    }
+
+    private fun animateEntrance(view: View, index: Int) {
+        if (!animationsEnabled()) return
+        view.animate().cancel()
+        view.alpha = 0f
+        view.translationY = dp(10).toFloat()
+        view.scaleX = 0.985f
+        view.scaleY = 0.985f
+        view.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+            .setStartDelay((index.coerceAtMost(6) * 28).toLong())
+            .setDuration(230)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+            .start()
+    }
+
+    private fun addPressFeedback(view: View) {
+        view.setOnTouchListener { target, event ->
+            if (!animationsEnabled()) return@setOnTouchListener false
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN ->
+                    target.animate().scaleX(0.985f).scaleY(0.985f).setDuration(85).start()
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL ->
+                    target.animate().scaleX(1f).scaleY(1f).setDuration(150)
+                        .setInterpolator(android.view.animation.OvershootInterpolator(1.15f)).start()
+            }
+            false
+        }
     }
 
     private fun infoCard(message: String) = TextView(this).apply {
@@ -1625,13 +1674,13 @@ class MainActivity : Activity() {
 
     private fun glassDrawable(radius: Int): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.argb(174, 34, 25, 53), Color.argb(142, 17, 17, 32))).apply {
+            intArrayOf(Color.argb(205, 8, 35, 47), Color.argb(188, 3, 17, 27))).apply {
             cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1), Color.argb(112, 34, 174, 197))
         }
 
     private fun ripple(content: Drawable): RippleDrawable =
-        RippleDrawable(ColorStateList.valueOf(Color.argb(72, 225, 205, 255)), content, null)
+        RippleDrawable(ColorStateList.valueOf(Color.argb(76, 100, 220, 235)), content, null)
 
     private fun animateScreen(view: View) {
         if (!prefs.getBoolean("smooth_animations", true)) return
