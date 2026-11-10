@@ -911,7 +911,10 @@ class MainActivity : Activity() {
                                 }
                                 progress.progress = index + 1
                                 status.text = "Loaded anime details ${index + 1} of ${resultList.size}"
-                                renderAnimeGroups(cachedAnimeGroups)
+                                // Batch card rebuilding to reduce UI work on slower phones.
+                                if ((index + 1) % 3 == 0 || index == resultList.lastIndex) {
+                                    renderAnimeGroups(cachedAnimeGroups)
+                                }
                             }
                         }
                     }
