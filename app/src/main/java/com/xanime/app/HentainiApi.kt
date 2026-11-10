@@ -205,7 +205,6 @@ object HentainiApi {
             val document = Jsoup.parse(html, episode.url)
             val episodeUri = java.net.URI(episode.url)
             val episodePath = episodeUri.path.orEmpty().trimEnd('/')
-            val episodeSegment = episodePath.substringAfterLast('/')
             document.select("main a[href], article a[href], .entry-content a[href], .download a[href], a[href]")
                 .firstOrNull { anchor ->
                     val target = anchor.absUrl("href")
@@ -225,7 +224,9 @@ object HentainiApi {
 
         val downloadHtml = runCatching { request(downloadPage, "text/html") }.getOrNull()
             ?: return parsed
-        val downloadParsed = HentainiEpisodeParser.parseEpisode(downloadHtml, downloadPage)
+        val downloadParsed = HentainiEpisodeParser.parseEpisode(
+            downloadHtml, downloadPage, episode.thumbnailUrl
+        )
         return parsed.copy(streams = downloadParsed.streams)
     }
 
