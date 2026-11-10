@@ -246,7 +246,7 @@ object HentainiEpisodeParser {
             }
             is JSONArray -> {
                 val marker = if (node.length() > 0) node.opt(0) as? String else null
-                if (marker in setOf("ShallowReactive", "Reactive", "Ref", "ShallowRef", "ComputedRef", "ReadonlyReactive", "ShallowReadonly")) {
+                if (marker != null && marker in setOf("ShallowReactive", "Reactive", "Ref", "ShallowRef", "ComputedRef", "ReadonlyReactive", "ShallowReadonly")) {
                     resolveNuxtValue(node.opt(1), payload, cache, visiting)
                 } else {
                     JSONArray().apply {
