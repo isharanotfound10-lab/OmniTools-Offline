@@ -230,72 +230,77 @@ class MainActivity : Activity() {
             return
         }
 
-        val welcomeCard = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(15), dp(16), dp(15))
-            background = glassDrawable(20)
-        }
-        welcomeCard.addView(label("YOUR NEXT FAVORITE", 10, accent, true).apply {
-            letterSpacing = .14f
-        })
-        welcomeCard.addView(label("Discover something new.", 20, white, true).apply {
-            setPadding(0, dp(6), 0, dp(4))
-        })
-        welcomeCard.addView(label("Search the catalogue or explore by category.", 12, muted, false))
-        root.addView(welcomeCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
-
+        // Keep the search controls compact so results get most of the screen.
         search = EditText(this).apply {
             hint = "Search anime titles..."; setHintTextColor(muted); setTextColor(white)
-            textSize = 15f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setPadding(dp(15), 0, dp(12), 0); background = ripple(glassDrawable(16))
+            textSize = 14f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(13), 0, dp(10), 0); background = ripple(glassDrawable(14))
             setText(query)
         }
         val searchRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        searchRow.addView(search, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-            marginEnd = dp(9)
+        searchRow.addView(search, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+            marginEnd = dp(7)
         })
-        searchRow.addView(actionButton("SEARCH  ↗") { startSearch(true) },
-            LinearLayout.LayoutParams(dp(104), dp(52)))
-        root.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
-        if (!showingFavorites) root.addView(label("BROWSE BY CATEGORY", 10, muted, true).apply {
-            setPadding(0, dp(15), 0, dp(7))
-        })
-        val categoryScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        val categoryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        categoryRow.addView(actionButton("All", selectedCategory == null && catalogMode) {
-            selectAllCategories()
-        }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
-        categories.forEach { (name, slug) ->
-            val isSelected = selectedCategory?.second == slug
-            categoryRow.addView(actionButton(name, isSelected) {
-                selectCategory(name, slug)
-            }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
+        searchRow.addView(actionButton("SEARCH ↗") { startSearch(true) },
+            LinearLayout.LayoutParams(dp(88), dp(44)))
+        root.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
+
+        val filtersPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
         }
-        categoryScroller.addView(categoryRow)
-        if (!showingFavorites) root.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(42)))
-        if (query.isBlank() && !showingFavorites) {
-            root.addView(label("SORT BY", 10, muted, true).apply {
-                setPadding(0, dp(12), 0, dp(7))
-            })
-            val sortScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-            val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            listOf(
-                "latest" to "Latest",
-                "views" to "Most Viewed",
-                "longest" to "Longest",
-                "rate" to "Top Rated",
-                "random" to "Random"
-            ).forEach { (filter, title) ->
-                sortRow.addView(actionButton(title, selectedSort == filter) {
-                    selectSort(filter)
-                }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
+        if (!showingFavorites) {
+            val categoryScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+            val categoryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            categoryRow.addView(actionButton("All", selectedCategory == null && catalogMode) {
+                selectAllCategories()
+            }, LinearLayout.LayoutParams(-2, dp(34)).apply { marginEnd = dp(6) })
+            categories.forEach { (name, slug) ->
+                val isSelected = selectedCategory?.second == slug
+                categoryRow.addView(actionButton(name, isSelected) {
+                    selectCategory(name, slug)
+                }, LinearLayout.LayoutParams(-2, dp(34)).apply { marginEnd = dp(6) })
             }
-            sortScroller.addView(sortRow)
-            root.addView(sortScroller, LinearLayout.LayoutParams(-1, dp(42)))
+            categoryScroller.addView(categoryRow)
+            filtersPanel.addView(label("CATEGORIES", 9, muted, true).apply {
+                setPadding(0, dp(5), 0, dp(4))
+            })
+            filtersPanel.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(37)))
+            if (query.isBlank()) {
+                val sortScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+                val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                listOf(
+                    "latest" to "Latest",
+                    "views" to "Most Viewed",
+                    "longest" to "Longest",
+                    "rate" to "Top Rated",
+                    "random" to "Random"
+                ).forEach { (filter, title) ->
+                    sortRow.addView(actionButton(title, selectedSort == filter) {
+                        selectSort(filter)
+                    }, LinearLayout.LayoutParams(-2, dp(34)).apply { marginEnd = dp(6) })
+                }
+                sortScroller.addView(sortRow)
+                filtersPanel.addView(label("SORT BY", 9, muted, true).apply {
+                    setPadding(0, dp(5), 0, dp(4))
+                })
+                filtersPanel.addView(sortScroller, LinearLayout.LayoutParams(-1, dp(37)))
+            }
         }
+        lateinit var filtersToggle: Button
+        filtersToggle = actionButton(
+            if (selectedCategory != null || catalogMode || selectedSort != "latest") "FILTERS • ACTIVE ▾" else "FILTERS ▾",
+            false
+        ) {
+            val opening = filtersPanel.visibility != View.VISIBLE
+            filtersPanel.visibility = if (opening) View.VISIBLE else View.GONE
+            filtersToggle.text = if (opening) "HIDE FILTERS ▴" else "FILTERS ▾"
+        }
+        root.addView(filtersToggle, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(4) })
+        root.addView(filtersPanel, LinearLayout.LayoutParams(-1, -2))
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) { startSearch(true); true } else false
         }
