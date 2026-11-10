@@ -768,8 +768,38 @@ class MainActivity : Activity() {
                     val encoded = URLEncoder.encode(query, "UTF-8")
                     "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
                 }
-                val html = request(address)
-                val parsed = SiteParser.parseSearch(Jsoup.parse(html, address))
+                val parsed = if (query.isBlank()) {
+                    // Category/catalog browsing remains on the existing HTML path.
+                    SiteParser.parseSearch(Jsoup.parse(request(address), address))
+                } else {
+                    val encoded = URLEncoder.encode(query, "UTF-8")
+                    val apiAddress = "https://xanimeporn.com/wp-json/wp/v2/posts" +
+                        "?search=$encoded&per_page=20&page=$requestedPage" +
+                        "&_embed=wp:featuredmedia&_fields=id,date,link,title,content,featured_media,_embedded"
+                    val apiResults = runCatching {
+                        SiteParser.parseApiSearch(request(apiAddress, "application/json"))
+                    }.getOrNull()
+
+                    if (apiResults.isNullOrEmpty()) {
+                        // Preserve the original HTML search if the API is unavailable,
+                        // returns an unexpected payload, or has no matching posts.
+                        SiteParser.parseSearch(Jsoup.parse(request(address), address))
+                    } else {
+                        // WordPress does not expose the site's duration field. Read the
+                        // original result listing once and fill any missing card metadata.
+                        val htmlResults = runCatching {
+                            SiteParser.parseSearch(Jsoup.parse(request(address), address))
+                        }.getOrDefault(emptyList())
+                        val htmlByUrl = htmlResults.associateBy { it.url }
+                        apiResults.map { apiResult ->
+                            val htmlResult = htmlByUrl[apiResult.url]
+                            apiResult.copy(
+                                thumbnail = apiResult.thumbnail.ifBlank { htmlResult?.thumbnail.orEmpty() },
+                                duration = htmlResult?.duration.orEmpty()
+                            )
+                        }
+                    }
+                }
                 val uniqueResults = LinkedHashMap<String, SearchResult>()
                 parsed.forEach { result ->
                     val key = animeName(result.title).lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
@@ -808,10 +838,35 @@ class MainActivity : Activity() {
                                 detailSlots.acquire(permits)
                                 try {
                                     runCatching {
-                                        val detailHtml = request(result.url)
-                                        val detailDoc = Jsoup.parse(detailHtml, result.url)
-                                        val episodeDetails = SiteParser.parseEpisode(detailDoc, result.url)
-                                        episodeDetails to extractEpisodeThumbnails(detailDoc, episodeDetails.episodes, result)
+                                        // Prefer the post content embedded in the API response.
+                                        // If it lacks episode/download data, fall back to the
+                                        // original series page so no existing detail data is lost.
+                                        val apiDoc = result.detailHtml
+                                            ?.takeIf { it.isNotBlank() }
+                                            ?.let { Jsoup.parse(it, result.url) }
+                                        val apiDetails = apiDoc?.let {
+                                            SiteParser.parseEpisode(it, result.url)
+                                        }
+                                        val needsHtmlFallback = apiDoc == null ||
+                                            apiDetails == null ||
+                                            apiDetails.episodes.isEmpty() ||
+                                            apiDetails.qualities.isEmpty()
+                                        val htmlDoc = if (needsHtmlFallback) {
+                                            runCatching { Jsoup.parse(request(result.url), result.url) }.getOrNull()
+                                        } else null
+                                        val detailDoc = htmlDoc ?: apiDoc
+                                        if (detailDoc == null) {
+                                            null to emptyList()
+                                        } else {
+                                            val episodeDetails = if (htmlDoc != null) {
+                                                SiteParser.parseEpisode(htmlDoc, result.url)
+                                            } else {
+                                                apiDetails!!
+                                            }
+                                            episodeDetails to extractEpisodeThumbnails(
+                                                detailDoc, episodeDetails.episodes, result
+                                            )
+                                        }
                                     }.getOrElse { null to emptyList() }
                                 } finally {
                                     detailSlots.release(permits)
@@ -1325,14 +1380,17 @@ class MainActivity : Activity() {
         Toast.makeText(this, "✓ Link copied!", Toast.LENGTH_SHORT).show()
     }
 
-    private fun request(address: String): String {
+    private fun request(
+        address: String,
+        accept: String = "text/html,application/xhtml+xml"
+    ): String {
         val connection = (URL(address).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15000
             readTimeout = 20000
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
-            setRequestProperty("Accept", "text/html,application/xhtml+xml")
+            setRequestProperty("Accept", accept)
             setRequestProperty("Accept-Language", "en-US,en;q=0.9")
         }
         return try {
