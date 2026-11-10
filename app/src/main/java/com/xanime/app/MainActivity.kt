@@ -102,6 +102,7 @@ class MainActivity : Activity() {
     private var isDetailScreen = false
     private var showingFavorites = false
     private var showingHentaini = false
+    private var showingHentainiFavorites = false
     private var hentainiQuery = ""
     private var hentainiGenre: String? = null
     private var hentainiOffset = 0
@@ -210,12 +211,14 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!showingHentaini) {
-            header.addView(actionButton(if (showingFavorites) "‹ Home" else "♥ Favorites", false) {
-                showingFavorites = !showingFavorites
-                showHome()
-            }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
-        }
+        header.addView(actionButton(
+            if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
+            else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
+        ) {
+            if (showingHentaini) showingHentainiFavorites = !showingHentainiFavorites
+            else showingFavorites = !showingFavorites
+            showHome()
+        }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
         header.addView(actionButton("⚙", false) { showSettings() },
             LinearLayout.LayoutParams(dp(44), dp(44)))
         pageContent.addView(header)
@@ -228,6 +231,7 @@ class MainActivity : Activity() {
         sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
             showingHentaini = true
             showingFavorites = false
+            showingHentainiFavorites = false
             showHome()
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
         pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
@@ -374,9 +378,23 @@ class MainActivity : Activity() {
 
 
     private fun showHentainiHome() {
-        pageContent.addView(label("HENTAINI", 22, white, true).apply {
+        pageContent.addView(label(if (showingHentainiFavorites) "YOUR FAVORITES" else "HENTAINI", 22, white, true).apply {
             setPadding(0, dp(22), 0, dp(8))
         })
+        if (showingHentainiFavorites) {
+            val saved = loadHentainiFavorites()
+            pageContent.addView(label("SAVED SERIES • " + saved.size, 10, accent, true).apply {
+                setPadding(0, 0, 0, dp(12))
+            })
+            val savedList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            pageContent.addView(savedList, LinearLayout.LayoutParams(-1, -2))
+            if (saved.isEmpty()) savedList.addView(infoCard("No favorites yet. Tap the heart on any Hentaini series to save it here."))
+            else saved.forEach { addHentainiCard(it, savedList) }
+            setContentView(root)
+            animateScreen(root)
+            isDetailScreen = false
+            return
+        }
         pageContent.addView(label("LIVE SEARCH", 10, accent, true).apply {
             letterSpacing = .12f
             setPadding(0, 0, 0, dp(12))
@@ -397,7 +415,7 @@ class MainActivity : Activity() {
 
         val genreScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        listOf("Action" to "action","Comedy" to "comedy","Fantasy" to "fantasy","Ahegao" to "ahegao","Anal" to "anal","BBW" to "bbw","Big Breast" to "big breast","Blackmail" to "blackmail","Bondage" to "bondage","Chikan" to "chikan","Cosplay" to "cosplay","Futanari" to "futanari","Garyu" to "garyu","Harem" to "harem","Incest" to "incest","Maid" to "maid","Milf" to "milf","Netorare" to "netorare","Nurse" to "nurse","Orgy" to "orgy","Oyakodon" to "oyakodon","Paizuri" to "paizuri","Rape" to "rape","Scholar" to "scholar","Shotacon" to "shotacon","Small Breasts" to "small breasts","Succubus" to "succubus","Tentacles" to "tentacles",).forEach { (name, slug) ->
+        listOf("Ahegao" to "ahegao","Anal" to "anal","BBW" to "bbw","Big Breast" to "big breast","Blackmail" to "blackmail","Bondage" to "bondage","Chikan" to "chikan","Cosplay" to "cosplay","Futanari" to "futanari","Garyu" to "garyu","Harem" to "harem","Incest" to "incest","Maid" to "maid","Milf" to "milf","Netorare" to "netorare","Nurse" to "nurse","Orgy" to "orgy","Oyakodon" to "oyakodon","Paizuri" to "paizuri","Rape" to "rape","Scholar" to "scholar","Shotacon" to "shotacon","Small Breasts" to "small breasts","Succubus" to "succubus","Tentacles" to "tentacles",).forEach { (name, slug) ->
             genreRow.addView(actionButton(name, hentainiGenre == slug) {
                 hentainiGenre = if (hentainiGenre == slug) null else slug
                 hentainiQuery = ""
@@ -458,7 +476,7 @@ class MainActivity : Activity() {
         } else if (hentainiQuery.isNotBlank()) {
             hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore, null)
         } else {
-            results.addView(infoCard("Search titles or choose Ahegao or MILF to browse by genre."))
+            results.addView(infoCard("Search titles or choose a genre to browse."))
         }
 
         setContentView(root)
@@ -578,6 +596,9 @@ class MainActivity : Activity() {
         episodeCount.tag = series.id
         details.addView(episodeCount)
         card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+        card.addView(actionButton(if (isHentainiFavorite(series)) "♥" else "♡", false) {
+            toggleHentainiFavorite(series)
+        }, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginStart = dp(5) })
         card.addView(label("OPEN  ›", 9, accent, true))
         output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
         animateEntrance(card, output.childCount - 1)
@@ -597,6 +618,44 @@ class MainActivity : Activity() {
         }
     }
 
+
+    private fun hentainiFavoriteEntries(): Set<String> =
+        prefs.getStringSet("hentaini_favorite_series", emptySet())?.toSet() ?: emptySet()
+
+    private fun isHentainiFavorite(series: HentainiSeries): Boolean =
+        hentainiFavoriteEntries().any { encoded ->
+            runCatching { org.json.JSONObject(encoded).optString("slug") == series.slug }.getOrDefault(false)
+        }
+
+    private fun toggleHentainiFavorite(series: HentainiSeries) {
+        val entries = hentainiFavoriteEntries().toMutableSet()
+        val existing = entries.firstOrNull { encoded ->
+            runCatching { org.json.JSONObject(encoded).optString("slug") == series.slug }.getOrDefault(false)
+        }
+        if (existing != null) {
+            entries.remove(existing)
+            Toast.makeText(this, "Removed from Hentaini Favorites", Toast.LENGTH_SHORT).show()
+        } else {
+            val item = org.json.JSONObject()
+                .put("id", series.id).put("title", series.title).put("slug", series.slug)
+                .put("hId", series.hId).put("hasEpisodes", series.hasEpisodes)
+                .put("thumbnailUrl", series.thumbnailUrl)
+            entries.add(item.toString())
+            Toast.makeText(this, "Added to Hentaini Favorites", Toast.LENGTH_SHORT).show()
+        }
+        prefs.edit().putStringSet("hentaini_favorite_series", entries).apply()
+        showHome()
+    }
+
+    private fun loadHentainiFavorites(): List<HentainiSeries> =
+        hentainiFavoriteEntries().mapNotNull { encoded ->
+            runCatching {
+                val item = org.json.JSONObject(encoded)
+                val slug = item.optString("slug").takeIf { it.isNotBlank() } ?: return@runCatching null
+                HentainiSeries(item.optInt("id"), item.optString("title"), slug,
+                    item.optString("hId"), item.optBoolean("hasEpisodes", true), item.optString("thumbnailUrl"))
+            }.getOrNull()
+        }.sortedBy { it.title.lowercase() }
 
     private fun showHentainiSeries(series: HentainiSeries) {
         showingHentaini = true
