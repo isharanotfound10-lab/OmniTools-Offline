@@ -32,6 +32,42 @@ object HentainiApi {
     private const val API_ROOT = "https://admin.hentaini.com/api"
     private const val IMAGE_ROOT = "https://admin.hentaini.com/uploads/"
 
+    fun searchGenre(slug: String, offset: Int, limit: Int = 10): HentainiSearchPage {
+        require(slug == "ahegao" || slug == "milf") { "Unsupported Hentaini genre" }
+        val pageNumber = offset / limit + 1
+        val address = "https://hentaini.com/genres/" + slug + "?page=" + pageNumber
+        val document = Jsoup.parse(request(address, "text/html"), address)
+        val results = linkedMapOf<String, HentainiSeries>()
+        document.select("a[href]").forEach { anchor ->
+            val target = anchor.absUrl("href")
+            val uri = runCatching { java.net.URI(target) }.getOrNull() ?: return@forEach
+            if (uri.host.orEmpty().lowercase() !in setOf("hentaini.com", "www.hentaini.com")) return@forEach
+            val parts = uri.path.orEmpty().trim('/').split('/')
+            if (parts.size != 2 || parts[0] != "h") return@forEach
+            val slugValue = parts[1]
+            if (slugValue.isBlank()) return@forEach
+            val image = anchor.selectFirst("img")
+            val title = anchor.attr("title").ifBlank { image?.attr("alt").orEmpty() }
+                .ifBlank { anchor.text() }.trim()
+            if (title.isBlank()) return@forEach
+            val imageUrl = image?.let {
+                it.absUrl("src").ifBlank { it.absUrl("data-src") }
+                    .ifBlank { it.absUrl("data-lazy-src") }
+            }.orEmpty()
+            val stableId = slugValue.hashCode() and Int.MAX_VALUE
+            results.putIfAbsent(slugValue, HentainiSeries(
+                id = stableId, title = title, slug = slugValue, hId = "",
+                hasEpisodes = true, thumbnailUrl = imageUrl
+            ))
+        }
+        val items = results.values.toList().take(limit)
+        val hasNext = document.select("a[rel=next], a.next, .pagination a").any { link ->
+            link.text().contains("next", true) || link.text().contains("›") || link.text().contains("»")
+        }
+        val total = if (hasNext || items.size == limit) offset + items.size + 1 else offset + items.size
+        return HentainiSearchPage(items, total, offset, limit)
+    }
+
     fun search(term: String, offset: Int, limit: Int = 10): HentainiSearchPage {
         val encoded = URLEncoder.encode(term, "UTF-8")
         val address = API_ROOT + "/series?filters%5Btitle%5D%5B%24containsi%5D=" + encoded +
