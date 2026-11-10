@@ -614,10 +614,11 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), 0, 0, 0)
         }
-        titleBlock.addView(label(
-            episode.title.ifBlank { "Episode " + episode.number.toString().padStart(2, '0') },
+        val episodeTitle = label(
+            episode.title.ifBlank { "Episode " + episode.number.toString() },
             14, white, true
-        ).apply { maxLines = 2 })
+        ).apply { maxLines = 2 }
+        titleBlock.addView(episodeTitle)
         titleBlock.addView(label(
             "EPISODE " + episode.number.toString().padStart(2, '0'),
             10, muted, true
@@ -646,7 +647,18 @@ class MainActivity : Activity() {
                     hentainiSelectedSeries?.id != series.id) return@post
                 streams.removeAllViews()
                 val resolvedThumbnail = details?.thumbnailUrl.orEmpty()
-                if (episode.thumbnailUrl.isBlank() && resolvedThumbnail.isNotBlank()) {
+                // Replace the temporary URL-derived label with the actual
+                // episode title from its VideoObject/page heading when present.
+                val resolvedTitle = details?.title.orEmpty().trim()
+                if (resolvedTitle.isNotBlank() &&
+                    !resolvedTitle.equals("Hentaini", true) &&
+                    !resolvedTitle.equals("Episode", true)
+                ) {
+                    episodeTitle.text = resolvedTitle
+                    thumbnail.contentDescription = resolvedTitle + " thumbnail"
+                }
+                // Always prefer the per-episode image resolved from this page.
+                if (resolvedThumbnail.isNotBlank()) {
                     loadImage(resolvedThumbnail, thumbnail)
                 }
                 val available = details?.streams.orEmpty()

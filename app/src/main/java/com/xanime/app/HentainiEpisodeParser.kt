@@ -47,11 +47,10 @@ object HentainiEpisodeParser {
                 parent.select("a[href]").size == 1 && parent.select("img").isNotEmpty()
             }?.selectFirst("img")
             val thumbnail = image?.let { imageUrl(it) }.orEmpty()
-            val title = sequenceOf(
-                anchor.text().trim(),
-                anchor.attr("title").trim(),
-                image?.attr("alt")?.trim().orEmpty()
-            ).firstOrNull { it.isNotBlank() } ?: "Episode " + number.toString().padStart(2, '0')
+            // Episode-card text often includes counters and unrelated labels
+            // (for example "67 AnimeEpisode 1"). Use the URL's episode number
+            // as the stable, clean title instead of polluted wrapper text.
+            val title = "Episode " + number
             episodes[absolute] = HentainiEpisode(number, title, absolute, thumbnail)
         }
 
@@ -66,8 +65,6 @@ object HentainiEpisodeParser {
 
     fun parseEpisode(html: String, pageUrl: String): HentainiEpisodePage {
         val doc = Jsoup.parse(html, pageUrl)
-        val title = doc.selectFirst("h1")?.text()?.trim()
-            ?.takeIf { it.isNotBlank() } ?: doc.title().substringBefore("|").trim()
         // Social preview metadata is commonly the SERIES cover on every
         // episode page. Use only media embedded in the episode content itself.
         // Hentaini's episode pages expose the actual frame in VideoObject
@@ -75,12 +72,56 @@ object HentainiEpisodeParser {
         val jsonLd = doc.select("script[type=application/ld+json]").mapNotNull { script ->
             parseJsonLd(script.data().ifBlank { script.html() })
         }
-        val structuredThumbnail = jsonLd.asSequence()
-            .flatMap { findJsonValues(it, "thumbnailUrl").asSequence() }
+        // Only use VideoObject metadata. Other JSON-LD objects can describe
+        // the series itself and repeat its cover/providers on every episode.
+        val allVideoObjects = jsonLd.flatMap { findVideoObjects(it) }
+        val pageHeading = doc.selectFirst("h1")?.text()?.trim().orEmpty()
+        // A page can contain shared/related VideoObjects as well as the
+        // current episode. Match canonical identity first; title is a
+        // secondary signal. If multiple unrelated objects remain, do not
+        // guess and accidentally reuse another episode's media.
+        val identityMatches = allVideoObjects.filter { videoObject ->
+            videoObjectBelongsToPage(videoObject, pageUrl)
+        }
+        val titleMatches = allVideoObjects.filter { videoObject ->
+            sequenceOf(videoObject.optString("name"), videoObject.optString("headline"))
+                .any { it.isNotBlank() && pageHeading.isNotBlank() && it.trim().equals(pageHeading, true) }
+        }
+        val videoObjects = when {
+            identityMatches.isNotEmpty() -> identityMatches
+            titleMatches.isNotEmpty() -> titleMatches
+            allVideoObjects.size == 1 -> allVideoObjects
+            else -> emptyList()
+        }
+        val structuredTitle = videoObjects.asSequence()
+            .flatMap { sequenceOf(it.optString("name"), it.optString("headline")).asSequence() }
+            .map { it.trim() }
+            .firstOrNull { it.isNotBlank() && !it.equals("Hentaini", true) }
+        val title = structuredTitle
+            ?: pageHeading.takeIf { it.isNotBlank() }
+            ?: doc.title().substringBefore("|").trim()
+        val structuredThumbnail = videoObjects.asSequence()
+            .flatMap { video ->
+                sequenceOf("thumbnailUrl", "thumbnail", "image")
+                    .flatMap { key -> findJsonValues(video, key).asSequence() }
+            }
             .mapNotNull { jsonImageUrl(it, pageUrl) }
+            .firstOrNull { isEpisodeImage(it) }
+        // Hentaini serves episode-specific screenshots through its Nuxt
+        // image proxy in og:image/twitter:image metadata. These are not
+        // necessarily the series cover, so inspect them before generic DOM
+        // images (which can belong to navigation or related content).
+        val metadataThumbnail = sequenceOf(
+            doc.selectFirst("meta[property=og:image]")?.attr("content"),
+            doc.selectFirst("meta[name=twitter:image]")?.attr("content"),
+            doc.selectFirst("meta[property=og:image:url]")?.attr("content"),
+            doc.selectFirst("link[rel=image_src]")?.attr("href")
+        ).filterNotNull()
+            .mapNotNull { normalizeUrl(it, pageUrl) }
             .firstOrNull { isEpisodeImage(it) }
         val thumbnail = sequenceOf(
             structuredThumbnail,
+            metadataThumbnail,
             doc.selectFirst("video[poster]")?.absUrl("poster"),
             doc.selectFirst("article img")?.let { imageUrl(it) },
             doc.selectFirst("main img")?.let { imageUrl(it) },
@@ -94,10 +135,10 @@ object HentainiEpisodeParser {
             val uri = runCatching { URI(url) }.getOrNull() ?: return
             val host = uri.host?.lowercase().orEmpty()
             if (host.isBlank() || host.endsWith("hentaini.com")) return
-            val text = label.orEmpty().lowercase()
-            val known = knownHosts.firstOrNull { host.contains(it) || text.contains(it) }
-            val genericLabels = setOf("download", "download now", "stream", "open", "click here", "about us", "home", "contact", "privacy policy", "terms")
-            if (known == null && (text.isBlank() || text in genericLabels || text.length > 40)) return
+            // A provider label alone is not enough: it can point to a shared
+            // redirect or a page-wide navigation item. The actual URL host
+            // must identify a supported file host.
+            val known = knownHosts.firstOrNull { host.contains(it) } ?: return
             val provider = known?.let {
                 when {
                     it.contains("terabox") -> "1024terabox"
@@ -111,47 +152,82 @@ object HentainiEpisodeParser {
             if (found.values.none { it.url == url }) found[key] = HentainiStream(provider, url)
         }
 
-        doc.select("a[href], iframe[src], [data-url], [data-href], [data-link], [data-download-url]").forEach { element ->
-            val label = element.text().ifBlank { element.attr("title") }.ifBlank { element.attr("aria-label") }
-            listOf("href", "src", "data-url", "data-href", "data-link", "data-download-url").forEach { key ->
-                val value = element.attr(key)
-                if (value.isNotBlank()) add(value, label)
-            }
-            val onclick = element.attr("onclick")
-            Regex("""['"]((?:https?:)?//[^'"]+)['"]""").findAll(onclick).forEach {
-                add(it.groupValues[1], label)
-            }
-        }
-
-        val scripts = doc.select("script").joinToString("\n") { it.data() + it.html() }
-            .replace("\\/", "/")
-            .replace("\\u0026", "&")
-            .replace("&amp;", "&")
-        // Structured episode metadata can also contain provider URLs nested
-        // in arrays/objects. Extract only hosts we explicitly recognize.
-        jsonLd.asSequence().flatMap { findAllJsonStrings(it).asSequence() }.forEach { value ->
-            val candidate = value.trim()
-            val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
-            if (knownHosts.any { host.contains(it) }) add(candidate, null)
-        }
-        Regex("""https?://[^\s"'<>\\]+""").findAll(scripts).forEach { match ->
-            val candidate = match.value.trimEnd(',', ';', ')', ']', '}')
+        // Extract links from the current VideoObject only. This prevents
+        // links belonging to a related episode/series JSON-LD block leaking
+        // into every episode card.
+        videoObjects.asSequence().flatMap { findAllJsonStrings(it).asSequence() }.forEach { value ->
+            val candidate = value.trim().replace("\\/", "/").replace("\\u0026", "&")
             val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
             if (knownHosts.any { host.contains(it) }) add(candidate, null)
         }
 
-        doc.select("button, [role=button]").forEach { button ->
-            val label = button.text().trim()
-            if (label.isBlank()) return@forEach
-            button.select("a[href], [data-url], [data-href]").forEach { child ->
-                add(child.attr("href").ifBlank { child.attr("data-url") }.ifBlank { child.attr("data-href") }, label)
+        // DOM fallback is restricted to episode content and actual supported
+        // provider hosts; skip global header/footer/sidebar navigation.
+        val contentRoots = doc.select("main, article, .entry-content, .episode-content, [class*=episode-content], [class*=download-links], [class*=download], [id*=download]")
+        val scanRoots = contentRoots.ifEmpty { listOfNotNull(doc.body()) }.distinct()
+        scanRoots.forEach { scanRoot ->
+            scanRoot.select("a[href], iframe[src], [data-url], [data-href], [data-link], [data-download-url], button, [role=button]").forEach { element ->
+                val label = element.text().ifBlank { element.attr("title") }.ifBlank { element.attr("aria-label") }
+                listOf("href", "src", "data-url", "data-href", "data-link", "data-download-url", "data-src").forEach { key ->
+                    val value = element.attr(key)
+                    if (value.isNotBlank()) add(value, label)
+                }
+                val onclick = element.attr("onclick")
+                Regex("""['"]((?:https?:)?//[^'"]+)['"]""").findAll(onclick).forEach {
+                    add(it.groupValues[1], label)
+                }
             }
-            val data = sequenceOf("data-url", "data-href", "data-link", "data-download-url")
-                .map { button.attr(it) }.firstOrNull { it.isNotBlank() }
-            if (data != null) add(data, label)
+        }
+
+        // Some pages expose the same episode's provider URLs in a player
+        // configuration script rather than JSON-LD. Only inspect scripts
+        // when structured VideoObject metadata is absent.
+        if (found.isEmpty()) {
+            // Player configurations often live in page-specific scripts beside
+            // a VideoObject that contains only title/thumbnail metadata.
+            // Search scripts even when VideoObject exists, but accept only
+            // explicit supported-provider URLs and deduplicate them.
+            val scripts = doc.select("script").joinToString("\n") { it.data() + it.html() }
+                // Some player configs are JSON-escaped twice by the page.
+                // Decode both single- and double-escaped separators.
+                .replace("\\\\/", "/")
+                .replace("\\\\u002f", "/")
+                .replace("\\\\u002F", "/")
+                .replace("\\\\u0026", "&")
+                .replace("\\/", "/")
+                .replace("\\u0026", "&")
+                .replace("\\u002f", "/")
+                .replace("\\u002F", "/")
+                .replace("&amp;", "&")
+                .replace("&#038;", "&")
+            Regex("""https?://[^\s"'<>\\]+""").findAll(scripts).forEach { match ->
+                val candidate = match.value.trimEnd(',', ';', ')', ']', '}')
+                val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
+                if (knownHosts.any { host.contains(it) }) add(candidate, null)
+            }
         }
 
         return HentainiEpisodePage(title, thumbnail, found.values.sortedBy { it.host.lowercase() })
+    }
+
+    private fun videoObjectBelongsToPage(video: JSONObject, pageUrl: String): Boolean {
+        val page = runCatching { URI(pageUrl) }.getOrNull() ?: return false
+        val identityValues = sequenceOf(
+            findJsonValues(video, "url"),
+            findJsonValues(video, "@id"),
+            findJsonValues(video, "mainEntityOfPage")
+        ).flatten()
+        return identityValues.any { value ->
+            val raw = when (value) {
+                is String -> value
+                is JSONObject -> value.optString("@id").ifBlank { value.optString("url") }
+                else -> ""
+            }
+            val candidate = normalizeUrl(raw, pageUrl) ?: return@any false
+            val uri = runCatching { URI(candidate) }.getOrNull() ?: return@any false
+            uri.host.equals(page.host, true) &&
+                uri.path.orEmpty().trimEnd('/').equals(page.path.orEmpty().trimEnd('/'), true)
+        }
     }
 
     private fun parseJsonLd(source: String): Any? {
@@ -164,6 +240,34 @@ object HentainiEpisodeParser {
                 else -> null
             }
         }.getOrNull()
+    }
+
+    private fun findVideoObjects(value: Any?, depth: Int = 0): List<JSONObject> {
+        if (depth > 20) return emptyList()
+        val result = mutableListOf<JSONObject>()
+        when (value) {
+            is JSONObject -> {
+                val type = value.opt("@type")
+                val isVideo = when (type) {
+                    is String -> type.equals("VideoObject", true) || type.endsWith("/VideoObject", true) ||
+                        type.endsWith("#VideoObject", true)
+                    is JSONArray -> (0 until type.length()).any {
+                        val candidate = type.optString(it)
+                        candidate.equals("VideoObject", true) ||
+                            candidate.endsWith("/VideoObject", true) ||
+                            candidate.endsWith("#VideoObject", true)
+                    }
+                    else -> false
+                }
+                if (isVideo) result.add(value)
+                val keys = value.keys()
+                while (keys.hasNext()) result.addAll(findVideoObjects(value.opt(keys.next()), depth + 1))
+            }
+            is JSONArray -> for (i in 0 until value.length()) {
+                result.addAll(findVideoObjects(value.opt(i), depth + 1))
+            }
+        }
+        return result
     }
 
     private fun findJsonValues(value: Any?, key: String, depth: Int = 0): List<Any> {
@@ -207,7 +311,13 @@ object HentainiEpisodeParser {
     private fun jsonImageUrl(value: Any, base: String): String? {
         val raw = when (value) {
             is String -> value
-            is JSONObject -> value.optString("url").ifBlank { value.optString("contentUrl") }
+            is JSONObject -> value.optString("url")
+                .ifBlank { value.optString("contentUrl") }
+                .ifBlank { value.optString("@id") }
+            is JSONArray -> (0 until value.length())
+                .asSequence()
+                .mapNotNull { jsonImageUrl(value.opt(it) ?: return@mapNotNull null, base) }
+                .firstOrNull().orEmpty()
             else -> ""
         }
         if (raw.isBlank()) return null
@@ -222,11 +332,17 @@ object HentainiEpisodeParser {
             !filename.contains("cover", true)
     }
 
-    private fun imageUrl(image: org.jsoup.nodes.Element): String =
-        sequenceOf("data-lazy-src", "data-src", "data-original", "src", "data-thumb")
-            .map { image.absUrl(it) }
+    private fun imageUrl(image: org.jsoup.nodes.Element): String {
+        val direct = sequenceOf(
+            "data-lazy-src", "data-src", "data-original", "data-thumb",
+            "data-echo", "data-lazy", "src"
+        ).map { image.absUrl(it) }
             .firstOrNull { it.startsWith("http://") || it.startsWith("https://") }
-            .orEmpty()
+        if (direct != null) return direct
+        val srcset = image.attr("data-srcset").ifBlank { image.attr("srcset") }
+        val candidate = srcset.split(',').firstOrNull()?.trim()?.substringBefore(' ') ?: return ""
+        return normalizeUrl(candidate, image.baseUri()).orEmpty()
+    }
 
     private fun normalizeUrl(raw: String, base: String): String? {
         var value = raw.trim().replace("&amp;", "&").replace("\\/", "/").trim(' ', '"', '\'')
