@@ -765,7 +765,17 @@ class MainActivity : Activity() {
                     lateinit var moreButton: Button
                     moreButton = actionButton("MORE LINKS ⬇︎", false) {
                         val expanded = hiddenLinks.visibility != View.VISIBLE
-                        hiddenLinks.visibility = if (expanded) View.VISIBLE else View.GONE
+                        if (expanded) {
+                            hiddenLinks.visibility = View.VISIBLE
+                            animateReveal(hiddenLinks)
+                        } else {
+                            hiddenLinks.animate().alpha(0f).translationY(-dp(4).toFloat()).setDuration(120)
+                                .withEndAction {
+                                    hiddenLinks.visibility = View.GONE
+                                    hiddenLinks.alpha = 1f
+                                    hiddenLinks.translationY = 0f
+                                }.start()
+                        }
                         moreButton.text = if (expanded) "LESS LINKS ⬆︎" else "MORE LINKS ⬇︎"
                     }
                     streams.addView(moreButton, LinearLayout.LayoutParams(-1, dp(42)).apply {
