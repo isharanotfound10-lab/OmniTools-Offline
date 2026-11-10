@@ -306,7 +306,7 @@ class MainActivity : Activity() {
             filtersPanel.visibility = if (opening) View.VISIBLE else View.GONE
             filtersToggle.text = if (opening) "HIDE FILTERS ▴" else if (selectedCategory != null || catalogMode || selectedSort != "latest") "FILTERS • ACTIVE ▾" else "FILTERS ▾"
         }
-        pageContent.addView(filtersToggle, LinearLayout.LayoutParams(-1, dp(30)).apply { topMargin = dp(4) })
+        pageContent.addView(filtersToggle, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(4) })
         pageContent.addView(filtersPanel, LinearLayout.LayoutParams(-1, -2))
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) { startSearch(true); true } else false
