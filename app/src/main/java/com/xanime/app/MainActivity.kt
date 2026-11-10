@@ -71,6 +71,10 @@ class MainActivity : Activity() {
     private val imageWorker = Executors.newFixedThreadPool(3)
     private val pendingImages = ConcurrentHashMap<String, MutableList<WeakReference<ImageView>>>()
     private val detailCache = ConcurrentHashMap<String, Pair<EpisodeDetails?, List<String>>>()
+    // Keep up to 120 title-search results (six API pages), excluding large embedded HTML bodies.
+    private val apiSearchCache = object : LruCache<String, List<SearchResult>>(120) {
+        override fun sizeOf(key: String, value: List<SearchResult>): Int = value.size
+    }
     private val detailSlots = Semaphore(4)
     private val imageCache = object : LruCache<String, Bitmap>(16 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
@@ -772,32 +776,48 @@ class MainActivity : Activity() {
                     // Category/catalog browsing remains on the existing HTML path.
                     SiteParser.parseSearch(Jsoup.parse(request(address), address))
                 } else {
-                    val encoded = URLEncoder.encode(query, "UTF-8")
-                    val apiAddress = "https://xanimeporn.com/wp-json/wp/v2/posts" +
-                        "?search=$encoded&per_page=20&page=$requestedPage" +
-                        "&_embed=wp:featuredmedia&_fields=id,date,link,title,content,featured_media,_embedded"
-                    val apiResults = runCatching {
-                        SiteParser.parseApiSearch(request(apiAddress, "application/json"))
-                    }.getOrNull()
-
-                    if (apiResults.isNullOrEmpty()) {
-                        // Preserve the original HTML search if the API is unavailable,
-                        // returns an unexpected payload, or has no matching posts.
-                        SiteParser.parseSearch(Jsoup.parse(request(address), address))
+                    val cacheKey = query.trim().lowercase() + ":" + requestedPage
+                    val useCache = getSharedPreferences("xanime", MODE_PRIVATE)
+                        .getBoolean("cache_enabled", true)
+                    val cachedResults = if (useCache) apiSearchCache.get(cacheKey) else null
+                    if (cachedResults != null) {
+                        cachedResults
                     } else {
-                        // WordPress does not expose the site's duration field. Read the
-                        // original result listing once and fill any missing card metadata.
-                        val htmlResults = runCatching {
-                            SiteParser.parseSearch(Jsoup.parse(request(address), address))
-                        }.getOrDefault(emptyList())
-                        val htmlByUrl = htmlResults.associateBy { it.url }
-                        apiResults.map { apiResult ->
-                            val htmlResult = htmlByUrl[apiResult.url]
-                            apiResult.copy(
-                                thumbnail = apiResult.thumbnail.ifBlank { htmlResult?.thumbnail.orEmpty() },
-                                duration = htmlResult?.duration.orEmpty()
-                            )
+                        val encoded = URLEncoder.encode(query, "UTF-8")
+                        val apiAddress = "https://xanimeporn.com/wp-json/wp/v2/posts" +
+                            "?search=$encoded&per_page=20&page=$requestedPage" +
+                            "&_embed=wp:featuredmedia&_fields=id,date,link,title,content,featured_media,_embedded"
+
+                        // Fetch HTML metadata alongside the API request, not after it.
+                        // This keeps duration and missing-thumbnail enrichment without serial latency.
+                        val htmlFuture = worker.submit(Callable {
+                            runCatching {
+                                SiteParser.parseSearch(Jsoup.parse(request(address), address))
+                            }.getOrDefault(emptyList())
+                        })
+                        val apiResults = runCatching {
+                            SiteParser.parseApiSearch(request(apiAddress, "application/json"))
+                        }.getOrNull()
+                        val results = if (apiResults.isNullOrEmpty()) {
+                            // Preserve the original HTML search if the API fails or has no results.
+                            htmlFuture.get()
+                        } else {
+                            // Keep duration and fallback thumbnails from the original listing.
+                            val htmlResults = runCatching { htmlFuture.get() }.getOrDefault(emptyList())
+                            val htmlByUrl = htmlResults.associateBy { it.url }
+                            apiResults.map { apiResult ->
+                                val htmlResult = htmlByUrl[apiResult.url]
+                                apiResult.copy(
+                                    thumbnail = apiResult.thumbnail.ifBlank { htmlResult?.thumbnail.orEmpty() },
+                                    duration = htmlResult?.duration.orEmpty()
+                                )
+                            }
                         }
+                        if (useCache && results.isNotEmpty()) {
+                            // Episode details are cached separately; avoid retaining content.rendered here.
+                            apiSearchCache.put(cacheKey, results.map { it.copy(detailHtml = null) })
+                        }
+                        results
                     }
                 }
                 val uniqueResults = LinkedHashMap<String, SearchResult>()
@@ -1394,10 +1414,15 @@ class MainActivity : Activity() {
             instanceFollowRedirects = true
             setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
             setRequestProperty("Accept", accept)
+            setRequestProperty("Accept-Encoding", "gzip")
             setRequestProperty("Accept-Language", "en-US,en;q=0.9")
         }
         return try {
-            val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+            val rawStream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
+            val stream = if (connection.getHeaderField("Content-Encoding")
+                    ?.contains("gzip", ignoreCase = true) == true) {
+                java.util.zip.GZIPInputStream(rawStream)
+            } else rawStream
             stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         } finally { connection.disconnect() }
     }
@@ -1562,6 +1587,7 @@ class MainActivity : Activity() {
             .setPositiveButton("APPLY") { _, _ -> showHome() }
             .setNeutralButton("CLEAR CACHE") { _, _ ->
                 detailCache.clear()
+                apiSearchCache.evictAll()
                 imageCache.evictAll()
                 Toast.makeText(this, "Cache cleared", Toast.LENGTH_SHORT).show()
             }
