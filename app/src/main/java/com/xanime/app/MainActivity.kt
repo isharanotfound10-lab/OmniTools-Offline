@@ -197,9 +197,9 @@ class MainActivity : Activity() {
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label("XAnime", 25, white, true))
-        titles.addView(label(":|", 17, accent, true).apply {
-            letterSpacing = .22f
-            setPadding(dp(2), dp(1), 0, 0)
+        titles.addView(label(":|  DISCOVER • WATCH • ENJOY", 9, muted, true).apply {
+            letterSpacing = .12f
+            setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         if (!showingHentaini) {
@@ -229,14 +229,36 @@ class MainActivity : Activity() {
             return
         }
 
+        val welcomeCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(15), dp(16), dp(15))
+            background = glassDrawable(20)
+        }
+        welcomeCard.addView(label("YOUR NEXT FAVORITE", 10, accent, true).apply {
+            letterSpacing = .14f
+        })
+        welcomeCard.addView(label("Discover something new.", 20, white, true).apply {
+            setPadding(0, dp(6), 0, dp(4))
+        })
+        welcomeCard.addView(label("Search the catalogue or explore by category.", 12, muted, false))
+        root.addView(welcomeCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(18) })
+
         search = EditText(this).apply {
-            hint = "Search titles..."; setHintTextColor(muted); setTextColor(white)
+            hint = "Search anime titles..."; setHintTextColor(muted); setTextColor(white)
             textSize = 15f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setPadding(dp(15), 0, dp(15), 0); background = ripple(glassDrawable(16))
+            setPadding(dp(15), 0, dp(12), 0); background = ripple(glassDrawable(16))
             setText(query)
         }
-        root.addView(search, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(22) })
-        root.addView(actionButton("SEARCH") { startSearch(true) }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(9) })
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchRow.addView(search, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+            marginEnd = dp(9)
+        })
+        searchRow.addView(actionButton("SEARCH  ↗") { startSearch(true) },
+            LinearLayout.LayoutParams(dp(104), dp(52)))
+        root.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         if (!showingFavorites) root.addView(label("BROWSE BY CATEGORY", 10, muted, true).apply {
             setPadding(0, dp(15), 0, dp(7))
         })
