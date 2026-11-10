@@ -23,6 +23,38 @@ class SiteParserTest {
         assertEquals("18:22", results[0].duration)
     }
 
+    @Test fun parsesWordPressApiResultsWithFeaturedThumbnailAndEmbeddedEpisodeContent() {
+        val json = """
+            [
+              {
+                "id": 70074,
+                "link": "https://xanimeporn.com/deco-x-deco-episode-2-sub-eng/",
+                "title": {"rendered": "Deco x Deco Episode 2 [Sub-ENG]"},
+                "content": {"rendered": "<div class='su-tabs-pane' data-title='Episodes'><a href='https://xanimeporn.com/deco-x-deco-episode-1-sub-eng/'>Episode 1</a><a href='https://xanimeporn.com/deco-x-deco-episode-2-sub-eng/'>Episode 2</a></div>"},
+                "_embedded": {
+                  "wp:featuredmedia": [{
+                    "source_url": "https://xanimeporn.com/full.jpg",
+                    "media_details": {"sizes": {
+                      "thumb_site": {"source_url": "https://xanimeporn.com/thumb.jpg"}
+                    }}
+                  }]
+                }
+              }
+            ]
+        """.trimIndent()
+
+        val results = SiteParser.parseApiSearch(json)
+        assertEquals(1, results.size)
+        assertEquals("Deco x Deco Episode 2 [Sub-ENG]", results[0].title)
+        assertEquals("https://xanimeporn.com/deco-x-deco-episode-2-sub-eng/", results[0].url)
+        assertEquals("https://xanimeporn.com/thumb.jpg", results[0].thumbnail)
+        assertEquals("", results[0].duration)
+
+        val embeddedDoc = Jsoup.parse(results[0].detailHtml.orEmpty(), results[0].url)
+        val details = SiteParser.parseEpisode(embeddedDoc, results[0].url)
+        assertEquals(2, details.episodes.size)
+    }
+
     @Test fun groupsEpisodeLinksAndExtractsExact480pUrl() {
         val html = """
             <h1>Adult Series Episode 2</h1>
