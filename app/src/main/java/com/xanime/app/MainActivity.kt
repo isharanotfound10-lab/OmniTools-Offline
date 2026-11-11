@@ -1547,7 +1547,31 @@ class MainActivity : Activity() {
             return
         }
 
-        if (!isViewVisible(target)) return
+        if (!isViewVisible(target)) {
+            if (target.getTag(android.R.id.content) != url) {
+                target.setTag(android.R.id.content, url)
+                val observer = object : android.view.ViewTreeObserver.OnGlobalLayoutListener,
+                    android.view.ViewTreeObserver.OnScrollChangedListener {
+                    override fun onGlobalLayout() = checkVisibility()
+                    override fun onScrollChanged() = checkVisibility()
+                    private fun checkVisibility() {
+                        if (!target.isAttachedToWindow) return
+                        if (isViewVisible(target)) {
+                            val tree = target.viewTreeObserver
+                            if (tree.isAlive) {
+                                tree.removeOnGlobalLayoutListener(this)
+                                tree.removeOnScrollChangedListener(this)
+                            }
+                            target.setTag(android.R.id.content, null)
+                            loadImage(url, target)
+                        }
+                    }
+                }
+                target.viewTreeObserver.addOnGlobalLayoutListener(observer)
+                target.viewTreeObserver.addOnScrollChangedListener(observer)
+            }
+            return
+        }
 
         // Keep one request per URL even when search cards are rebuilt while
         // detail pages finish. Every currently visible ImageView gets the
