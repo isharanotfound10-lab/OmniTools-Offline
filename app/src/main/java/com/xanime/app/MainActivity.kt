@@ -233,13 +233,15 @@ class MainActivity : Activity() {
 
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         sourceTabs.addView(actionButton("XAnime", !showingHentaini) {
+            val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = false
+            showingFavorites = keepFavorites
             showHome()
         }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(8) })
         sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
+            val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = true
-            showingFavorites = false
-            showingHentainiFavorites = false
+            showingHentainiFavorites = keepFavorites
             showHome()
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
         pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
@@ -398,13 +400,16 @@ class MainActivity : Activity() {
             pageContent.addView(label("SAVED SERIES • " + saved.size, 10, accent, true).apply {
                 setPadding(0, 0, 0, dp(12))
             })
+            if (saved.isNotEmpty()) {
+                pageContent.addView(actionButton("COPY DOWNLOAD STREAMS", true) {
+                    showHentainiBulkSeriesPicker(saved)
+                }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(8) })
+                pageContent.addView(label("Choose series and providers, then copy each stream link separately.", 11, muted, false).apply {
+                    setPadding(dp(2), 0, dp(2), dp(12))
+                })
+            }
             val savedList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             pageContent.addView(savedList, LinearLayout.LayoutParams(-1, -2))
-            if (saved.isNotEmpty()) {
-                pageContent.addView(actionButton("COPY DOWNLOAD STREAMS", false) {
-                    showHentainiBulkSeriesPicker(saved)
-                }, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(12) })
-            }
             if (saved.isEmpty()) savedList.addView(infoCard("No favorites yet. Tap the heart on any Hentaini series to save it here."))
             else saved.forEach { addHentainiCard(it, savedList) }
             setContentView(root)
@@ -1528,7 +1533,7 @@ class MainActivity : Activity() {
             val item = org.json.JSONObject()
                 .put("title", group.name)
                 .put("url", group.firstResult.url)
-                .put("thumbnail", group.firstResult.thumbnail)
+                .put("thumbnail", group.thumbnails.firstOrNull { it.isNotBlank() } ?: group.firstResult.thumbnail)
                 .put("subEng", group.hasSubEng)
             entries.add(item.toString())
             Toast.makeText(this, "Added to Favorites", Toast.LENGTH_SHORT).show()
@@ -1546,7 +1551,8 @@ class MainActivity : Activity() {
                 val url = item.optString("url").takeIf { it.isNotBlank() } ?: return@runCatching null
                 val thumbnail = item.optString("thumbnail")
                 val result = SearchResult(title, url, thumbnail, "")
-                AnimeGroup(title, result, null, emptyList(), item.optBoolean("subEng"))
+                val savedThumbnails = listOf(thumbnail).filter { it.isNotBlank() }
+                AnimeGroup(title, result, null, savedThumbnails, item.optBoolean("subEng"))
             }.getOrNull()
         }.sortedBy { it.name.lowercase() }
 
