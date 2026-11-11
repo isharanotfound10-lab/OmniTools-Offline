@@ -106,6 +106,8 @@ class MainActivity : Activity() {
     @Volatile private var searchGeneration = 0
     private var hasCachedSearch = false
     private var cachedAnimeGroups: List<AnimeGroup> = emptyList()
+    private var favoriteAnimeGroups: List<AnimeGroup> = emptyList()
+    @Volatile private var favoriteLoadGeneration = 0
     private var searchScrollY = 0
     private var isDetailScreen = false
     private var showingFavorites = false
@@ -363,10 +365,11 @@ class MainActivity : Activity() {
         }
         scroll.post { loadVisibleImages(pageContent) }
         if (showingFavorites) {
-            status.text = "Your saved series"
-            val favorites = loadFavoriteGroups()
-            renderAnimeGroups(favorites)
-            pageText.text = "FAVORITES • ${favorites.size} SERIES"
+            status.text = "Your saved series • loading episode details"
+            favoriteAnimeGroups = loadFavoriteGroups()
+            renderAnimeGroups(favoriteAnimeGroups)
+            pageText.text = "FAVORITES • ${favoriteAnimeGroups.size} SERIES"
+            loadFavoriteGroupDetails(favoriteAnimeGroups)
         } else if (hasCachedSearch) {
             status.text = if (cachedAnimeGroups.isEmpty()) "No results for: $query" else
                 "${cachedAnimeGroups.size} unique anime • cached results"
@@ -1404,7 +1407,9 @@ class MainActivity : Activity() {
                     setPadding(dp(12), 0, 0, 0)
                 }
                 previewInfo.addView(label(
-                    if (episodes.isNotEmpty()) "${episodes.size} Episodes" else "Episode count loading",
+                    if (episodes.isNotEmpty()) "${episodes.size} Episodes"
+                    else if (showingFavorites && group.details == null) "Loading episodes..."
+                    else "Episode count unavailable",
                     12, white, true
                 ))
                 previewInfo.addView(label(
@@ -1477,7 +1482,9 @@ class MainActivity : Activity() {
             }
             val count = episodes.size
             footer.addView(label(
-                if (count > 0) "$count Episodes" else "Episode count unavailable",
+                if (count > 0) "$count Episodes"
+                else if (showingFavorites && group.details == null) "Loading episodes..."
+                else "Episode count unavailable",
                 12, muted, false
             ), LinearLayout.LayoutParams(0, -2, 1f))
             if (count > 4) {
@@ -1539,8 +1546,12 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Added to Favorites", Toast.LENGTH_SHORT).show()
         }
         prefs.edit().putStringSet("favorite_series", entries).apply()
-        if (showingFavorites) renderAnimeGroups(loadFavoriteGroups())
-        else renderAnimeGroups(cachedAnimeGroups)
+        if (showingFavorites) {
+            favoriteLoadGeneration++
+            favoriteAnimeGroups = loadFavoriteGroups()
+            renderAnimeGroups(favoriteAnimeGroups)
+            loadFavoriteGroupDetails(favoriteAnimeGroups)
+        } else renderAnimeGroups(cachedAnimeGroups)
     }
 
     private fun loadFavoriteGroups(): List<AnimeGroup> =
@@ -1556,6 +1567,37 @@ class MainActivity : Activity() {
             }.getOrNull()
         }.sortedBy { it.name.lowercase() }
 
+    // Favorites persist only the series card data. Re-fetch the episode list
+    // and each episode's own preview images when Favorites is opened.
+    private fun loadFavoriteGroupDetails(groups: List<AnimeGroup>) {
+        val generation = ++favoriteLoadGeneration
+        if (groups.isEmpty()) return
+        detailWorker.execute {
+            val resolved = groups.map { group ->
+                if (Thread.currentThread().isInterrupted) return@execute
+                val cached = if (prefs.getBoolean("cache_enabled", true)) detailCache[group.firstResult.url] else null
+                val data = cached ?: runCatching {
+                    val html = request(group.firstResult.url)
+                    val doc = Jsoup.parse(html, group.firstResult.url)
+                    val details = SiteParser.parseEpisode(doc, group.firstResult.url)
+                    details to extractEpisodeThumbnails(doc, details.episodes, group.firstResult)
+                }.getOrElse { null to emptyList() }.also {
+                    if (prefs.getBoolean("cache_enabled", true)) detailCache[group.firstResult.url] = it
+                }
+                group.copy(details = data.first, thumbnails = data.second)
+            }
+            main.post {
+                if (isFinishing || !showingFavorites || generation != favoriteLoadGeneration) return@post
+                favoriteAnimeGroups = resolved
+                status.text = "Your saved series • episode details loaded"
+                renderAnimeGroups(favoriteAnimeGroups)
+                val expandedGroups = favoriteAnimeGroups.filter {
+                    it.name.lowercase() in expandedAnimeNames && (it.details?.episodes?.size ?: 0) > 4
+                }
+                expandedGroups.forEach { fetchRemainingThumbnails(it) }
+            }
+        }
+    }
 
     private fun showBulkCopySeriesPicker(groups: List<AnimeGroup>) {
         if (groups.isEmpty()) return
@@ -1771,12 +1813,18 @@ class MainActivity : Activity() {
             }
             main.post {
                 loadingExtraThumbnails.remove(key)
-                cachedAnimeGroups = cachedAnimeGroups.map {
-                    if (it.name.lowercase() == key) it.copy(thumbnails = thumbnails) else it
+                if (showingFavorites) {
+                    favoriteAnimeGroups = favoriteAnimeGroups.map {
+                        if (it.name.lowercase() == key) it.copy(thumbnails = thumbnails) else it
+                    }
+                } else {
+                    cachedAnimeGroups = cachedAnimeGroups.map {
+                        if (it.name.lowercase() == key) it.copy(thumbnails = thumbnails) else it
+                    }
                 }
                 if (expandedAnimeNames.contains(key)) {
                     val y = scroll.scrollY
-                    renderAnimeGroups(cachedAnimeGroups)
+                    renderAnimeGroups(if (showingFavorites) favoriteAnimeGroups else cachedAnimeGroups)
                     scroll.post { scroll.scrollTo(0, y) }
                 }
             }
