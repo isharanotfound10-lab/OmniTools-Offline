@@ -611,7 +611,19 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun safeDownloadFileName(rawName: String): String {
+        val cleaned = rawName
+            .replace(Regex("[\\u0000-\\u001F\\\\/:*?\"<>|]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .trim('.')
+            .take(120)
+            .trim()
+        return (cleaned.ifBlank { "WatchAnimeHentai" } + ".mp4")
+    }
+
     private fun downloadWatchAnimeEpisode(episode: WatchAnimeEpisode) {
+        val seriesTitle = watchAnimeSelectedSeries?.title.orEmpty()
         Toast.makeText(this, "Preparing English download...", Toast.LENGTH_SHORT).show()
         worker.execute {
             try {
@@ -621,7 +633,8 @@ class MainActivity : Activity() {
                     ?: throw IllegalStateException("English download option was not found")
                 main.post {
                     try {
-                        val fileName = "WatchAnimeHentai_Episode_${episode.number}.mp4"
+                        val baseTitle = seriesTitle.ifBlank { "WatchAnimeHentai" }
+                        val fileName = safeDownloadFileName("${baseTitle} - Episode ${episode.number}")
                         val downloadRequest = DownloadManager.Request(Uri.parse(englishEndpoint)).apply {
                             setTitle("WatchAnimeHentai • Episode ${episode.number}")
                             setDescription("English video download")
