@@ -48,6 +48,7 @@ import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.Callable
+import java.util.concurrent.Future
 import org.jsoup.Jsoup
 
 class MainActivity : Activity() {
@@ -96,6 +97,8 @@ class MainActivity : Activity() {
     private val seenResultUrls = mutableSetOf<String>()
     private val allSearchResults = mutableListOf<SearchResult>()
     private var busy = false
+    private var activeSearchTask: Future<*>? = null
+    @Volatile private var searchGeneration = 0
     private var hasCachedSearch = false
     private var cachedAnimeGroups: List<AnimeGroup> = emptyList()
     private var searchScrollY = 0
@@ -347,7 +350,11 @@ class MainActivity : Activity() {
         pageContent.addView(pageText)
         setContentView(root)
         animateScreen(root)
-        scroll.setOnScrollChangeListener { _, _, scrollY, _, _ -> ambientBackground?.setScrollOffset(scrollY) }
+        scroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            ambientBackground?.setScrollOffset(scrollY)
+            loadVisibleImages(pageContent)
+        }
+        scroll.post { loadVisibleImages(pageContent) }
         if (showingFavorites) {
             status.text = "Your saved series"
             val favorites = loadFavoriteGroups()
@@ -848,6 +855,7 @@ class MainActivity : Activity() {
     }
 
     private fun startSearch(reset: Boolean) {
+        if (reset) cancelActiveSearch()
         val value = search.text.toString().trim()
         if (value.isBlank()) { status.text = "Enter a search term or choose a category."; return }
         selectedCategory = null
@@ -915,16 +923,24 @@ class MainActivity : Activity() {
         showHome()
     }
 
+    private fun cancelActiveSearch() {
+        searchGeneration++
+        activeSearchTask?.cancel(true)
+        activeSearchTask = null
+        busy = false
+    }
+
     private fun runSearch(append: Boolean = false) {
         if (busy || (query.isBlank() && selectedCategory == null && !catalogMode)) return
         busy = true
+        val generation = searchGeneration
         val requestedPage = page
         status.text = if (append) "Loading more results..." else "Searching..."
         progress.visibility = View.VISIBLE
         progress.progress = requestedPage
         if (!append) content.removeAllViews()
         pageText.text = "SEARCHING PAGE $requestedPage"
-        worker.execute {
+        activeSearchTask = worker.submit {
             try {
                 val address = if (query.isBlank()) {
                     CatalogUrlBuilder.build(selectedCategory?.second, selectedSort, requestedPage)
@@ -933,6 +949,7 @@ class MainActivity : Activity() {
                     "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
                 }
                 val html = request(address)
+                if (Thread.currentThread().isInterrupted || generation != searchGeneration) return@submit
                 val parsed = SiteParser.parseSearch(Jsoup.parse(html, address))
                 val uniqueResults = LinkedHashMap<String, SearchResult>()
                 parsed.forEach { result ->
@@ -951,7 +968,9 @@ class MainActivity : Activity() {
                             .containsMatchIn(result.title)
                     )
                 }
+                if (Thread.currentThread().isInterrupted || generation != searchGeneration) return@submit
                 main.post {
+                    if (generation != searchGeneration || isFinishing) return@post
                     progress.max = resultList.size.coerceAtLeast(1)
                     progress.progress = 0
                     if (append) cachedAnimeGroups = cachedAnimeGroups + placeholders
@@ -992,6 +1011,7 @@ class MainActivity : Activity() {
                         val completed = runCatching { completion.take().get() }.getOrNull()
                         if (completed != null) {
                             main.post {
+                                if (generation != searchGeneration || isFinishing) return@post
                                 cachedAnimeGroups = cachedAnimeGroups.map {
                                     if (it.firstResult.url == completed.firstResult.url) completed else it
                                 }
@@ -1002,8 +1022,11 @@ class MainActivity : Activity() {
                         }
                     }
                 }
+                if (generation != searchGeneration) return@submit
                 main.post {
+                    if (generation != searchGeneration || isFinishing) return@post
                     busy = false
+                    activeSearchTask = null
                     progress.visibility = View.GONE
                     if (parsed.isEmpty() && !append) {
                         hasCachedSearch = true
@@ -1030,8 +1053,11 @@ class MainActivity : Activity() {
                     }
                 }
             } catch (error: Exception) {
+                if (generation != searchGeneration) return@submit
                 main.post {
+                    if (generation != searchGeneration || isFinishing) return@post
                     busy = false
+                    activeSearchTask = null
                     progress.visibility = View.GONE
                     if (append) page = (requestedPage - 1).coerceAtLeast(1)
                     status.text = "Search unavailable"
@@ -1286,6 +1312,7 @@ class MainActivity : Activity() {
         }.sortedBy { it.name.lowercase() }
 
     private fun fetchRemainingThumbnails(group: AnimeGroup) {
+        if (prefs.getBoolean("data_saver_mode", false)) return
         val episodes = group.details?.episodes.orEmpty()
         val key = group.name.lowercase()
         if (episodes.size <= 4 || !loadingExtraThumbnails.add(key)) return
@@ -1509,7 +1536,7 @@ class MainActivity : Activity() {
 
     private fun loadImage(url: String, target: ImageView) {
         target.tag = url
-        target.contentDescription = "Loading thumbnail"
+        target.contentDescription = "Thumbnail waiting to load"
         val cacheEnabled = getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)
         if (cacheEnabled) imageCache.get(url)?.let { bitmap ->
             target.animate().cancel()
@@ -1519,6 +1546,8 @@ class MainActivity : Activity() {
             target.setOnClickListener(null)
             return
         }
+
+        if (!isViewVisible(target)) return
 
         // Keep one request per URL even when search cards are rebuilt while
         // detail pages finish. Every currently visible ImageView gets the
@@ -1551,8 +1580,11 @@ class MainActivity : Activity() {
                 bitmap = try {
                     connection.inputStream.use { stream ->
                         val options = BitmapFactory.Options().apply {
-                            inSampleSize = if (getSharedPreferences("xanime", MODE_PRIVATE)
-                                    .getBoolean("high_quality_thumbnails", false)) 1 else 2
+                            inSampleSize = when {
+                                prefs.getBoolean("data_saver_mode", false) -> 4
+                                prefs.getBoolean("high_quality_thumbnails", false) -> 1
+                                else -> 2
+                            }
                         }
                         BitmapFactory.decodeStream(stream, null, options)
                     }
@@ -1592,6 +1624,23 @@ class MainActivity : Activity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun isViewVisible(view: View): Boolean {
+        if (!view.isShown || view.width <= 0 || view.height <= 0) return false
+        val visible = android.graphics.Rect()
+        return view.getGlobalVisibleRect(visible) && visible.width() > 0 && visible.height() > 0
+    }
+
+    private fun loadVisibleImages(parent: View) {
+        if (parent is ImageView) {
+            val url = parent.tag as? String
+            if (!url.isNullOrBlank() && parent.drawable == null && isViewVisible(parent)) loadImage(url, parent)
+            return
+        }
+        if (parent is ViewGroup) {
+            for (index in 0 until parent.childCount) loadVisibleImages(parent.getChildAt(index))
         }
     }
 
@@ -1666,6 +1715,7 @@ class MainActivity : Activity() {
         option("Fast search (up to 4 concurrent detail requests)", "fast_search", true)
         option("High-quality thumbnails (uses more data)", "high_quality_thumbnails", false)
         option("Cache search details and thumbnails", "cache_enabled", true)
+        option("Data Saver (smaller thumbnails, no extra preloading)", "data_saver_mode", false)
         AlertDialog.Builder(this)
             .setTitle("XAnime settings")
             .setView(panel)
