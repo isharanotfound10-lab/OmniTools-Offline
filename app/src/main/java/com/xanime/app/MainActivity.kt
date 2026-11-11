@@ -1499,10 +1499,10 @@ class MainActivity : Activity() {
                     setOnClickListener {
                         if (expanded) {
                             expandedAnimeNames.remove(groupKey)
-                            renderAnimeGroups(cachedAnimeGroups)
+                            renderAnimeGroups(if (showingFavorites) favoriteAnimeGroups else cachedAnimeGroups)
                         } else {
                             expandedAnimeNames.add(groupKey)
-                            renderAnimeGroups(cachedAnimeGroups)
+                            renderAnimeGroups(if (showingFavorites) favoriteAnimeGroups else cachedAnimeGroups)
                             fetchRemainingThumbnails(group)
                         }
                     }
