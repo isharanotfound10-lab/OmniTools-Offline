@@ -98,6 +98,11 @@ class MainActivity : Activity() {
     private val allSearchResults = mutableListOf<SearchResult>()
     private var busy = false
     private var activeSearchTask: Future<*>? = null
+    // Spaced clipboard writes allow keyboard clipboard history to observe each link.
+    private var bulkCopyRequest = 0
+    private var bulkCopyTask: Future<*>? = null
+    private var bulkCopyDialog: AlertDialog? = null
+    private var bulkCopyRunnable: Runnable? = null
     @Volatile private var searchGeneration = 0
     private var hasCachedSearch = false
     private var cachedAnimeGroups: List<AnimeGroup> = emptyList()
@@ -1115,6 +1120,14 @@ class MainActivity : Activity() {
             else "No matching results were found."))
             return
         }
+        if (showingFavorites) {
+            content.addView(actionButton("COPY DOWNLOAD LINKS", true) {
+                showBulkCopySeriesPicker(groups)
+            }, LinearLayout.LayoutParams(-1, dp(46)).apply { bottomMargin = dp(8) })
+            content.addView(label("Choose series and qualities, then save each link separately in your keyboard clipboard.", 11, muted, false).apply {
+                setPadding(dp(2), 0, dp(2), dp(12))
+            })
+        }
         groups.forEach { group ->
             val groupKey = group.name.lowercase()
             val expanded = groupKey in expandedAnimeNames
@@ -1316,6 +1329,187 @@ class MainActivity : Activity() {
                 AnimeGroup(title, result, null, emptyList(), item.optBoolean("subEng"))
             }.getOrNull()
         }.sortedBy { it.name.lowercase() }
+
+
+    private fun showBulkCopySeriesPicker(groups: List<AnimeGroup>) {
+        if (groups.isEmpty()) return
+        val selected = BooleanArray(groups.size)
+        AlertDialog.Builder(this)
+            .setTitle("Choose favorite series")
+            .setMultiChoiceItems(groups.map { it.name }.toTypedArray(), selected) { _, which, checked ->
+                selected[which] = checked
+            }
+            .setPositiveButton("CHOOSE QUALITY") { _, _ ->
+                val chosen = groups.filterIndexed { index, _ -> selected[index] }
+                if (chosen.isEmpty()) {
+                    Toast.makeText(this, "Select at least one series.", Toast.LENGTH_SHORT).show()
+                } else showBulkCopyQualityPicker(chosen)
+            }
+            .setNegativeButton("CANCEL", null)
+            .show()
+    }
+
+    private fun showBulkCopyQualityPicker(groups: List<AnimeGroup>) {
+        val qualities = listOf("240p", "480p", "720p", "1080p")
+        val labels = arrayOf("240p", "480p   🔥 HOT", "720p", "1080p")
+        val selected = booleanArrayOf(false, true, false, false)
+        AlertDialog.Builder(this)
+            .setTitle("Choose download qualities")
+            .setMultiChoiceItems(labels, selected) { _, which, checked ->
+                selected[which] = checked
+            }
+            .setPositiveButton("START COPYING") { _, _ ->
+                val chosenQualities = qualities.filterIndexed { index, _ -> selected[index] }
+                if (chosenQualities.isEmpty()) {
+                    Toast.makeText(this, "Choose at least one quality.", Toast.LENGTH_SHORT).show()
+                } else startBulkCopy(groups, chosenQualities)
+            }
+            .setNegativeButton("BACK") { _, _ -> showBulkCopySeriesPicker(groups) }
+            .show()
+    }
+
+    private fun startBulkCopy(groups: List<AnimeGroup>, qualities: List<String>) {
+        cancelBulkCopy(false)
+        val requestId = ++bulkCopyRequest
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        val progressText = label("Preparing episode links...", 12, muted, false)
+        val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = true
+        }
+        panel.addView(progressText, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        panel.addView(progressBar, LinearLayout.LayoutParams(-1, dp(5)))
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Bulk copy download links")
+            .setView(panel)
+            .setNegativeButton("CANCEL", null)
+            .create()
+        bulkCopyDialog = dialog
+        dialog.setOnCancelListener {
+            if (bulkCopyRequest == requestId) cancelBulkCopy(false)
+        }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setOnClickListener { cancelBulkCopy() }
+        }
+        dialog.show()
+
+        bulkCopyTask = detailWorker.submit {
+            val collected = LinkedHashSet<String>()
+            var episodesChecked = 0
+            var episodesFailed = 0
+            try {
+                groups.forEachIndexed { seriesIndex, group ->
+                    if (Thread.currentThread().isInterrupted) return@submit
+                    val firstDetails = runCatching {
+                        val html = request(group.firstResult.url)
+                        SiteParser.parseEpisode(Jsoup.parse(html, group.firstResult.url), group.firstResult.url)
+                    }.getOrNull()
+                    if (firstDetails == null) {
+                        episodesFailed++
+                        main.post {
+                            if (bulkCopyRequest == requestId && dialog.isShowing) {
+                                progressText.text = "Could not open " + group.name + "; continuing..."
+                            }
+                        }
+                        return@forEachIndexed
+                    }
+                    val episodes = firstDetails.episodes.ifEmpty {
+                        listOf(EpisodeLink(firstDetails.title, firstDetails.url, 0))
+                    }
+                    episodes.forEachIndexed { episodeIndex, episode ->
+                        if (Thread.currentThread().isInterrupted) return@submit
+                        val details = if (episode.url.trimEnd('/') == firstDetails.url.trimEnd('/')) {
+                            firstDetails
+                        } else runCatching {
+                            val html = request(episode.url)
+                            SiteParser.parseEpisode(Jsoup.parse(html, episode.url), episode.url)
+                        }.getOrNull()
+                        episodesChecked++
+                        if (details == null) {
+                            episodesFailed++
+                        } else {
+                            qualities.forEach { quality ->
+                                details.qualities[quality]?.takeIf {
+                                    it.startsWith("http://") || it.startsWith("https://")
+                                }?.let { collected.add(it) }
+                            }
+                        }
+                        val checked = episodesChecked
+                        main.post {
+                            if (bulkCopyRequest == requestId && dialog.isShowing) {
+                                progressText.text = group.name + " • Series " + (seriesIndex + 1) + "/" + groups.size +
+                                    " • Episode " + (episodeIndex + 1) + "/" + episodes.size + " • " + checked + " checked"
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Keep links already collected if one page fails.
+            }
+            if (Thread.currentThread().isInterrupted) return@submit
+            val links = collected.toList()
+            main.post {
+                if (bulkCopyRequest != requestId || !dialog.isShowing) return@post
+                if (links.isEmpty()) {
+                    progressBar.visibility = View.GONE
+                    progressText.text = "No matching download links found. Checked " + episodesChecked +
+                        " episodes; " + episodesFailed + " pages failed."
+                    dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.text = "CLOSE"
+                    dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setOnClickListener { dialog.dismiss() }
+                    return@post
+                }
+                progressBar.isIndeterminate = false
+                progressBar.max = links.size
+                progressBar.progress = 0
+                progressText.text = "Found " + links.size + " unique links. Copying one at a time..."
+                copyBulkLinksOneByOne(links, 0, requestId, dialog, progressText, progressBar, episodesFailed)
+            }
+        }
+    }
+
+    private fun copyBulkLinksOneByOne(
+        links: List<String>,
+        index: Int,
+        requestId: Int,
+        dialog: AlertDialog,
+        progressText: TextView,
+        progressBar: ProgressBar,
+        failedPages: Int
+    ) {
+        if (bulkCopyRequest != requestId || !dialog.isShowing) return
+        if (index >= links.size) {
+            bulkCopyRunnable = null
+            progressText.text = "Done! Copied " + links.size + " separate clipboard entries." +
+                (if (failedPages > 0) " " + failedPages + " pages could not be read." else "") +
+                " Keep Facemoji's clipboard history enabled to access them."
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.text = "DONE"
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setOnClickListener { dialog.dismiss() }
+            Toast.makeText(this, links.size.toString() + " links copied separately", Toast.LENGTH_LONG).show()
+            return
+        }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("XAnime link " + (index + 1), links[index]))
+        progressBar.progress = index + 1
+        progressText.text = "Copied " + (index + 1) + " / " + links.size + " • Keep XAnime open"
+        val next = Runnable {
+            copyBulkLinksOneByOne(links, index + 1, requestId, dialog, progressText, progressBar, failedPages)
+        }
+        bulkCopyRunnable = next
+        main.postDelayed(next, 1200L)
+    }
+
+    private fun cancelBulkCopy(dismissDialog: Boolean = true) {
+        bulkCopyRequest++
+        bulkCopyTask?.cancel(true)
+        bulkCopyTask = null
+        bulkCopyRunnable?.let { main.removeCallbacks(it) }
+        bulkCopyRunnable = null
+        val dialog = bulkCopyDialog
+        bulkCopyDialog = null
+        if (dismissDialog && dialog?.isShowing == true) dialog.dismiss()
+    }
 
     private fun fetchRemainingThumbnails(group: AnimeGroup) {
         if (prefs.getBoolean("data_saver_mode", false)) return
