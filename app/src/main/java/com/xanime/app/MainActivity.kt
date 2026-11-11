@@ -231,6 +231,8 @@ class MainActivity : Activity() {
             renderAnimeGroups(cachedAnimeGroups)
             pageText.text = "PAGE $page COMPLETE • ${cachedAnimeGroups.size} UNIQUE ANIME"
             scroll.post { scroll.scrollTo(0, searchScrollY) }
+        } else if (watchAnimeTab && query.isNotBlank()) {
+            runWatchAnimeSearch()
         } else if (query.isNotBlank() || selectedCategory != null) {
             runSearch()
         }
