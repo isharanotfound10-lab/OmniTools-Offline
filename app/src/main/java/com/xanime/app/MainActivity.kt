@@ -959,7 +959,12 @@ class MainActivity : Activity() {
                 val existingNames = if (append) cachedAnimeGroups.map {
                     it.name.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
                 }.toSet() else emptySet()
-                val newUniqueResults = uniqueResults.filterKeys { it !in existingNames }
+                // Pagination can repeat posts between adjacent pages. Filter by
+                // both normalized series title and canonical URL before loading
+                // any detail pages, so duplicates do not trigger extra requests.
+                val newUniqueResults = uniqueResults.filter { (key, result) ->
+                    key !in existingNames && result.url !in seenResultUrls
+                }
                 val resultList = newUniqueResults.values.toList()
                 val placeholders = resultList.map { result ->
                     AnimeGroup(
@@ -1037,7 +1042,9 @@ class MainActivity : Activity() {
         content.removeAllViews()
                         content.addView(infoCard("No matching adult-only results were found. Try another search term."))
                     } else {
-                        if (append) allSearchResults.addAll(parsed)
+                        if (!append) seenResultUrls.clear()
+                        parsed.forEach { seenResultUrls.add(it.url) }
+                        if (append) allSearchResults.addAll(parsed.filter { it.url !in allSearchResults.map(SearchResult::url).toSet() })
                         else {
                             allSearchResults.clear()
                             allSearchResults.addAll(parsed)
