@@ -113,6 +113,39 @@ object SiteParser {
         }
     }
 
+    fun parseWatchAnimeGenre(doc: Document): List<WatchAnimeSearchResult> {
+        val found = LinkedHashMap<String, WatchAnimeSearchResult>()
+        doc.select("#archive-content article.item").forEach { card ->
+            val titleAnchor = card.selectFirst(".data h3 a[href]")
+                ?: card.selectFirst(".poster a[href]")
+                ?: return@forEach
+            val url = titleAnchor.absUrl("href").let { raw ->
+                val uri = runCatching { URI(raw) }.getOrNull()
+                if (uri?.host?.lowercase() == "www.watchanimehentai.com" &&
+                    uri.path.orEmpty().startsWith("/info/") &&
+                    uri.rawQuery == null && uri.rawFragment == null
+                ) "https://www.watchanimehentai.com" + uri.path.orEmpty().let {
+                    if (it.endsWith("/")) it else "$it/"
+                } else ""
+            }
+            if (url.isBlank()) return@forEach
+            val image = card.selectFirst(".poster img")
+            val title = sequenceOf(
+                titleAnchor.text().trim(),
+                image?.attr("alt")?.trim().orEmpty(),
+                image?.attr("title")?.trim().orEmpty()
+            ).firstOrNull { it.isNotBlank() }.orEmpty()
+            if (title.isBlank()) return@forEach
+            val thumbnail = image?.let {
+                sequenceOf("data-lazy-src", "data-src", "src")
+                    .map { key -> it.absUrl(key) }
+                    .firstOrNull { value -> value.startsWith("https://") || value.startsWith("http://") }
+            }.orEmpty()
+            found[url] = WatchAnimeSearchResult(title, url, thumbnail, emptyList(), "", "")
+        }
+        return found.values.toList()
+    }
+
     fun parseWatchAnimeSearch(doc: Document): List<WatchAnimeSearchResult> {
         val found = LinkedHashMap<String, WatchAnimeSearchResult>()
         doc.select("article.search-result").forEach { card ->

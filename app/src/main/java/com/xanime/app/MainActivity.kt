@@ -165,7 +165,7 @@ class MainActivity : Activity() {
 "Mind Break" to "mind-break",
 "Molestation" to "molestation",
 "Monsters" to "monsters",
-"NTR" to "ntr"
+"NTR" to "ntr",
 "Nuns" to "nuns",
 "Nurses" to "nurses",
 "Office Ladies" to "office-ladies",
@@ -204,7 +204,7 @@ class MainActivity : Activity() {
 "Virgins" to "virgins",
 "X Ray" to "x-ray",
 "Yaoi" to "yaoi",
-"Yuri" to "yuri")
+"Yuri" to "yuri",)
     private var watchAnimePage = 1
     private var watchAnimeRequestId = 0
     private var watchAnimeLoading = false
@@ -630,32 +630,89 @@ class MainActivity : Activity() {
             setPadding(0, dp(12), 0, dp(6))
             letterSpacing = .1f
         })
-        val genreScroller = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
+
+        val genreSearchInput = EditText(this).apply {
+            hint = "Search genres..."
+            setHintTextColor(muted)
+            setTextColor(white)
+            textSize = 14f
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_DONE
+            setPadding(dp(13), 0, dp(10), 0)
+            background = ripple(glassDrawable(14))
         }
-        val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        genreRow.addView(actionButton("All", watchAnimeSelectedGenre == null) {
+        pageContent.addView(genreSearchInput, LinearLayout.LayoutParams(-1, dp(42)).apply {
+            bottomMargin = dp(7)
+        })
+
+        val genreActionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        genreActionRow.addView(actionButton("ALL GENRES", watchAnimeSelectedGenre == null) {
             if (watchAnimeSelectedGenre != null) {
                 watchAnimeSelectedGenre = null
                 watchAnimeQuery = ""
                 search.setText("")
+                genreSearchInput.setText("")
                 watchAnimePage = 1
                 watchAnimeResults = emptyList()
                 runWatchAnimeSearch()
             }
-        }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(7) })
-        watchAnimeGenres.forEach { (genreName, slug) ->
-            genreRow.addView(actionButton(genreName, watchAnimeSelectedGenre == slug) {
-                watchAnimeSelectedGenre = slug
-                watchAnimeQuery = ""
-                search.setText("")
-                watchAnimePage = 1
-                watchAnimeResults = emptyList()
-                runWatchAnimeSearch()
-            }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(7) })
+        }, LinearLayout.LayoutParams(-2, dp(34)))
+        pageContent.addView(genreActionRow, LinearLayout.LayoutParams(-1, dp(38)).apply {
+            bottomMargin = dp(5)
+        })
+
+        val genreSuggestions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(dp(7), dp(7), dp(7), dp(7))
+            background = rounded(surface, 13)
         }
-        genreScroller.addView(genreRow)
-        pageContent.addView(genreScroller, LinearLayout.LayoutParams(-1, dp(40)))
+        pageContent.addView(genreSuggestions, LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = dp(7)
+        })
+
+        fun refreshGenreSuggestions(rawQuery: String) {
+            genreSuggestions.removeAllViews()
+            val term = rawQuery.trim()
+            if (term.isBlank()) {
+                genreSuggestions.visibility = View.GONE
+                return
+            }
+            val matches = watchAnimeGenres
+                .filter { it.first.contains(term, ignoreCase = true) || it.second.contains(term, ignoreCase = true) }
+                .take(8)
+            genreSuggestions.visibility = View.VISIBLE
+            if (matches.isEmpty()) {
+                genreSuggestions.addView(label("No matching genres", 12, muted, false).apply {
+                    setPadding(dp(9), dp(10), dp(9), dp(10))
+                })
+                return
+            }
+            matches.forEach { (genreName, slug) ->
+                genreSuggestions.addView(actionButton(genreName, watchAnimeSelectedGenre == slug) {
+                    watchAnimeSelectedGenre = slug
+                    watchAnimeQuery = ""
+                    search.setText("")
+                    genreSearchInput.setText("")
+                    watchAnimePage = 1
+                    watchAnimeResults = emptyList()
+                    runWatchAnimeSearch()
+                }, LinearLayout.LayoutParams(-1, dp(38)).apply {
+                    bottomMargin = dp(4)
+                })
+            }
+        }
+
+        genreSearchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                refreshGenreSuggestions(s?.toString().orEmpty())
+            }
+        })
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 watchAnimeQuery = search.text.toString().trim()
@@ -806,13 +863,18 @@ class MainActivity : Activity() {
             try {
                 val address = watchAnimeSelectedGenre?.let { slug ->
                     "https://www.watchanimehentai.com/genre/$slug/" +
-                        if (requestedPage > 1) "?pagination=$requestedPage" else ""
+                        if (requestedPage > 1) "$requestedPage/" else ""
                 } ?: run {
                     val encoded = URLEncoder.encode(watchAnimeQuery.trim(), "UTF-8")
                     "https://www.watchanimehentai.com/search/$encoded/" +
                         if (requestedPage > 1) "?pagination=$requestedPage" else ""
                 }
-                val parsed = SiteParser.parseWatchAnimeSearch(Jsoup.parse(request(address), address))
+                val pageDocument = Jsoup.parse(request(address), address)
+                val parsed = if (watchAnimeSelectedGenre != null) {
+                    SiteParser.parseWatchAnimeGenre(pageDocument)
+                } else {
+                    SiteParser.parseWatchAnimeSearch(pageDocument)
+                }
                 main.post {
                     if (isFinishing || !showingWatchAnimeHentai || requestId != watchAnimeRequestId) return@post
                     watchAnimeLoading = false
