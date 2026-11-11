@@ -117,94 +117,93 @@ class MainActivity : Activity() {
     private var showingWatchAnimeHentai = false
     private var watchAnimeQuery = ""
     private var watchAnimeSelectedGenre: String? = null
-    private val watchAnimeGenres = listOf("Action" to "action",
-"Adventure" to "adventure",
-"Ahegao" to "ahegao",
-"Anal" to "anal",
-"Big Tits" to "big-tits",
-"Blackmail" to "blackmail",
-"Blowjob" to "blowjob",
-"Bondage" to "bondage",
-"Brainwashed" to "brainwashed",
-"Bukakke" to "bukakke",
-"Cat Girl" to "cat-girl",
-"Comedy" to "comedy",
-"Cosplay" to "cosplay",
-"Cream Pie" to "cream-pie",
-"Creampie" to "creampie",
-"Dark Skin" to "dark-skin",
-"Deepthroat" to "deepthroat",
-"Demons" to "demons",
-"Doctor" to "doctor",
-"Double Penatration" to "double-penatration",
-"Elf" to "elf",
-"Facial" to "facial",
-"Fantasy" to "fantasy",
-"Female Doctor" to "female-doctor",
-"Female Teacher" to "female-teacher",
-"Femdom" to "femdom",
-"Footjob" to "footjob",
-"Futanari" to "futanari",
-"Gangbang" to "gangbang",
-"Gyaru" to "gyaru",
-"Harem" to "harem",
-"Horny Slut" to "horny-slut",
-"Housewife" to "housewife",
-"Humiliation" to "humiliation",
-"Incest" to "incest",
-"Inflation" to "inflation",
-"Internal Cumshot" to "internal-cumshot",
-"Lactation" to "lactation",
-"Large Breasts" to "large-breasts",
-"Loli" to "loli",
-"Magical Girls" to "magical-girls",
-"Maid" to "maid",
-"Masturbation" to "masturbation",
-"Megane" to "megane",
-"Milf" to "milf",
-"Mind Break" to "mind-break",
-"Molestation" to "molestation",
-"Monsters" to "monsters",
-"NTR" to "ntr"
-"Nuns" to "nuns",
-"Nurses" to "nurses",
-"Office Ladies" to "office-ladies",
-"Orgy" to "orgy",
-"Pov" to "pov",
-"Pregnant" to "pregnant",
-"Princess" to "princess",
-"Public Sex" to "public-sex",
-"Rim Job" to "rim-job",
-"Romance" to "romance",
-"School Girls" to "school-girls",
-"School Life" to "school-life",
-"Sci Fi" to "sci-fi",
-"Shimapan" to "shimapan",
-"Shoutacon" to "shoutacon",
-"Slaves" to "slaves",
-"Squirting" to "squirting",
-"Stocking" to "stocking",
-"Submission" to "submission",
-"Succubus" to "succubus",
-"Super Power" to "super-power",
-"Supernatural" to "supernatural",
-"Swimsuit" to "swimsuit",
-"Tentacles" to "tentacles",
-"Three Some" to "three-some",
-"Tits" to "tits",
-"Tits Fuck" to "tits-fuck",
-"Torture" to "torture",
-"Toys" to "toys",
-"Train Molestation" to "train-molestation",
-"Tsundere" to "tsundere",
-"Uncensored" to "uncensored",
-"Urination" to "urination",
-"Vampire" to "vampire",
-"Vanilla" to "vanilla",
-"Virgins" to "virgins",
-"X Ray" to "x-ray",
-"Yaoi" to "yaoi",
-"Yuri" to "yuri")
+    private val watchAnimeGenres = listOf(
+        "Action" to "action",
+        "Adventure" to "adventure",
+        "Ahegao" to "ahegao",
+        "Anal" to "anal",
+        "Big Tits" to "big-tits",
+        "Blackmail" to "blackmail",
+        "Blowjob" to "blowjob",
+        "Bondage" to "bondage",
+        "Brainwashed" to "brainwashed",
+        "Bukakke" to "bukakke",
+        "Cat Girl" to "cat-girl",
+        "Comedy" to "comedy",
+        "Cosplay" to "cosplay",
+        "Cream Pie" to "cream-pie",
+        "Creampie" to "creampie",
+        "Dark Skin" to "dark-skin",
+        "Deepthroat" to "deepthroat",
+        "Demons" to "demons",
+        "Doctor" to "doctor",
+        "Double Penatration" to "double-penatration",
+        "Elf" to "elf",
+        "Facial" to "facial",
+        "Fantasy" to "fantasy",
+        "Female Doctor" to "female-doctor",
+        "Female Teacher" to "female-teacher",
+        "Femdom" to "femdom",
+        "Footjob" to "footjob",
+        "Futanari" to "futanari",
+        "Gangbang" to "gangbang",
+        "Gyaru" to "gyaru",
+        "Harem" to "harem",
+        "Horny Slut" to "horny-slut",
+        "Housewife" to "housewife",
+        "Humiliation" to "humiliation",
+        "Incest" to "incest",
+        "Inflation" to "inflation",
+        "Internal Cumshot" to "internal-cumshot",
+        "Lactation" to "lactation",
+        "Large Breasts" to "large-breasts",
+        "Magical Girls" to "magical-girls",
+        "Maid" to "maid",
+        "Masturbation" to "masturbation",
+        "Megane" to "megane",
+        "Milf" to "milf",
+        "Mind Break" to "mind-break",
+        "Molestation" to "molestation",
+        "Monsters" to "monsters",
+        "NTR" to "ntr",
+        "Nuns" to "nuns",
+        "Nurses" to "nurses",
+        "Office Ladies" to "office-ladies",
+        "Orgy" to "orgy",
+        "Pov" to "pov",
+        "Pregnant" to "pregnant",
+        "Princess" to "princess",
+        "Public Sex" to "public-sex",
+        "Rim Job" to "rim-job",
+        "Romance" to "romance",
+        "School Life" to "school-life",
+        "Sci Fi" to "sci-fi",
+        "Shimapan" to "shimapan",
+        "Slaves" to "slaves",
+        "Squirting" to "squirting",
+        "Stocking" to "stocking",
+        "Submission" to "submission",
+        "Succubus" to "succubus",
+        "Super Power" to "super-power",
+        "Supernatural" to "supernatural",
+        "Swimsuit" to "swimsuit",
+        "Tentacles" to "tentacles",
+        "Three Some" to "three-some",
+        "Tits" to "tits",
+        "Tits Fuck" to "tits-fuck",
+        "Torture" to "torture",
+        "Toys" to "toys",
+        "Train Molestation" to "train-molestation",
+        "Tsundere" to "tsundere",
+        "Uncensored" to "uncensored",
+        "Urination" to "urination",
+        "Vampire" to "vampire",
+        "Vanilla" to "vanilla",
+        "Virgins" to "virgins",
+        "X Ray" to "x-ray",
+        "Yaoi" to "yaoi",
+        "Yuri" to "yuri"
+    )
     private var watchAnimePage = 1
     private var watchAnimeRequestId = 0
     private var watchAnimeLoading = false
@@ -630,32 +629,89 @@ class MainActivity : Activity() {
             setPadding(0, dp(12), 0, dp(6))
             letterSpacing = .1f
         })
-        val genreScroller = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
+
+        val genreSearchInput = EditText(this).apply {
+            hint = "Search genres..."
+            setHintTextColor(muted)
+            setTextColor(white)
+            textSize = 14f
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_DONE
+            setPadding(dp(13), 0, dp(10), 0)
+            background = ripple(glassDrawable(14))
         }
-        val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        genreRow.addView(actionButton("All", watchAnimeSelectedGenre == null) {
+        pageContent.addView(genreSearchInput, LinearLayout.LayoutParams(-1, dp(42)).apply {
+            bottomMargin = dp(7)
+        })
+
+        val genreActionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        genreActionRow.addView(actionButton("ALL GENRES", watchAnimeSelectedGenre == null) {
             if (watchAnimeSelectedGenre != null) {
                 watchAnimeSelectedGenre = null
                 watchAnimeQuery = ""
                 search.setText("")
+                genreSearchInput.setText("")
                 watchAnimePage = 1
                 watchAnimeResults = emptyList()
                 runWatchAnimeSearch()
             }
-        }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(7) })
-        watchAnimeGenres.forEach { (genreName, slug) ->
-            genreRow.addView(actionButton(genreName, watchAnimeSelectedGenre == slug) {
-                watchAnimeSelectedGenre = slug
-                watchAnimeQuery = ""
-                search.setText("")
-                watchAnimePage = 1
-                watchAnimeResults = emptyList()
-                runWatchAnimeSearch()
-            }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(7) })
+        }, LinearLayout.LayoutParams(-2, dp(34)))
+        pageContent.addView(genreActionRow, LinearLayout.LayoutParams(-1, dp(38)).apply {
+            bottomMargin = dp(5)
+        })
+
+        val genreSuggestions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(dp(7), dp(7), dp(7), dp(7))
+            background = rounded(surface, 13)
         }
-        genreScroller.addView(genreRow)
-        pageContent.addView(genreScroller, LinearLayout.LayoutParams(-1, dp(40)))
+        pageContent.addView(genreSuggestions, LinearLayout.LayoutParams(-1, -2).apply {
+            bottomMargin = dp(7)
+        })
+
+        fun refreshGenreSuggestions(rawQuery: String) {
+            genreSuggestions.removeAllViews()
+            val term = rawQuery.trim()
+            if (term.isBlank()) {
+                genreSuggestions.visibility = View.GONE
+                return
+            }
+            val matches = watchAnimeGenres
+                .filter { it.first.contains(term, ignoreCase = true) || it.second.contains(term, ignoreCase = true) }
+                .take(8)
+            genreSuggestions.visibility = View.VISIBLE
+            if (matches.isEmpty()) {
+                genreSuggestions.addView(label("No matching genres", 12, muted, false).apply {
+                    setPadding(dp(9), dp(10), dp(9), dp(10))
+                })
+                return
+            }
+            matches.forEach { (genreName, slug) ->
+                genreSuggestions.addView(actionButton(genreName, watchAnimeSelectedGenre == slug) {
+                    watchAnimeSelectedGenre = slug
+                    watchAnimeQuery = ""
+                    search.setText("")
+                    genreSearchInput.setText("")
+                    watchAnimePage = 1
+                    watchAnimeResults = emptyList()
+                    runWatchAnimeSearch()
+                }, LinearLayout.LayoutParams(-1, dp(38)).apply {
+                    bottomMargin = dp(4)
+                })
+            }
+        }
+
+        genreSearchInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                refreshGenreSuggestions(s?.toString().orEmpty())
+            }
+        })
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 watchAnimeQuery = search.text.toString().trim()
