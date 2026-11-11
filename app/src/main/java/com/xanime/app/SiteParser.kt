@@ -3,6 +3,24 @@ package com.xanime.app
 import org.jsoup.nodes.Document
 import java.net.URI
 
+data class WatchAnimeSearchResult(
+    val title: String,
+    val url: String,
+    val thumbnail: String,
+    val genres: List<String>,
+    val studio: String,
+    val description: String
+)
+
+data class WatchAnimeEpisode(
+    val title: String,
+    val url: String,
+    val thumbnail: String,
+    val number: Int,
+    val subbed: Boolean
+)
+
+
 data class SearchResult(
     val title: String,
     val url: String,
@@ -52,6 +70,72 @@ object SiteParser {
             }.orEmpty()
             val duration = card.selectFirst(".time-infos")?.text()?.trim().orEmpty()
             found[url] = SearchResult(title, url, thumbnail, duration)
+        }
+        return found.values.toList()
+    }
+
+    fun parseWatchAnimeSeries(doc: Document, pageUrl: String): List<WatchAnimeEpisode> {
+        val found = LinkedHashMap<String, WatchAnimeEpisode>()
+        doc.select("article.item.se.episodes").forEach { card ->
+            val anchor = card.selectFirst("a[href]") ?: return@forEach
+            val url = anchor.absUrl("href")
+                .takeIf { it.startsWith("https://www.watchanimehentai.com/episodes/") }
+                ?: return@forEach
+            val title = card.selectFirst(".data h3")?.text()?.trim()
+                ?: card.selectFirst(".season_m .c")?.text()?.trim()
+                ?: anchor.text().trim()
+            val number = Regex("(?i)episode\\s*(\\d+)")
+                .find(title)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+            if (number <= 0) return@forEach
+            val image = card.selectFirst(".poster img")
+            val thumbnail = image?.let {
+                sequenceOf("data-src", "data-lazy-src", "src")
+                    .map { key -> it.absUrl(key) }
+                    .firstOrNull { value -> value.startsWith("https://") || value.startsWith("http://") }
+            }.orEmpty()
+            val subbed = card.select(".ep_status, .status-sub").text()
+                .contains("subbed", ignoreCase = true)
+            found[url] = WatchAnimeEpisode("Episode $number", url, thumbnail, number, subbed)
+        }
+        return found.values.sortedBy { it.number }
+    }
+
+    fun parseWatchAnimeEnglishDownload(doc: Document, episodeUrl: String): String? {
+        val anchor = doc.select("a.button22[href]").firstOrNull {
+            it.text().contains("Download in English", ignoreCase = true)
+        } ?: doc.select("a[href]").firstOrNull {
+            it.text().contains("Download in English", ignoreCase = true)
+        } ?: return null
+        val resolved = anchor.absUrl("href")
+        return resolved.takeIf {
+            it.startsWith("https://www.watchanimehentai.com/players/") &&
+                it.contains("p2.php")
+        }
+    }
+
+    fun parseWatchAnimeSearch(doc: Document): List<WatchAnimeSearchResult> {
+        val found = LinkedHashMap<String, WatchAnimeSearchResult>()
+        doc.select("article.search-result").forEach { card ->
+            val anchor = card.selectFirst("a.search-result-poster[href]")
+                ?: card.selectFirst("h2.search-result-title a[href]")
+                ?: return@forEach
+            val url = anchor.absUrl("href")
+                .takeIf { it.startsWith("https://www.watchanimehentai.com/info/") }
+                ?: return@forEach
+            val title = card.selectFirst(".search-result-title a")?.text()?.trim().orEmpty()
+                .ifBlank { card.selectFirst("img[alt]")?.attr("alt")?.trim().orEmpty() }
+            if (title.isBlank()) return@forEach
+            val image = card.selectFirst(".search-result-poster img")
+            val thumbnail = image?.let {
+                sequenceOf("data-src", "data-lazy-src", "src")
+                    .map { key -> it.absUrl(key) }
+                    .firstOrNull { it.startsWith("https://") || it.startsWith("http://") }
+            }.orEmpty()
+            val genres = card.select(".search-result-tags a")
+                .map { it.text().trim() }.filter { it.isNotBlank() }
+            val studio = card.select(".search-result-studios a").firstOrNull()?.text()?.trim().orEmpty()
+            val description = card.selectFirst(".search-result-description")?.text()?.trim().orEmpty()
+            found[url] = WatchAnimeSearchResult(title, url, thumbnail, genres, studio, description)
         }
         return found.values.toList()
     }
