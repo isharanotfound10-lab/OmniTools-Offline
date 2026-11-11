@@ -862,13 +862,18 @@ class MainActivity : Activity() {
             try {
                 val address = watchAnimeSelectedGenre?.let { slug ->
                     "https://www.watchanimehentai.com/genre/$slug/" +
-                        if (requestedPage > 1) "?pagination=$requestedPage" else ""
+                        if (requestedPage > 1) "$requestedPage/" else ""
                 } ?: run {
                     val encoded = URLEncoder.encode(watchAnimeQuery.trim(), "UTF-8")
                     "https://www.watchanimehentai.com/search/$encoded/" +
                         if (requestedPage > 1) "?pagination=$requestedPage" else ""
                 }
-                val parsed = SiteParser.parseWatchAnimeSearch(Jsoup.parse(request(address), address))
+                val pageDocument = Jsoup.parse(request(address), address)
+                val parsed = if (watchAnimeSelectedGenre != null) {
+                    SiteParser.parseWatchAnimeGenre(pageDocument)
+                } else {
+                    SiteParser.parseWatchAnimeSearch(pageDocument)
+                }
                 main.post {
                     if (isFinishing || !showingWatchAnimeHentai || requestId != watchAnimeRequestId) return@post
                     watchAnimeLoading = false
