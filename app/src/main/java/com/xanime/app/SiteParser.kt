@@ -3,6 +3,8 @@ package com.xanime.app
 import org.jsoup.nodes.Document
 import java.net.URI
 
+data class WatchAnimeSearchResult(val title: String, val url: String, val thumbnail: String, val genres: List<String>, val studio: String, val description: String)
+
 data class SearchResult(
     val title: String,
     val url: String,
@@ -52,6 +54,33 @@ object SiteParser {
             }.orEmpty()
             val duration = card.selectFirst(".time-infos")?.text()?.trim().orEmpty()
             found[url] = SearchResult(title, url, thumbnail, duration)
+        }
+        return found.values.toList()
+    }
+
+    fun parseWatchAnimeSearch(doc: Document): List<WatchAnimeSearchResult> {
+        val found = LinkedHashMap<String, WatchAnimeSearchResult>()
+        doc.select("article.search-result").forEach { card ->
+            val anchor = card.selectFirst("a.search-result-poster[href]")
+                ?: card.selectFirst("h2.search-result-title a[href]")
+                ?: return@forEach
+            val url = anchor.absUrl("href")
+                .takeIf { it.startsWith("https://www.watchanimehentai.com/info/") }
+                ?: return@forEach
+            val title = card.selectFirst(".search-result-title a")?.text()?.trim().orEmpty()
+                .ifBlank { card.selectFirst("img[alt]")?.attr("alt")?.trim().orEmpty() }
+            if (title.isBlank()) return@forEach
+            val image = card.selectFirst(".search-result-poster img")
+            val thumbnail = image?.let {
+                sequenceOf("data-src", "data-lazy-src", "src")
+                    .map { key -> it.absUrl(key) }
+                    .firstOrNull { it.startsWith("https://") || it.startsWith("http://") }
+            }.orEmpty()
+            val genres = card.select(".search-result-tags a")
+                .map { it.text().trim() }.filter { it.isNotBlank() }
+            val studio = card.select(".search-result-studios a").firstOrNull()?.text()?.trim().orEmpty()
+            val description = card.selectFirst(".search-result-description")?.text()?.trim().orEmpty()
+            found[url] = WatchAnimeSearchResult(title, url, thumbnail, genres, studio, description)
         }
         return found.values.toList()
     }

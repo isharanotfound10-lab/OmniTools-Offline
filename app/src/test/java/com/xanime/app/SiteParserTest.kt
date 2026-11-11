@@ -23,6 +23,28 @@ class SiteParserTest {
         assertEquals("18:22", results[0].duration)
     }
 
+    @Test fun parsesWatchAnimeHentaiSearchCards() {
+        val html = """
+            <section class="search-results-list">
+              <article class="search-result">
+                <a class="search-result-poster" href="/info/example-title/"><img src="/cdn/images/posters/example.jpg" alt="Example Title"></a>
+                <h2 class="search-result-title"><a href="/info/example-title/">Example Title</a></h2>
+                <div class="search-result-tags"><a href="/genre/fantasy">Fantasy</a><a href="/genre/action">Action</a></div>
+                <div class="search-result-studios"><a href="/studio/example/">Example Studio</a></div>
+                <p class="search-result-description">A short description.</p>
+              </article>
+            </section>
+        """.trimIndent()
+        val results = SiteParser.parseWatchAnimeSearch(Jsoup.parse(html, "https://www.watchanimehentai.com/search/example/"))
+        assertEquals(1, results.size)
+        assertEquals("Example Title", results[0].title)
+        assertEquals("https://www.watchanimehentai.com/info/example-title/", results[0].url)
+        assertEquals("https://www.watchanimehentai.com/cdn/images/posters/example.jpg", results[0].thumbnail)
+        assertEquals(listOf("Fantasy", "Action"), results[0].genres)
+        assertEquals("Example Studio", results[0].studio)
+        assertEquals("A short description.", results[0].description)
+    }
+
     @Test fun groupsEpisodeLinksAndExtractsExact480pUrl() {
         val html = """
             <h1>Adult Series Episode 2</h1>
