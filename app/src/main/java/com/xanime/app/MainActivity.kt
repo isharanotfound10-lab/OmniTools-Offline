@@ -116,6 +116,95 @@ class MainActivity : Activity() {
     private var showingHentaini = false
     private var showingWatchAnimeHentai = false
     private var watchAnimeQuery = ""
+    private var watchAnimeSelectedGenre: String? = null
+    private val watchAnimeGenres = listOf("Action" to "action",
+"Adventure" to "adventure",
+"Ahegao" to "ahegao",
+"Anal" to "anal",
+"Big Tits" to "big-tits",
+"Blackmail" to "blackmail",
+"Blowjob" to "blowjob",
+"Bondage" to "bondage",
+"Brainwashed" to "brainwashed",
+"Bukakke" to "bukakke",
+"Cat Girl" to "cat-girl",
+"Comedy" to "comedy",
+"Cosplay" to "cosplay",
+"Cream Pie" to "cream-pie",
+"Creampie" to "creampie",
+"Dark Skin" to "dark-skin",
+"Deepthroat" to "deepthroat",
+"Demons" to "demons",
+"Doctor" to "doctor",
+"Double Penatration" to "double-penatration",
+"Elf" to "elf",
+"Facial" to "facial",
+"Fantasy" to "fantasy",
+"Female Doctor" to "female-doctor",
+"Female Teacher" to "female-teacher",
+"Femdom" to "femdom",
+"Footjob" to "footjob",
+"Futanari" to "futanari",
+"Gangbang" to "gangbang",
+"Gyaru" to "gyaru",
+"Harem" to "harem",
+"Horny Slut" to "horny-slut",
+"Housewife" to "housewife",
+"Humiliation" to "humiliation",
+"Incest" to "incest",
+"Inflation" to "inflation",
+"Internal Cumshot" to "internal-cumshot",
+"Lactation" to "lactation",
+"Large Breasts" to "large-breasts",
+"Loli" to "loli",
+"Magical Girls" to "magical-girls",
+"Maid" to "maid",
+"Masturbation" to "masturbation",
+"Megane" to "megane",
+"Milf" to "milf",
+"Mind Break" to "mind-break",
+"Molestation" to "molestation",
+"Monsters" to "monsters",
+"NTR" to "ntr"
+"Nuns" to "nuns",
+"Nurses" to "nurses",
+"Office Ladies" to "office-ladies",
+"Orgy" to "orgy",
+"Pov" to "pov",
+"Pregnant" to "pregnant",
+"Princess" to "princess",
+"Public Sex" to "public-sex",
+"Rim Job" to "rim-job",
+"Romance" to "romance",
+"School Girls" to "school-girls",
+"School Life" to "school-life",
+"Sci Fi" to "sci-fi",
+"Shimapan" to "shimapan",
+"Shoutacon" to "shoutacon",
+"Slaves" to "slaves",
+"Squirting" to "squirting",
+"Stocking" to "stocking",
+"Submission" to "submission",
+"Succubus" to "succubus",
+"Super Power" to "super-power",
+"Supernatural" to "supernatural",
+"Swimsuit" to "swimsuit",
+"Tentacles" to "tentacles",
+"Three Some" to "three-some",
+"Tits" to "tits",
+"Tits Fuck" to "tits-fuck",
+"Torture" to "torture",
+"Toys" to "toys",
+"Train Molestation" to "train-molestation",
+"Tsundere" to "tsundere",
+"Uncensored" to "uncensored",
+"Urination" to "urination",
+"Vampire" to "vampire",
+"Vanilla" to "vanilla",
+"Virgins" to "virgins",
+"X Ray" to "x-ray",
+"Yaoi" to "yaoi",
+"Yuri" to "yuri")
     private var watchAnimePage = 1
     private var watchAnimeRequestId = 0
     private var watchAnimeLoading = false
@@ -528,6 +617,7 @@ class MainActivity : Activity() {
         })
         searchRow.addView(actionButton("SEARCH ↗") {
             watchAnimeQuery = search.text.toString().trim()
+            watchAnimeSelectedGenre = null
             watchAnimePage = 1
             watchAnimeResults = emptyList()
             runWatchAnimeSearch()
@@ -535,9 +625,41 @@ class MainActivity : Activity() {
         pageContent.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply {
             topMargin = dp(7)
         })
+
+        pageContent.addView(label("GENRES", 10, muted, true).apply {
+            setPadding(0, dp(12), 0, dp(6))
+            letterSpacing = .1f
+        })
+        val genreScroller = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+        }
+        val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        genreRow.addView(actionButton("All", watchAnimeSelectedGenre == null) {
+            if (watchAnimeSelectedGenre != null) {
+                watchAnimeSelectedGenre = null
+                watchAnimeQuery = ""
+                search.setText("")
+                watchAnimePage = 1
+                watchAnimeResults = emptyList()
+                runWatchAnimeSearch()
+            }
+        }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(7) })
+        watchAnimeGenres.forEach { (genreName, slug) ->
+            genreRow.addView(actionButton(genreName, watchAnimeSelectedGenre == slug) {
+                watchAnimeSelectedGenre = slug
+                watchAnimeQuery = ""
+                search.setText("")
+                watchAnimePage = 1
+                watchAnimeResults = emptyList()
+                runWatchAnimeSearch()
+            }, LinearLayout.LayoutParams(-2, dp(36)).apply { marginEnd = dp(7) })
+        }
+        genreScroller.addView(genreRow)
+        pageContent.addView(genreScroller, LinearLayout.LayoutParams(-1, dp(40)))
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
                 watchAnimeQuery = search.text.toString().trim()
+                watchAnimeSelectedGenre = null
                 watchAnimePage = 1
                 watchAnimeResults = emptyList()
                 runWatchAnimeSearch()
@@ -546,8 +668,11 @@ class MainActivity : Activity() {
         }
 
         status = label(
-            if (watchAnimeQuery.isBlank()) "Search the WatchAnimeHentai catalogue"
-            else "Results for: $watchAnimeQuery",
+            when {
+                watchAnimeSelectedGenre != null -> "Browse genre: ${watchAnimeGenres.firstOrNull { it.second == watchAnimeSelectedGenre }?.first ?: watchAnimeSelectedGenre}"
+                watchAnimeQuery.isBlank() -> "Search the WatchAnimeHentai catalogue"
+                else -> "Results for: $watchAnimeQuery"
+            },
             13, muted, true
         ).apply { setPadding(0, dp(16), 0, dp(8)) }
         pageContent.addView(status)
@@ -572,8 +697,8 @@ class MainActivity : Activity() {
             renderWatchAnimeResults(watchAnimeResults)
         } else if (watchAnimeQuery.isNotBlank() && !watchAnimeLoading) {
             runWatchAnimeSearch()
-        } else if (watchAnimeQuery.isBlank()) {
-            content.addView(infoCard("Enter a title and tap SEARCH. This source has no filters in this version."))
+        } else if (watchAnimeQuery.isBlank() && watchAnimeSelectedGenre == null) {
+            content.addView(infoCard("Search titles or choose a genre to browse the catalogue."))
         }
         setContentView(root)
         animateScreen(root)
@@ -666,8 +791,8 @@ class MainActivity : Activity() {
     }
 
     private fun runWatchAnimeSearch(append: Boolean = false) {
-        if (watchAnimeLoading || watchAnimeQuery.isBlank()) {
-            if (watchAnimeQuery.isBlank()) status.text = "Enter a title to search."
+        if (watchAnimeLoading || (watchAnimeQuery.isBlank() && watchAnimeSelectedGenre == null)) {
+            if (watchAnimeQuery.isBlank() && watchAnimeSelectedGenre == null) status.text = "Enter a title or choose a genre."
             return
         }
         watchAnimeLoading = true
@@ -679,9 +804,14 @@ class MainActivity : Activity() {
         pageText.text = "SEARCHING • PAGE $requestedPage"
         worker.execute {
             try {
-                val encoded = URLEncoder.encode(watchAnimeQuery.trim(), "UTF-8")
-                val address = "https://www.watchanimehentai.com/search/$encoded/" +
-                    if (requestedPage > 1) "?pagination=$requestedPage" else ""
+                val address = watchAnimeSelectedGenre?.let { slug ->
+                    "https://www.watchanimehentai.com/genre/$slug/" +
+                        if (requestedPage > 1) "?pagination=$requestedPage" else ""
+                } ?: run {
+                    val encoded = URLEncoder.encode(watchAnimeQuery.trim(), "UTF-8")
+                    "https://www.watchanimehentai.com/search/$encoded/" +
+                        if (requestedPage > 1) "?pagination=$requestedPage" else ""
+                }
                 val parsed = SiteParser.parseWatchAnimeSearch(Jsoup.parse(request(address), address))
                 main.post {
                     if (isFinishing || !showingWatchAnimeHentai || requestId != watchAnimeRequestId) return@post

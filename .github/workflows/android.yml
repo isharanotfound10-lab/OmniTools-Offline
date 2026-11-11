@@ -1,7 +1,7 @@
 name: XAnime Android Build
 on:
   push:
-    branches: [main, xanime-app, feature/catalog-sorting, feature/xanime-visual-refresh, feature/xanime-logo, feature/xanime-favorites-logo-polish, feature/xanime-hentaini-search, feature/hentaini-episode-streams, feature/hentaini-episode-data-fix, feature/hentaini-episode-data-fix-v2, fix/hentaini-per-episode-assets, feature/watchanimehentai-on-hentaini-final]
+    branches: [main, xanime-app, feature/catalog-sorting, feature/xanime-visual-refresh, feature/xanime-logo, feature/xanime-favorites-logo-polish, feature/xanime-hentaini-search, feature/hentaini-episode-streams, feature/hentaini-episode-data-fix, feature/hentaini-episode-data-fix-v2, fix/hentaini-per-episode-assets, feature/watchanimehentai-on-hentaini-final, feature/watchanimehentai-genres]
   pull_request:
     branches: [main, xanime-app, feature/catalog-sorting, feature/xanime-visual-refresh, feature/xanime-logo, feature/xanime-favorites-logo-polish, feature/xanime-hentaini-search, feature/hentaini-episode-streams, feature/hentaini-episode-data-fix, feature/hentaini-episode-data-fix-v2, feature/hentaini-bulk-copy-stream-links]
   workflow_dispatch:
