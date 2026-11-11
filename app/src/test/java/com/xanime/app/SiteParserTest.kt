@@ -51,6 +51,52 @@ class SiteParserTest {
         assertEquals("A short description.", results[0].description)
     }
 
+    @Test fun parsesWatchAnimeHentaiSeriesEpisodeCards() {
+        val html = """
+            <div id="episodes"><div class="items">
+              <article class="item se episodes">
+                <a href="/episodes/example-episode-1/">
+                  <div class="poster">
+                    <img src="/cdn/images/episodes/example-episode-1.jpg">
+                    <div class="season_m"><span class="c">Episode 1</span></div>
+                    <div class="ep_status"><span class="status-sub">Subbed</span></div>
+                  </div>
+                  <div class="data"><h3>Episode 1</h3></div>
+                </a>
+              </article>
+              <article class="item se episodes">
+                <a href="/episodes/example-episode-2/">
+                  <div class="poster"><img src="/cdn/images/episodes/example-episode-2.jpg"></div>
+                  <div class="data"><h3>Episode 2</h3></div>
+                </a>
+              </article>
+            </div></div>
+        """.trimIndent()
+        val parsed = SiteParser.parseWatchAnimeSeries(
+            Jsoup.parse(html, "https://www.watchanimehentai.com/info/example/")
+                , "https://www.watchanimehentai.com/info/example/"
+        )
+        assertEquals(2, parsed.size)
+        assertEquals(1, parsed[0].number)
+        assertEquals("Episode 1", parsed[0].title)
+        assertEquals("https://www.watchanimehentai.com/cdn/images/episodes/example-episode-1.jpg", parsed[0].thumbnail)
+        assertTrue(parsed[0].subbed)
+        assertEquals("https://www.watchanimehentai.com/episodes/example-episode-2/", parsed[1].url)
+    }
+
+    @Test fun selectsOnlyEnglishWatchAnimeDownloadEndpoint() {
+        val html = """
+            <a href="/players/p2/p2.php?id=abc" class="button22">Download in English (HD)</a>
+            <a href="/players/p3/p3.php?id=def" class="button22">Download in Portuguese (HD)</a>
+            <a href="/players/p4/p4.php?id=ghi" class="button22">Download in Spanish (HD)</a>
+        """.trimIndent()
+        val parsed = SiteParser.parseWatchAnimeEnglishDownload(
+            Jsoup.parse(html, "https://www.watchanimehentai.com/download-hentai/example-episode-1/"),
+            "https://www.watchanimehentai.com/download-hentai/example-episode-1/"
+        )
+        assertEquals("https://www.watchanimehentai.com/players/p2/p2.php?id=abc", parsed)
+    }
+
     @Test fun groupsEpisodeLinksAndExtractsExact480pUrl() {
         val html = """
             <h1>Adult Series Episode 2</h1>
