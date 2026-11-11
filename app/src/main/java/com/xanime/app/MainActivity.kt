@@ -1554,8 +1554,8 @@ class MainActivity : Activity() {
         }
 
         if (!isViewVisible(target)) {
-            if (target.getTag(android.R.id.content) != url) {
-                target.setTag(android.R.id.content, url)
+            if (target.getTag(R.id.tag_load_image_visibility_url) != url) {
+                target.setTag(R.id.tag_load_image_visibility_url, url)
                 val observer = object : android.view.ViewTreeObserver.OnGlobalLayoutListener,
                     android.view.ViewTreeObserver.OnScrollChangedListener {
                     override fun onGlobalLayout() = checkVisibility()
@@ -1568,7 +1568,7 @@ class MainActivity : Activity() {
                                 tree.removeOnGlobalLayoutListener(this)
                                 tree.removeOnScrollChangedListener(this)
                             }
-                            target.setTag(android.R.id.content, null)
+                            target.setTag(R.id.tag_load_image_visibility_url, null)
                             loadImage(url, target)
                         }
                     }
