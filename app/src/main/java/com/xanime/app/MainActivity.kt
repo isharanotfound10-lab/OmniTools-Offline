@@ -48,14 +48,15 @@ import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
 import java.util.concurrent.Callable
+import java.util.concurrent.Future
 import org.jsoup.Jsoup
 
 class MainActivity : Activity() {
     private val prefs get() = getSharedPreferences("xanime", MODE_PRIVATE)
     private val amoled get() = prefs.getBoolean("amoled_mode", false)
-    private val bgColor: Int get() = if (amoled) Color.BLACK else Color.rgb(7, 6, 15)
-    private val surface: Int get() = if (amoled) Color.rgb(13, 13, 17) else Color.rgb(24, 19, 36)
-    private val surface2: Int get() = if (amoled) Color.rgb(24, 24, 29) else Color.rgb(34, 26, 49)
+    private val bgColor: Int get() = if (amoled) Color.BLACK else Color.rgb(2, 6, 9)
+    private val surface: Int get() = if (amoled) Color.rgb(8, 16, 20) else Color.rgb(5, 23, 32)
+    private val surface2: Int get() = if (amoled) Color.rgb(13, 27, 33) else Color.rgb(7, 39, 51)
     private val accent: Int get() = when (prefs.getString("accent_color", "Purple")) {
         "Pink" -> Color.rgb(255, 76, 164)
         "Cyan" -> Color.rgb(0, 190, 210)
@@ -96,13 +97,17 @@ class MainActivity : Activity() {
     private val seenResultUrls = mutableSetOf<String>()
     private val allSearchResults = mutableListOf<SearchResult>()
     private var busy = false
+    private var activeSearchTask: Future<*>? = null
+    @Volatile private var searchGeneration = 0
     private var hasCachedSearch = false
     private var cachedAnimeGroups: List<AnimeGroup> = emptyList()
     private var searchScrollY = 0
     private var isDetailScreen = false
     private var showingFavorites = false
     private var showingHentaini = false
+    private var showingHentainiFavorites = false
     private var hentainiQuery = ""
+    private var hentainiGenre: String? = null
     private var hentainiOffset = 0
     private var hentainiTotal = 0
     private var hentainiRequestId = 0
@@ -116,6 +121,7 @@ class MainActivity : Activity() {
     private lateinit var root: LinearLayout
     private lateinit var content: LinearLayout
     private lateinit var scroll: ScrollView
+    private lateinit var pageContent: LinearLayout
     private lateinit var status: TextView
     private lateinit var progress: ProgressBar
     private lateinit var search: EditText
@@ -194,23 +200,31 @@ class MainActivity : Activity() {
         window.statusBarColor = bgColor
         window.navigationBarColor = bgColor
         root = baseLayout()
+        // One page-level scroll view keeps the search controls and every result
+        // in the same scrollable area instead of trapping scrolling in results.
+        scroll = ScrollView(this).apply { isFillViewport = false }
+        pageContent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(pageContent, ViewGroup.LayoutParams(-1, -2))
+        root.addView(scroll, LinearLayout.LayoutParams(-1, -1))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label("XAnime", 25, white, true))
-        titles.addView(label(":|", 17, accent, true).apply {
-            letterSpacing = .22f
-            setPadding(dp(2), dp(1), 0, 0)
+        titles.addView(label(":|  DISCOVER • WATCH • ENJOY", 9, muted, true).apply {
+            letterSpacing = .12f
+            setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!showingHentaini) {
-            header.addView(actionButton(if (showingFavorites) "‹ Home" else "♥ Favorites", false) {
-                showingFavorites = !showingFavorites
-                showHome()
-            }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
-        }
+        header.addView(actionButton(
+            if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
+            else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
+        ) {
+            if (showingHentaini) showingHentainiFavorites = !showingHentainiFavorites
+            else showingFavorites = !showingFavorites
+            showHome()
+        }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
         header.addView(actionButton("⚙", false) { showSettings() },
             LinearLayout.LayoutParams(dp(44), dp(44)))
-        root.addView(header)
+        pageContent.addView(header)
 
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         sourceTabs.addView(actionButton("XAnime", !showingHentaini) {
@@ -220,59 +234,97 @@ class MainActivity : Activity() {
         sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
             showingHentaini = true
             showingFavorites = false
+            showingHentainiFavorites = false
             showHome()
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        root.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
 
         if (showingHentaini) {
             showHentainiHome()
             return
         }
 
+        // Keep the search controls compact so results get most of the screen.
         search = EditText(this).apply {
-            hint = "Search titles..."; setHintTextColor(muted); setTextColor(white)
-            textSize = 15f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setPadding(dp(15), 0, dp(15), 0); background = ripple(glassDrawable(16))
+            hint = "Search Hanime Titles..."; setHintTextColor(muted); setTextColor(white)
+            textSize = 14f; isSingleLine = true; imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(13), 0, dp(10), 0); background = ripple(glassDrawable(14))
             setText(query)
         }
-        root.addView(search, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(22) })
-        root.addView(actionButton("SEARCH") { startSearch(true) }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(9) })
-        if (!showingFavorites) root.addView(label("BROWSE BY CATEGORY", 10, muted, true).apply {
-            setPadding(0, dp(15), 0, dp(7))
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchRow.addView(search, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+            marginEnd = dp(7)
         })
-        val categoryScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-        val categoryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        categoryRow.addView(actionButton("All", selectedCategory == null && catalogMode) {
-            selectAllCategories()
-        }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
-        categories.forEach { (name, slug) ->
-            val isSelected = selectedCategory?.second == slug
-            categoryRow.addView(actionButton(name, isSelected) {
-                selectCategory(name, slug)
-            }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
+        searchRow.addView(actionButton("SEARCH ↗") { startSearch(true) },
+            LinearLayout.LayoutParams(dp(88), dp(44)))
+        pageContent.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
+
+        val filtersPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
         }
-        categoryScroller.addView(categoryRow)
-        if (!showingFavorites) root.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(42)))
-        if (query.isBlank() && !showingFavorites) {
-            root.addView(label("SORT BY", 10, muted, true).apply {
-                setPadding(0, dp(12), 0, dp(7))
-            })
-            val sortScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
-            val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            listOf(
-                "latest" to "Latest",
-                "views" to "Most Viewed",
-                "longest" to "Longest",
-                "rate" to "Top Rated",
-                "random" to "Random"
-            ).forEach { (filter, title) ->
-                sortRow.addView(actionButton(title, selectedSort == filter) {
-                    selectSort(filter)
-                }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(7) })
+        if (!showingFavorites) {
+            val categoryScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+            val categoryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            categoryRow.addView(actionButton("All", selectedCategory == null && catalogMode) {
+                selectAllCategories()
+            }, LinearLayout.LayoutParams(-2, dp(34)).apply { marginEnd = dp(6) })
+            categories.forEach { (name, slug) ->
+                val isSelected = selectedCategory?.second == slug
+                categoryRow.addView(actionButton(name, isSelected) {
+                    selectCategory(name, slug)
+                }, LinearLayout.LayoutParams(-2, dp(34)).apply { marginEnd = dp(6) })
             }
-            sortScroller.addView(sortRow)
-            root.addView(sortScroller, LinearLayout.LayoutParams(-1, dp(42)))
+            categoryScroller.addView(categoryRow)
+            filtersPanel.addView(label("CATEGORIES", 9, muted, true).apply {
+                setPadding(0, dp(5), 0, dp(4))
+            })
+            filtersPanel.addView(categoryScroller, LinearLayout.LayoutParams(-1, dp(37)))
+            if (query.isBlank()) {
+                val sortScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+                val sortRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                listOf(
+                    "latest" to "Latest",
+                    "views" to "Most Viewed",
+                    "longest" to "Longest",
+                    "rate" to "Top Rated",
+                    "random" to "Random"
+                ).forEach { (filter, title) ->
+                    sortRow.addView(actionButton(title, selectedSort == filter) {
+                        selectSort(filter)
+                    }, LinearLayout.LayoutParams(-2, dp(34)).apply { marginEnd = dp(6) })
+                }
+                sortScroller.addView(sortRow)
+                filtersPanel.addView(label("SORT BY", 9, muted, true).apply {
+                    setPadding(0, dp(5), 0, dp(4))
+                })
+                filtersPanel.addView(sortScroller, LinearLayout.LayoutParams(-1, dp(37)))
+            }
         }
+        lateinit var filtersToggle: Button
+        filtersToggle = actionButton(
+            if (selectedCategory != null || catalogMode || selectedSort != "latest") "FILTERS • ACTIVE ▾" else "FILTERS ▾",
+            false
+        ) {
+            val opening = filtersPanel.visibility != View.VISIBLE
+            if (opening) {
+                filtersPanel.visibility = View.VISIBLE
+                animateReveal(filtersPanel)
+            } else {
+                filtersPanel.animate().alpha(0f).translationY(-dp(5).toFloat()).setDuration(130)
+                    .withEndAction {
+                        filtersPanel.visibility = View.GONE
+                        filtersPanel.alpha = 1f
+                        filtersPanel.translationY = 0f
+                    }.start()
+            }
+            filtersToggle.text = if (opening) "HIDE FILTERS ▴" else if (selectedCategory != null || catalogMode || selectedSort != "latest") "FILTERS • ACTIVE ▾" else "FILTERS ▾"
+        }
+        pageContent.addView(filtersToggle, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(4) })
+        pageContent.addView(filtersPanel, LinearLayout.LayoutParams(-1, -2))
         search.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) { startSearch(true); true } else false
         }
@@ -280,29 +332,29 @@ class MainActivity : Activity() {
         status = label(if (query.isBlank()) "Search the catalogue" else "Results for: $query", 14, muted, true).apply {
             setPadding(0, dp(18), 0, dp(8))
         }
-        root.addView(status)
+        pageContent.addView(status)
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             visibility = View.GONE
             max = maxSearchPages
             progress = 0
             isIndeterminate = false
         }
-        root.addView(progress, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(5) })
-        scroll = ScrollView(this).apply {
-            isFillViewport = true
-        }
+        pageContent.addView(progress, LinearLayout.LayoutParams(-1, dp(5)).apply { topMargin = dp(5) })
         content = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, dp(4), 0, dp(10)) }
         if (query.isBlank() && selectedCategory == null && !catalogMode) content.addView(infoCard("Search titles, choose a category, or select a sort filter to browse the full catalogue."))
-        scroll.addView(content)
-        root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        pageContent.addView(content, LinearLayout.LayoutParams(-1, -2))
         pageText = label("SEARCH RESULTS FROM PAGE 1 ONLY", 10, muted, true).apply {
             gravity = Gravity.CENTER
             setPadding(0, dp(10), 0, dp(4))
         }
-        root.addView(pageText)
+        pageContent.addView(pageText)
         setContentView(root)
         animateScreen(root)
-        scroll.setOnScrollChangeListener { _, _, scrollY, _, _ -> ambientBackground?.setScrollOffset(scrollY) }
+        scroll.setOnScrollChangeListener { _, _, scrollY, _, _ ->
+            ambientBackground?.setScrollOffset(scrollY)
+            loadVisibleImages(pageContent)
+        }
+        scroll.post { loadVisibleImages(pageContent) }
         if (showingFavorites) {
             status.text = "Your saved series"
             val favorites = loadFavoriteGroups()
@@ -333,10 +385,24 @@ class MainActivity : Activity() {
 
 
     private fun showHentainiHome() {
-        root.addView(label("HENTAINI", 22, white, true).apply {
+        pageContent.addView(label(if (showingHentainiFavorites) "YOUR FAVORITES" else "HENTAINI", 22, white, true).apply {
             setPadding(0, dp(22), 0, dp(8))
         })
-        root.addView(label("LIVE SEARCH", 10, accent, true).apply {
+        if (showingHentainiFavorites) {
+            val saved = loadHentainiFavorites()
+            pageContent.addView(label("SAVED SERIES • " + saved.size, 10, accent, true).apply {
+                setPadding(0, 0, 0, dp(12))
+            })
+            val savedList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            pageContent.addView(savedList, LinearLayout.LayoutParams(-1, -2))
+            if (saved.isEmpty()) savedList.addView(infoCard("No favorites yet. Tap the heart on any Hentaini series to save it here."))
+            else saved.forEach { addHentainiCard(it, savedList) }
+            setContentView(root)
+            animateScreen(root)
+            isDetailScreen = false
+            return
+        }
+        pageContent.addView(label("LIVE SEARCH", 10, accent, true).apply {
             letterSpacing = .12f
             setPadding(0, 0, 0, dp(12))
         })
@@ -352,59 +418,71 @@ class MainActivity : Activity() {
             background = ripple(glassDrawable(16))
             setText(hentainiQuery)
         }
-        root.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchRow.addView(input, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+            marginEnd = dp(8)
+        })
+        pageContent.addView(searchRow, LinearLayout.LayoutParams(-1, dp(52)))
+
+        val genreScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
+        val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf("Ahegao" to "ahegao","Anal" to "anal","BBW" to "bbw","Big Breast" to "big breast","Blackmail" to "blackmail","Bondage" to "bondage","Chikan" to "chikan","Cosplay" to "cosplay","Futanari" to "futanari","Garyu" to "garyu","Harem" to "harem","Incest" to "incest","Maid" to "maid","Milf" to "milf","Netorare" to "netorare","Nurse" to "nurse","Orgy" to "orgy","Oyakodon" to "oyakodon","Paizuri" to "paizuri","Rape" to "rape","Scholar" to "scholar","Shotacon" to "shotacon","Small Breasts" to "small breasts","Succubus" to "succubus","Tentacles" to "tentacles",).forEach { (name, slug) ->
+            genreRow.addView(actionButton(name, hentainiGenre == slug) {
+                hentainiGenre = if (hentainiGenre == slug) null else slug
+                hentainiQuery = ""
+                showHome()
+            }, LinearLayout.LayoutParams(-2, dp(38)).apply { marginEnd = dp(8) })
+        }
+        genreScroller.addView(genreRow)
+        pageContent.addView(genreScroller, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(9) })
 
         val statusView = label(
-            if (hentainiQuery.isBlank()) "Search Hentaini titles" else "Results for: " + hentainiQuery,
+            if (hentainiQuery.isBlank()) "Search Hentaini Titles" else "Results for: " + hentainiQuery,
             13, muted, true
         ).apply { setPadding(0, dp(14), 0, dp(8)) }
-        root.addView(statusView)
+        pageContent.addView(statusView)
 
         val progressView = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             visibility = View.GONE
             isIndeterminate = true
         }
-        root.addView(progressView, LinearLayout.LayoutParams(-1, dp(4)))
+        pageContent.addView(progressView, LinearLayout.LayoutParams(-1, dp(4)))
 
         val results = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(12), 0, dp(12))
         }
-        val resultsScroll = ScrollView(this).apply { isFillViewport = false }
-        resultsScroll.addView(results)
-        root.addView(resultsScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        pageContent.addView(results, LinearLayout.LayoutParams(-1, -2))
 
         val loadMore = actionButton("LOAD MORE RESULTS", false) { }
         loadMore.setOnClickListener {
-            hentainiSearch(hentainiQuery, false, statusView, progressView, results, loadMore)
+            hentainiSearch(hentainiQuery, false, statusView, progressView, results, loadMore, hentainiGenre)
         }
         loadMore.visibility = View.GONE
-        root.addView(loadMore, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
+        pageContent.addView(loadMore, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(6) })
 
         fun submitSearch() {
             hentainiQuery = input.text.toString().trim()
-            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore)
+            hentainiGenre = null
+            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore, null)
         }
-        val debounce = Runnable { submitSearch() }
-        input.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                main.removeCallbacks(debounce)
-                main.postDelayed(debounce, 500)
-            }
-            override fun afterTextChanged(s: Editable?) = Unit
-        })
+        searchRow.addView(actionButton("SEARCH ↗") { submitSearch() },
+            LinearLayout.LayoutParams(dp(100), dp(48)))
         input.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                main.removeCallbacks(debounce)
                 submitSearch()
                 true
             } else false
         }
-        if (hentainiQuery.isNotBlank()) {
-            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore)
+        if (hentainiGenre != null) {
+            hentainiSearch("", true, statusView, progressView, results, loadMore, hentainiGenre)
+        } else if (hentainiQuery.isNotBlank()) {
+            hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore, null)
         } else {
-            results.addView(infoCard("Type a title to search the Hentaini catalogue."))
+            results.addView(infoCard("Search titles or choose a genre to browse."))
         }
 
         setContentView(root)
@@ -418,9 +496,10 @@ class MainActivity : Activity() {
         statusView: TextView,
         progressView: ProgressBar,
         output: LinearLayout,
-        loadMoreButton: Button?
+        loadMoreButton: Button?,
+        genre: String? = null
     ) {
-        if (term.isBlank()) {
+        if (term.isBlank() && genre.isNullOrBlank()) {
             hentainiRequestId++
             hentainiLoading = false
             hentainiResults.clear()
@@ -442,14 +521,17 @@ class MainActivity : Activity() {
             output.removeAllViews()
         }
         hentainiLoading = true
-        statusView.text = if (reset) "Searching Hentaini..." else "Loading more results..."
+        statusView.text = if (reset) {
+            if (genre != null) "Loading " + genre.uppercase() + " titles..." else "Searching Hentaini..."
+        } else "Loading more results..."
         progressView.visibility = View.VISIBLE
         loadMoreButton?.isEnabled = false
 
         val requestedOffset = hentainiOffset
         worker.execute {
             try {
-                val page = HentainiApi.search(term, requestedOffset, 10)
+                val page = if (!genre.isNullOrBlank()) HentainiApi.searchGenre(genre, requestedOffset, 10)
+                    else HentainiApi.search(term, requestedOffset, 10)
                 main.post {
                     if (isFinishing || requestId != hentainiRequestId || !showingHentaini) return@post
                     hentainiLoading = false
@@ -459,7 +541,7 @@ class MainActivity : Activity() {
                     hentainiOffset = page.offset + page.results.size
                     hentainiTotal = page.total
                     statusView.text = if (hentainiResults.isEmpty()) {
-                        "No results for: " + term
+                        if (genre != null) "No titles found in " + genre.uppercase() else "No results for: " + term
                     } else {
                         hentainiResults.size.toString() + " of " + hentainiTotal + " results"
                     }
@@ -476,10 +558,10 @@ class MainActivity : Activity() {
                     hentainiLoading = false
                     progressView.visibility = View.GONE
                     loadMoreButton?.isEnabled = true
-                    statusView.text = "Hentaini search failed."
+                    statusView.text = "Hentaini search failed: " + (error.message ?: error.javaClass.simpleName)
                     if (hentainiResults.isEmpty()) {
                         output.removeAllViews()
-                        output.addView(infoCard("Could not load live results. Check your connection and try again."))
+                        output.addView(infoCard("Could not load live results. " + (error.message ?: "Please try again.")))
                     } else {
                         Toast.makeText(this, "Could not load more results.", Toast.LENGTH_SHORT).show()
                     }
@@ -520,8 +602,13 @@ class MainActivity : Activity() {
         episodeCount.tag = series.id
         details.addView(episodeCount)
         card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+        card.addView(actionButton(if (isHentainiFavorite(series)) "♥" else "♡", false) {
+            toggleHentainiFavorite(series)
+        }, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginStart = dp(5) })
         card.addView(label("OPEN  ›", 9, accent, true))
         output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        animateEntrance(card, output.childCount - 1)
+        addPressFeedback(card)
         if (series.thumbnailUrl.isNotBlank()) loadImage(series.thumbnailUrl, thumbnail)
 
         // Look up the real count for every series; hasEpisodes can be stale.
@@ -537,6 +624,44 @@ class MainActivity : Activity() {
         }
     }
 
+
+    private fun hentainiFavoriteEntries(): Set<String> =
+        prefs.getStringSet("hentaini_favorite_series", emptySet())?.toSet() ?: emptySet()
+
+    private fun isHentainiFavorite(series: HentainiSeries): Boolean =
+        hentainiFavoriteEntries().any { encoded ->
+            runCatching { org.json.JSONObject(encoded).optString("slug") == series.slug }.getOrDefault(false)
+        }
+
+    private fun toggleHentainiFavorite(series: HentainiSeries) {
+        val entries = hentainiFavoriteEntries().toMutableSet()
+        val existing = entries.firstOrNull { encoded ->
+            runCatching { org.json.JSONObject(encoded).optString("slug") == series.slug }.getOrDefault(false)
+        }
+        if (existing != null) {
+            entries.remove(existing)
+            Toast.makeText(this, "Removed from Hentaini Favorites", Toast.LENGTH_SHORT).show()
+        } else {
+            val item = org.json.JSONObject()
+                .put("id", series.id).put("title", series.title).put("slug", series.slug)
+                .put("hId", series.hId).put("hasEpisodes", series.hasEpisodes)
+                .put("thumbnailUrl", series.thumbnailUrl)
+            entries.add(item.toString())
+            Toast.makeText(this, "Added to Hentaini Favorites", Toast.LENGTH_SHORT).show()
+        }
+        prefs.edit().putStringSet("hentaini_favorite_series", entries).apply()
+        showHome()
+    }
+
+    private fun loadHentainiFavorites(): List<HentainiSeries> =
+        hentainiFavoriteEntries().mapNotNull { encoded ->
+            runCatching {
+                val item = org.json.JSONObject(encoded)
+                val slug = item.optString("slug").takeIf { it.isNotBlank() } ?: return@runCatching null
+                HentainiSeries(item.optInt("id"), item.optString("title"), slug,
+                    item.optString("hId"), item.optBoolean("hasEpisodes", true), item.optString("thumbnailUrl"))
+            }.getOrNull()
+        }.sortedBy { it.title.lowercase() }
 
     private fun showHentainiSeries(series: HentainiSeries) {
         showingHentaini = true
@@ -633,10 +758,10 @@ class MainActivity : Activity() {
         streams.addView(label("Finding available download streams...", 11, muted, false))
         card.addView(streams)
         output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        animateEntrance(card, output.childCount - 1)
 
-        // Never substitute the series cover for a missing episode image:
-        // that makes every episode appear to have the same thumbnail.
-        if (episode.thumbnailUrl.isNotBlank()) loadImage(episode.thumbnailUrl, thumbnail)
+        // Wait for the episode page's own image. The thumbnail attached to
+        // a series-list card may be the shared series/search image.
 
         detailWorker.execute {
             val details = hentainiEpisodeCache[episode.url] ?: runCatching {
@@ -670,8 +795,19 @@ class MainActivity : Activity() {
                     available.size.toString() + " AVAILABLE DOWNLOAD STREAMS",
                     9, accent, true
                 ).apply { setPadding(0, 0, 0, dp(8)) })
-                available.forEach { stream ->
-                    streams.addView(actionButton("COPY " + stream.host.uppercase(), false) {
+                val collapsedHosts = setOf(
+                    "1fichier.com",
+                    "burstcloud.co",
+                    "mp4upload.com",
+                    "streamwish.to",
+                    "yourupload.com"
+                )
+                fun isCollapsedProvider(stream: HentainiStream): Boolean {
+                    val host = Uri.parse(stream.url).host.orEmpty().lowercase()
+                    return collapsedHosts.any { host == it || host.endsWith("." + it) }
+                }
+                fun addStreamButton(stream: HentainiStream, target: LinearLayout) {
+                    target.addView(actionButton("COPY " + stream.host.uppercase(), false) {
                         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText(
                             stream.host + " download link", stream.url
@@ -679,11 +815,46 @@ class MainActivity : Activity() {
                         Toast.makeText(this, stream.host + " link copied!", Toast.LENGTH_SHORT).show()
                     }, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(7) })
                 }
+
+                val regularStreams = available.filterNot { isCollapsedProvider(it) }
+                val moreStreams = available.filter { isCollapsedProvider(it) }
+                regularStreams.forEach { addStreamButton(it, streams) }
+
+                if (moreStreams.isNotEmpty()) {
+                    val hiddenLinks = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                        visibility = View.GONE
+                    }
+                    moreStreams.forEach { addStreamButton(it, hiddenLinks) }
+
+                    lateinit var moreButton: Button
+                    moreButton = actionButton("MORE LINKS ⬇︎", false) {
+                        val expanded = hiddenLinks.visibility != View.VISIBLE
+                        if (expanded) {
+                            hiddenLinks.visibility = View.VISIBLE
+                            animateReveal(hiddenLinks)
+                        } else {
+                            hiddenLinks.animate().alpha(0f).translationY(-dp(4).toFloat()).setDuration(120)
+                                .withEndAction {
+                                    hiddenLinks.visibility = View.GONE
+                                    hiddenLinks.alpha = 1f
+                                    hiddenLinks.translationY = 0f
+                                }.start()
+                        }
+                        moreButton.text = if (expanded) "LESS LINKS ⬆︎" else "MORE LINKS ⬇︎"
+                    }
+                    streams.addView(moreButton, LinearLayout.LayoutParams(-1, dp(42)).apply {
+                        topMargin = dp(2)
+                        bottomMargin = dp(7)
+                    })
+                    streams.addView(hiddenLinks)
+                }
             }
         }
     }
 
     private fun startSearch(reset: Boolean) {
+        if (reset) cancelActiveSearch()
         val value = search.text.toString().trim()
         if (value.isBlank()) { status.text = "Enter a search term or choose a category."; return }
         selectedCategory = null
@@ -751,16 +922,24 @@ class MainActivity : Activity() {
         showHome()
     }
 
+    private fun cancelActiveSearch() {
+        searchGeneration++
+        activeSearchTask?.cancel(true)
+        activeSearchTask = null
+        busy = false
+    }
+
     private fun runSearch(append: Boolean = false) {
         if (busy || (query.isBlank() && selectedCategory == null && !catalogMode)) return
         busy = true
+        val generation = searchGeneration
         val requestedPage = page
         status.text = if (append) "Loading more results..." else "Searching..."
         progress.visibility = View.VISIBLE
         progress.progress = requestedPage
         if (!append) content.removeAllViews()
         pageText.text = "SEARCHING PAGE $requestedPage"
-        worker.execute {
+        activeSearchTask = worker.submit {
             try {
                 val address = if (query.isBlank()) {
                     CatalogUrlBuilder.build(selectedCategory?.second, selectedSort, requestedPage)
@@ -769,6 +948,7 @@ class MainActivity : Activity() {
                     "https://xanimeporn.com/?s=$encoded&paged=$requestedPage"
                 }
                 val html = request(address)
+                if (Thread.currentThread().isInterrupted || generation != searchGeneration) return@submit
                 val parsed = SiteParser.parseSearch(Jsoup.parse(html, address))
                 val uniqueResults = LinkedHashMap<String, SearchResult>()
                 parsed.forEach { result ->
@@ -778,7 +958,12 @@ class MainActivity : Activity() {
                 val existingNames = if (append) cachedAnimeGroups.map {
                     it.name.lowercase().replace(Regex("[^a-z0-9]+"), " ").trim()
                 }.toSet() else emptySet()
-                val newUniqueResults = uniqueResults.filterKeys { it !in existingNames }
+                // Pagination can repeat posts between adjacent pages. Filter by
+                // both normalized series title and canonical URL before loading
+                // any detail pages, so duplicates do not trigger extra requests.
+                val newUniqueResults = uniqueResults.filter { (key, result) ->
+                    key !in existingNames && result.url !in seenResultUrls
+                }
                 val resultList = newUniqueResults.values.toList()
                 val placeholders = resultList.map { result ->
                     AnimeGroup(
@@ -787,7 +972,9 @@ class MainActivity : Activity() {
                             .containsMatchIn(result.title)
                     )
                 }
+                if (Thread.currentThread().isInterrupted || generation != searchGeneration) return@submit
                 main.post {
+                    if (generation != searchGeneration || isFinishing) return@post
                     progress.max = resultList.size.coerceAtLeast(1)
                     progress.progress = 0
                     if (append) cachedAnimeGroups = cachedAnimeGroups + placeholders
@@ -828,6 +1015,7 @@ class MainActivity : Activity() {
                         val completed = runCatching { completion.take().get() }.getOrNull()
                         if (completed != null) {
                             main.post {
+                                if (generation != searchGeneration || isFinishing) return@post
                                 cachedAnimeGroups = cachedAnimeGroups.map {
                                     if (it.firstResult.url == completed.firstResult.url) completed else it
                                 }
@@ -838,8 +1026,11 @@ class MainActivity : Activity() {
                         }
                     }
                 }
+                if (generation != searchGeneration) return@submit
                 main.post {
+                    if (generation != searchGeneration || isFinishing) return@post
                     busy = false
+                    activeSearchTask = null
                     progress.visibility = View.GONE
                     if (parsed.isEmpty() && !append) {
                         hasCachedSearch = true
@@ -850,7 +1041,9 @@ class MainActivity : Activity() {
         content.removeAllViews()
                         content.addView(infoCard("No matching adult-only results were found. Try another search term."))
                     } else {
-                        if (append) allSearchResults.addAll(parsed)
+                        if (!append) seenResultUrls.clear()
+                        parsed.forEach { seenResultUrls.add(it.url) }
+                        if (append) allSearchResults.addAll(parsed.filter { it.url !in allSearchResults.map(SearchResult::url).toSet() })
                         else {
                             allSearchResults.clear()
                             allSearchResults.addAll(parsed)
@@ -866,8 +1059,11 @@ class MainActivity : Activity() {
                     }
                 }
             } catch (error: Exception) {
+                if (generation != searchGeneration) return@submit
                 main.post {
+                    if (generation != searchGeneration || isFinishing) return@post
                     busy = false
+                    activeSearchTask = null
                     progress.visibility = View.GONE
                     if (append) page = (requestedPage - 1).coerceAtLeast(1)
                     status.text = "Search unavailable"
@@ -1122,6 +1318,7 @@ class MainActivity : Activity() {
         }.sortedBy { it.name.lowercase() }
 
     private fun fetchRemainingThumbnails(group: AnimeGroup) {
+        if (prefs.getBoolean("data_saver_mode", false)) return
         val episodes = group.details?.episodes.orEmpty()
         val key = group.name.lowercase()
         if (episodes.size <= 4 || !loadingExtraThumbnails.add(key)) return
@@ -1233,6 +1430,8 @@ class MainActivity : Activity() {
         if (item.duration.isNotBlank()) details.addView(label(item.duration, 11, muted, false).apply { setPadding(0, dp(6), 0, 0) })
         card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
         content.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        animateEntrance(card, content.childCount - 1)
+        addPressFeedback(card)
         if (item.thumbnail.isNotBlank()) loadImage(item.thumbnail, image)
     }
 
@@ -1343,7 +1542,7 @@ class MainActivity : Activity() {
 
     private fun loadImage(url: String, target: ImageView) {
         target.tag = url
-        target.contentDescription = "Loading thumbnail"
+        target.contentDescription = "Thumbnail waiting to load"
         val cacheEnabled = getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("cache_enabled", true)
         if (cacheEnabled) imageCache.get(url)?.let { bitmap ->
             target.animate().cancel()
@@ -1351,6 +1550,32 @@ class MainActivity : Activity() {
             target.setImageBitmap(bitmap)
             target.contentDescription = "Episode thumbnail"
             target.setOnClickListener(null)
+            return
+        }
+
+        if (!isViewVisible(target)) {
+            if (target.getTag(R.id.tag_load_image_visibility_url) != url) {
+                target.setTag(R.id.tag_load_image_visibility_url, url)
+                val observer = object : android.view.ViewTreeObserver.OnGlobalLayoutListener,
+                    android.view.ViewTreeObserver.OnScrollChangedListener {
+                    override fun onGlobalLayout() = checkVisibility()
+                    override fun onScrollChanged() = checkVisibility()
+                    private fun checkVisibility() {
+                        if (!target.isAttachedToWindow) return
+                        if (isViewVisible(target)) {
+                            val tree = target.viewTreeObserver
+                            if (tree.isAlive) {
+                                tree.removeOnGlobalLayoutListener(this)
+                                tree.removeOnScrollChangedListener(this)
+                            }
+                            target.setTag(R.id.tag_load_image_visibility_url, null)
+                            loadImage(url, target)
+                        }
+                    }
+                }
+                target.viewTreeObserver.addOnGlobalLayoutListener(observer)
+                target.viewTreeObserver.addOnScrollChangedListener(observer)
+            }
             return
         }
 
@@ -1385,8 +1610,11 @@ class MainActivity : Activity() {
                 bitmap = try {
                     connection.inputStream.use { stream ->
                         val options = BitmapFactory.Options().apply {
-                            inSampleSize = if (getSharedPreferences("xanime", MODE_PRIVATE)
-                                    .getBoolean("high_quality_thumbnails", false)) 1 else 2
+                            inSampleSize = when {
+                                prefs.getBoolean("data_saver_mode", false) -> 4
+                                prefs.getBoolean("high_quality_thumbnails", false) -> 1
+                                else -> 2
+                            }
                         }
                         BitmapFactory.decodeStream(stream, null, options)
                     }
@@ -1408,7 +1636,12 @@ class MainActivity : Activity() {
                     view.animate().cancel()
                     stopThumbnailShimmer(view)
                     if (completedBitmap != null) {
+                        view.alpha = 0f
                         view.setImageBitmap(completedBitmap)
+                        if (animationsEnabled()) {
+                            view.animate().alpha(1f).setDuration(220)
+                                .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                        } else view.alpha = 1f
                         view.contentDescription = "Episode thumbnail"
                         view.setOnClickListener(null)
                     } else {
@@ -1421,6 +1654,23 @@ class MainActivity : Activity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun isViewVisible(view: View): Boolean {
+        if (!view.isShown || view.width <= 0 || view.height <= 0) return false
+        val visible = android.graphics.Rect()
+        return view.getGlobalVisibleRect(visible) && visible.width() > 0 && visible.height() > 0
+    }
+
+    private fun loadVisibleImages(parent: View) {
+        if (parent is ImageView) {
+            val url = parent.tag as? String
+            if (!url.isNullOrBlank() && parent.drawable == null && isViewVisible(parent)) loadImage(url, parent)
+            return
+        }
+        if (parent is ViewGroup) {
+            for (index in 0 until parent.childCount) loadVisibleImages(parent.getChildAt(index))
         }
     }
 
@@ -1495,6 +1745,7 @@ class MainActivity : Activity() {
         option("Fast search (up to 4 concurrent detail requests)", "fast_search", true)
         option("High-quality thumbnails (uses more data)", "high_quality_thumbnails", false)
         option("Cache search details and thumbnails", "cache_enabled", true)
+        option("Data Saver (smaller thumbnails, no extra preloading)", "data_saver_mode", false)
         AlertDialog.Builder(this)
             .setTitle("XAnime settings")
             .setView(panel)
@@ -1507,13 +1758,48 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun animateEntrance(view: View, index: Int) {
-        if (!getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("smooth_animations", true)) return
+    private fun animationsEnabled(): Boolean =
+        prefs.getBoolean("smooth_animations", true)
+
+    private fun animateReveal(view: View) {
+        if (!animationsEnabled()) {
+            view.alpha = 1f
+            view.translationY = 0f
+            return
+        }
         view.alpha = 0f
-        view.translationY = dp(9).toFloat()
-        view.animate().alpha(1f).translationY(0f)
-            .setStartDelay((index.coerceAtMost(5) * 25).toLong())
-            .setDuration(180).start()
+        view.translationY = -dp(5).toFloat()
+        view.animate().alpha(1f).translationY(0f).setDuration(190)
+            .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+    }
+
+    private fun animateEntrance(view: View, index: Int) {
+        if (!animationsEnabled()) return
+        view.animate().cancel()
+        view.alpha = 0f
+        view.translationY = dp(10).toFloat()
+        view.scaleX = 0.985f
+        view.scaleY = 0.985f
+        view.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+            .setStartDelay((index.coerceAtMost(6) * 28).toLong())
+            .setDuration(230)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+            .start()
+    }
+
+    private fun addPressFeedback(view: View) {
+        view.setOnTouchListener { target, event ->
+            if (!animationsEnabled()) return@setOnTouchListener false
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN ->
+                    target.animate().scaleX(0.985f).scaleY(0.985f).setDuration(85).start()
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL ->
+                    target.animate().scaleX(1f).scaleY(1f).setDuration(150)
+                        .setInterpolator(android.view.animation.OvershootInterpolator(1.15f)).start()
+            }
+            false
+        }
     }
 
     private fun infoCard(message: String) = TextView(this).apply {
@@ -1543,13 +1829,13 @@ class MainActivity : Activity() {
 
     private fun glassDrawable(radius: Int): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.argb(174, 34, 25, 53), Color.argb(142, 17, 17, 32))).apply {
+            intArrayOf(Color.argb(205, 8, 35, 47), Color.argb(188, 3, 17, 27))).apply {
             cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), Color.argb(105, Color.red(accent), Color.green(accent), Color.blue(accent)))
+            setStroke(dp(1), Color.argb(112, 34, 174, 197))
         }
 
     private fun ripple(content: Drawable): RippleDrawable =
-        RippleDrawable(ColorStateList.valueOf(Color.argb(72, 225, 205, 255)), content, null)
+        RippleDrawable(ColorStateList.valueOf(Color.argb(76, 100, 220, 235)), content, null)
 
     private fun animateScreen(view: View) {
         if (!prefs.getBoolean("smooth_animations", true)) return
