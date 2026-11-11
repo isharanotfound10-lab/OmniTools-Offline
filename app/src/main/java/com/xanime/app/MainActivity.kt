@@ -1497,6 +1497,7 @@ class MainActivity : Activity() {
             copyBulkLinksOneByOne(links, index + 1, requestId, dialog, progressText, progressBar, failedPages)
         }
         bulkCopyRunnable = next
+        // Give Facemoji and other keyboard clipboard listeners time to retain this entry.
         main.postDelayed(next, 1200L)
     }
 
