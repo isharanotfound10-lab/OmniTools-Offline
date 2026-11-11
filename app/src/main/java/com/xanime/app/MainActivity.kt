@@ -1382,7 +1382,7 @@ class MainActivity : Activity() {
         val prefixInput = EditText(this).apply {
             setText(".download")
             hint = "Prefix"
-            singleLine = true
+            setSingleLine(true)
             isEnabled = true
         }
         prefixToggle.setOnCheckedChangeListener { _, checked -> prefixInput.isEnabled = checked }
