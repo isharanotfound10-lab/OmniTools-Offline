@@ -1375,10 +1375,23 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), dp(8))
         }
+        val prefixToggle = android.widget.CheckBox(this).apply {
+            text = "Add prefix to each copied link"
+            isChecked = true
+        }
+        val prefixInput = EditText(this).apply {
+            setText(".download")
+            hint = "Prefix"
+            singleLine = true
+            isEnabled = true
+        }
+        prefixToggle.setOnCheckedChangeListener { _, checked -> prefixInput.isEnabled = checked }
         val progressText = label("Preparing episode links...", 12, muted, false)
         val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             isIndeterminate = true
         }
+        panel.addView(prefixToggle, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(4) })
+        panel.addView(prefixInput, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
         panel.addView(progressText, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
         panel.addView(progressBar, LinearLayout.LayoutParams(-1, dp(5)))
         val dialog = AlertDialog.Builder(this)
@@ -1463,8 +1476,10 @@ class MainActivity : Activity() {
                 progressBar.isIndeterminate = false
                 progressBar.max = links.size
                 progressBar.progress = 0
+                val prefix = if (prefixToggle.isChecked) prefixInput.text.toString().trim() else ""
+                val clipboardEntries = if (prefix.isEmpty()) links else links.map { "$prefix $it" }
                 progressText.text = "Found " + links.size + " unique links. Copying one at a time..."
-                copyBulkLinksOneByOne(links, 0, requestId, dialog, progressText, progressBar, episodesFailed)
+                copyBulkLinksOneByOne(clipboardEntries, 0, requestId, dialog, progressText, progressBar, episodesFailed)
             }
         }
     }
