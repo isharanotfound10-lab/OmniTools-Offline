@@ -24,7 +24,7 @@ object HentainiEpisodeParser {
     private val knownHosts = listOf(
         "1024terabox", "terabox", "fireload", "mediafire", "1fichier",
         "mega.nz", "drive.google", "gofile", "pixeldrain", "mixdrop",
-        "streamtape", "vidoza", "voe", "dood"
+        "streamtape", "vidoza", "voe", "dood", "yesterdaymail.com", "yourupload.com", "streamwish.to", "mp4upload.com", "burstcloud.co"
     )
 
     fun parseSeries(html: String, pageUrl: String, slug: String): List<HentainiEpisode> {
@@ -63,7 +63,11 @@ object HentainiEpisodeParser {
         return episodes.values.sortedBy { it.number }
     }
 
-    fun parseEpisode(html: String, pageUrl: String): HentainiEpisodePage {
+    fun parseEpisode(
+        html: String,
+        pageUrl: String,
+        thumbnailToExclude: String = ""
+    ): HentainiEpisodePage {
         val doc = Jsoup.parse(html, pageUrl)
         // Social preview metadata is commonly the SERIES cover on every
         // episode page. Use only media embedded in the episode content itself.
@@ -90,7 +94,8 @@ object HentainiEpisodeParser {
         val videoObjects = when {
             identityMatches.isNotEmpty() -> identityMatches
             titleMatches.isNotEmpty() -> titleMatches
-            allVideoObjects.size == 1 -> allVideoObjects
+            // Never assume a lone VideoObject belongs to this episode.
+            // Hentaini can repeat a series-level VideoObject on every episode URL.
             else -> emptyList()
         }
         val structuredTitle = videoObjects.asSequence()
@@ -106,7 +111,7 @@ object HentainiEpisodeParser {
                     .flatMap { key -> findJsonValues(video, key).asSequence() }
             }
             .mapNotNull { jsonImageUrl(it, pageUrl) }
-            .firstOrNull { isEpisodeImage(it) }
+            .firstOrNull { isEpisodeImage(it, thumbnailToExclude) }
         // Hentaini serves episode-specific screenshots through its Nuxt
         // image proxy in og:image/twitter:image metadata. These are not
         // necessarily the series cover, so inspect them before generic DOM
@@ -118,7 +123,7 @@ object HentainiEpisodeParser {
             doc.selectFirst("link[rel=image_src]")?.attr("href")
         ).filterNotNull()
             .mapNotNull { normalizeUrl(it, pageUrl) }
-            .firstOrNull { isEpisodeImage(it) }
+            .firstOrNull { isEpisodeImage(it, thumbnailToExclude) }
         val thumbnail = sequenceOf(
             structuredThumbnail,
             metadataThumbnail,
@@ -127,7 +132,7 @@ object HentainiEpisodeParser {
             doc.selectFirst("main img")?.let { imageUrl(it) },
             doc.selectFirst("[class*=episode] img")?.let { imageUrl(it) },
             doc.selectFirst("[class*=thumbnail] img")?.let { imageUrl(it) }
-        ).filterNotNull().firstOrNull { isEpisodeImage(it) }.orEmpty()
+        ).filterNotNull().firstOrNull { isEpisodeImage(it, thumbnailToExclude) }.orEmpty()
 
         val found = linkedMapOf<String, HentainiStream>()
         fun add(raw: String?, label: String?) {
@@ -151,6 +156,9 @@ object HentainiEpisodeParser {
             val key = provider.lowercase()
             if (found.values.none { it.url == url }) found[key] = HentainiStream(provider, url)
         }
+
+        // Read players/downloads from the Nuxt SSR episode object, scoped by this page's exact contentUrl.
+        extractNuxtEpisodeLinks(html, videoObjects).forEach { (url, label) -> add(url, label) }
 
         // Extract links from the current VideoObject only. This prevents
         // links belonging to a related episode/series JSON-LD block leaking
@@ -179,35 +187,89 @@ object HentainiEpisodeParser {
             }
         }
 
-        // Some pages expose the same episode's provider URLs in a player
-        // configuration script rather than JSON-LD. Only inspect scripts
-        // when structured VideoObject metadata is absent.
-        if (found.isEmpty()) {
-            // Player configurations often live in page-specific scripts beside
-            // a VideoObject that contains only title/thumbnail metadata.
-            // Search scripts even when VideoObject exists, but accept only
-            // explicit supported-provider URLs and deduplicate them.
-            val scripts = doc.select("script").joinToString("\n") { it.data() + it.html() }
-                // Some player configs are JSON-escaped twice by the page.
-                // Decode both single- and double-escaped separators.
-                .replace("\\\\/", "/")
-                .replace("\\\\u002f", "/")
-                .replace("\\\\u002F", "/")
-                .replace("\\\\u0026", "&")
-                .replace("\\/", "/")
-                .replace("\\u0026", "&")
-                .replace("\\u002f", "/")
-                .replace("\\u002F", "/")
-                .replace("&amp;", "&")
-                .replace("&#038;", "&")
-            Regex("""https?://[^\s"'<>\\]+""").findAll(scripts).forEach { match ->
-                val candidate = match.value.trimEnd(',', ';', ')', ']', '}')
-                val host = runCatching { URI(candidate).host.orEmpty() }.getOrDefault("")
-                if (knownHosts.any { host.contains(it) }) add(candidate, null)
-            }
-        }
+        // Do not scrape every script on the page: shared bundles and series
+        // state can repeat identical provider URLs on every episode.
+        // Trust only episode-identified structured data and episode-content DOM links.
 
         return HentainiEpisodePage(title, thumbnail, found.values.sortedBy { it.host.lowercase() })
+    }
+
+
+    private fun extractNuxtEpisodeLinks(html: String, videoObjects: List<JSONObject>): List<Pair<String, String>> {
+        val currentContentUrls = videoObjects.flatMap { findJsonValues(it, "contentUrl") }
+            .mapNotNull { (it as? String)?.trim()?.takeIf { value -> value.isNotBlank() } }.toSet()
+        if (currentContentUrls.isEmpty()) return emptyList()
+        val doc = Jsoup.parse(html)
+        val payloadText = doc.selectFirst("script#__NUXT_DATA__")?.data()
+            ?.ifBlank { doc.selectFirst("script#__NUXT_DATA__")?.html() }?.trim().orEmpty()
+        val payload = runCatching { JSONArray(payloadText) }.getOrNull() ?: return emptyList()
+        val cache = mutableMapOf<Int, Any?>()
+        for (index in 0 until payload.length()) {
+            if (payload.opt(index) !is JSONObject) continue
+            val episode = resolveNuxtNode(index, payload, cache, mutableSetOf()) as? JSONObject ?: continue
+            val players = runCatching { JSONArray(episode.optString("players")) }.getOrNull() ?: continue
+            val urls = (0 until players.length()).mapNotNull { players.optJSONObject(it)?.optString("url") }
+            if (currentContentUrls.none { it in urls }) continue
+            val result = mutableListOf<Pair<String, String>>()
+            for (i in 0 until players.length()) {
+                val player = players.optJSONObject(i) ?: continue
+                val url = player.optString("url").trim()
+                if (url.isNotBlank()) result.add(url to player.optString("name", "Stream"))
+            }
+            val downloads = runCatching { JSONArray(episode.optString("downloads")) }.getOrNull()
+            if (downloads != null) for (i in 0 until downloads.length()) {
+                val url = downloads.optJSONObject(i)?.optString("url")?.trim().orEmpty()
+                if (url.isNotBlank()) result.add(url to "Download")
+            }
+            return result
+        }
+        return emptyList()
+    }
+
+    private fun resolveNuxtNode(
+        index: Int,
+        payload: JSONArray,
+        cache: MutableMap<Int, Any?>,
+        visiting: MutableSet<Int>
+    ): Any? {
+        if (index !in 0 until payload.length()) return null
+        if (cache.containsKey(index)) return cache[index]
+        if (!visiting.add(index)) return null
+        val node = payload.opt(index)
+        val result: Any? = when (node) {
+            is JSONObject -> JSONObject().apply {
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    put(key, resolveNuxtValue(node.opt(key), payload, cache, visiting))
+                }
+            }
+            is JSONArray -> {
+                val marker = if (node.length() > 0) node.opt(0) as? String else null
+                if (marker != null && marker in setOf("ShallowReactive", "Reactive", "Ref", "ShallowRef", "ComputedRef", "ReadonlyReactive", "ShallowReadonly")) {
+                    resolveNuxtValue(node.opt(1), payload, cache, visiting)
+                } else {
+                    JSONArray().apply {
+                        for (i in 0 until node.length()) put(resolveNuxtValue(node.opt(i), payload, cache, visiting))
+                    }
+                }
+            }
+            else -> node
+        }
+        visiting.remove(index)
+        cache[index] = result
+        return result
+    }
+
+    private fun resolveNuxtValue(
+        value: Any?,
+        payload: JSONArray,
+        cache: MutableMap<Int, Any?>,
+        visiting: MutableSet<Int>
+    ): Any? = when (value) {
+        is Int -> resolveNuxtNode(value, payload, cache, visiting)
+        is Long -> if (value >= 0 && value < payload.length()) resolveNuxtNode(value.toInt(), payload, cache, visiting) else value
+        else -> value
     }
 
     private fun videoObjectBelongsToPage(video: JSONObject, pageUrl: String): Boolean {
@@ -324,8 +386,11 @@ object HentainiEpisodeParser {
         return normalizeUrl(raw, base)
     }
 
-    private fun isEpisodeImage(url: String): Boolean {
+    private fun isEpisodeImage(url: String, excluded: String = ""): Boolean {
         if (!url.startsWith("http://") && !url.startsWith("https://")) return false
+        if (excluded.isNotBlank() && runCatching {
+                URI(url).normalize().toString() == URI(excluded).normalize().toString()
+            }.getOrDefault(url == excluded)) return false
         val filename = url.substringAfterLast('/').substringBefore('?')
         return !filename.contains("logo", true) &&
             !filename.contains("avatar", true) &&

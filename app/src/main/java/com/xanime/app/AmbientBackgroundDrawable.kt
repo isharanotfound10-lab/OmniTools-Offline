@@ -32,8 +32,8 @@ class AmbientBackgroundDrawable(
     private val particleRadius = FloatArray(34) { 0.7f + random.nextFloat() * 1.5f }
     private val particleAlpha = IntArray(34) { 35 + random.nextInt(75) }
     private val violet = accentColor
-    private val cyan = Color.rgb(0, 156, 190)
-    private val blue = Color.rgb(45, 75, 190)
+    private val cyan = Color.rgb(8, 125, 145)
+    private val blue = Color.rgb(6, 52, 67)
     private val violetShader = RadialGradient(0f, 0f, 1f,
         intArrayOf(Color.argb(86, Color.red(violet), Color.green(violet), Color.blue(violet)), Color.TRANSPARENT),
         null, Shader.TileMode.CLAMP)

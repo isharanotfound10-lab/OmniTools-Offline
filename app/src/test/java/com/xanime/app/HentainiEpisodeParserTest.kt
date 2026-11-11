@@ -5,6 +5,44 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HentainiEpisodeParserTest {
+
+    @Test
+    fun extractsOnlyTheCurrentEpisodePlayersAndDownloadsFromNuxtPayload() {
+        val hls = "https://vs1.yesterdaymail.com/series/147/1358/147-1358.m3u8"
+        val html = """
+            <html><head>
+              <script type="application/ld+json">
+                {"@type":"VideoObject","url":"https://hentaini.com/h/sample-series/1","contentUrl":"$hls"}
+              </script>
+              <script id="__NUXT_DATA__" type="application/json">[
+                ["ShallowReactive",1],
+                {"data":2},
+                ["ShallowReactive",3],
+                {"episode":4},
+                {"data":5},
+                [6],
+                {"id":7,"episode_number":8,"players":9,"downloads":10},
+                1358,
+                1,
+                "[{\"name\":\"HLS\",\"url\":\"$hls\"},{\"name\":\"Yourupload\",\"url\":\"https://www.yourupload.com/embed/ep1\"}]",
+                "[{\"url\":\"https://www.fireload.com/ep1.mp4\"},{\"url\":\"https://www.mediafire.com/file/ep1/file\"}]"
+              ]</script>
+            </head><body><main><h1>Episode 1</h1></main></body></html>
+        """.trimIndent()
+
+        val page = HentainiEpisodeParser.parseEpisode(html, "https://hentaini.com/h/sample-series/1")
+        assertTrue(page.streams.any { it.url == hls })
+        assertTrue(page.streams.any { it.url == "https://www.yourupload.com/embed/ep1" })
+        assertTrue(page.streams.any { it.url == "https://www.fireload.com/ep1.mp4" })
+        assertTrue(page.streams.any { it.url == "https://www.mediafire.com/file/ep1/file" })
+
+        val otherEpisode = HentainiEpisodeParser.parseEpisode(
+            html,
+            "https://hentaini.com/h/sample-series/2"
+        )
+        assertTrue(otherEpisode.streams.isEmpty())
+    }
+
     @Test
     fun parsesNumberedEpisodesAndThumbnails() {
         val html = """
@@ -129,7 +167,7 @@ class HentainiEpisodeParserTest {
     }
 
     @Test
-    fun supportsArrayAndImageObjectThumbnailsAndPlayerScriptLinks() {
+    fun supportsArrayAndImageObjectThumbnailsButIgnoresUnscopedScriptLinks() {
         val html = """
             <html><head>
               <script type="application/ld+json">
@@ -155,8 +193,52 @@ class HentainiEpisodeParserTest {
         )
 
         assertEquals("https://cdn.example/ep-one-frame.jpeg", page.thumbnailUrl)
-        assertTrue(page.streams.any { it.url.contains("fireload.com") })
-        assertTrue(page.streams.any { it.url.contains("mediafire.com") })
+        assertTrue(page.streams.isEmpty())
+    }
+
+    @Test
+    fun doesNotReuseUnidentifiedSingleVideoObjectAcrossEpisodePages() {
+        val html = """
+            <html><head>
+              <script type="application/ld+json">
+                {
+                  "@type":"VideoObject",
+                  "name":"Series title",
+                  "thumbnailUrl":"https://cdn.example/shared-series-image.jpeg",
+                  "contentUrl":"https://1024terabox.com/s/shared-series-link",
+                  "embedUrl":"https://www.mediafire.com/file/shared-series-link"
+                }
+              </script>
+            </head><body><main><h1>Episode</h1></main></body></html>
+        """.trimIndent()
+
+        val first = HentainiEpisodeParser.parseEpisode(
+            html, "https://hentaini.com/h/sample-series/1"
+        )
+        val second = HentainiEpisodeParser.parseEpisode(
+            html, "https://hentaini.com/h/sample-series/2"
+        )
+
+        assertTrue(first.thumbnailUrl.isEmpty())
+        assertTrue(second.thumbnailUrl.isEmpty())
+        assertTrue(first.streams.isEmpty())
+        assertTrue(second.streams.isEmpty())
+    }
+
+    @Test
+    fun excludesTheSeriesCardThumbnailWhenResolvingEpisodeImages() {
+        val image = "https://cdn.example/shared-series-image.jpeg"
+        val html = """
+            <html><head>
+              <meta property="og:image" content="$image">
+            </head><body><main><h1>Episode 1</h1></main></body></html>
+        """.trimIndent()
+
+        val page = HentainiEpisodeParser.parseEpisode(
+            html, "https://hentaini.com/h/sample-series/1", image
+        )
+
+        assertTrue(page.thumbnailUrl.isEmpty())
     }
 
     @Test

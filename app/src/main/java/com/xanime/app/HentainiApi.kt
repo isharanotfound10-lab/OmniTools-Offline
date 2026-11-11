@@ -32,6 +32,51 @@ object HentainiApi {
     private const val API_ROOT = "https://admin.hentaini.com/api"
     private const val IMAGE_ROOT = "https://admin.hentaini.com/uploads/"
 
+    fun searchGenre(slug: String, offset: Int, limit: Int = 10): HentainiSearchPage {
+        // MainActivity supplies genre slugs for every visible chip. Convert labels
+        // such as "big breast" or "small breasts" to the site's hyphenated URL form.
+        // Do not maintain a hard-coded allow-list: newly added chips should work too.
+        val normalizedSlug = slug.trim()
+            .lowercase()
+            .replace(Regex("\\s+"), "-")
+            .replace(Regex("-+"), "-")
+        require(normalizedSlug.matches(Regex("[a-z0-9]+(?:-[a-z0-9]+)*"))) {
+            "Invalid Hentaini genre slug: " + slug
+        }
+        val pageNumber = offset / limit + 1
+        val address = "https://hentaini.com/genres/" + normalizedSlug + "?page=" + pageNumber
+        val document = Jsoup.parse(request(address, "text/html"), address)
+        val results = linkedMapOf<String, HentainiSeries>()
+        document.select("a[href]").forEach { anchor ->
+            val target = anchor.absUrl("href")
+            val uri = runCatching { java.net.URI(target) }.getOrNull() ?: return@forEach
+            if (uri.host.orEmpty().lowercase() !in setOf("hentaini.com", "www.hentaini.com")) return@forEach
+            val parts = uri.path.orEmpty().trim('/').split('/')
+            if (parts.size != 2 || parts[0] != "h") return@forEach
+            val slugValue = parts[1]
+            if (slugValue.isBlank()) return@forEach
+            val image = anchor.selectFirst("img")
+            val title = anchor.attr("title").ifBlank { image?.attr("alt").orEmpty() }
+                .ifBlank { anchor.text() }.trim()
+            if (title.isBlank()) return@forEach
+            val imageUrl = image?.let {
+                it.absUrl("src").ifBlank { it.absUrl("data-src") }
+                    .ifBlank { it.absUrl("data-lazy-src") }
+            }.orEmpty()
+            val stableId = slugValue.hashCode() and Int.MAX_VALUE
+            results.putIfAbsent(slugValue, HentainiSeries(
+                id = stableId, title = title, slug = slugValue, hId = "",
+                hasEpisodes = true, thumbnailUrl = imageUrl
+            ))
+        }
+        val items = results.values.toList().take(limit)
+        val hasNext = document.select("a[rel=next], a.next, .pagination a").any { link ->
+            link.text().contains("next", true) || link.text().contains("›") || link.text().contains("»")
+        }
+        val total = if (hasNext || items.size == limit) offset + items.size + 1 else offset + items.size
+        return HentainiSearchPage(items, total, offset, limit)
+    }
+
     fun search(term: String, offset: Int, limit: Int = 10): HentainiSearchPage {
         val encoded = URLEncoder.encode(term, "UTF-8")
         val address = API_ROOT + "/series?filters%5Btitle%5D%5B%24containsi%5D=" + encoded +
@@ -194,7 +239,9 @@ object HentainiApi {
 
     fun loadEpisodePage(episode: HentainiEpisode): HentainiEpisodePage {
         val html = request(episode.url, "text/html")
-        val parsed = HentainiEpisodeParser.parseEpisode(html, episode.url)
+        // Exclude the series-list image so it cannot silently stand in for
+        // a missing screenshot belonging to the current episode.
+        val parsed = HentainiEpisodeParser.parseEpisode(html, episode.url, episode.thumbnailUrl)
         if (parsed.streams.isNotEmpty()) return parsed
 
         // The site's Download control can lead to a separate page containing
@@ -203,7 +250,6 @@ object HentainiApi {
             val document = Jsoup.parse(html, episode.url)
             val episodeUri = java.net.URI(episode.url)
             val episodePath = episodeUri.path.orEmpty().trimEnd('/')
-            val episodeSegment = episodePath.substringAfterLast('/')
             document.select("main a[href], article a[href], .entry-content a[href], .download a[href], a[href]")
                 .firstOrNull { anchor ->
                     val target = anchor.absUrl("href")
@@ -212,9 +258,9 @@ object HentainiApi {
                     val sameSite = targetUri.host.orEmpty().lowercase() in
                         setOf("hentaini.com", "www.hentaini.com")
                     val targetPath = targetUri.path.orEmpty()
-                    val belongsToEpisode = targetPath.startsWith(episodePath + "/") ||
-                        targetPath.contains("/" + episodeSegment + "/") ||
-                        targetUri.rawQuery.orEmpty().contains(episodeSegment)
+                    // Only accept a download page nested under this exact
+                    // episode URL; a matching numeric segment elsewhere is ambiguous.
+                    val belongsToEpisode = targetPath.startsWith(episodePath + "/")
                     anchor.text().contains("download", ignoreCase = true) &&
                         sameSite && target != episode.url && belongsToEpisode
                 }?.absUrl("href")
@@ -223,7 +269,9 @@ object HentainiApi {
 
         val downloadHtml = runCatching { request(downloadPage, "text/html") }.getOrNull()
             ?: return parsed
-        val downloadParsed = HentainiEpisodeParser.parseEpisode(downloadHtml, downloadPage)
+        val downloadParsed = HentainiEpisodeParser.parseEpisode(
+            downloadHtml, downloadPage, episode.thumbnailUrl
+        )
         return parsed.copy(streams = downloadParsed.streams)
     }
 
