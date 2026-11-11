@@ -2,6 +2,7 @@ package com.xanime.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.DownloadManager
 import android.widget.CheckBox
 import android.graphics.Bitmap
 import android.util.LruCache
@@ -18,6 +19,7 @@ import android.graphics.drawable.RippleDrawable
 import android.content.res.ColorStateList
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
@@ -118,6 +120,10 @@ class MainActivity : Activity() {
     private var watchAnimeRequestId = 0
     private var watchAnimeLoading = false
     private var watchAnimeResults: List<WatchAnimeSearchResult> = emptyList()
+    private var watchAnimeSelectedSeries: WatchAnimeSearchResult? = null
+    private var watchAnimeEpisodes: List<WatchAnimeEpisode> = emptyList()
+    private var watchAnimeSeriesLoading = false
+    private var watchAnimeSeriesRequestId = 0
     private var showingHentainiFavorites = false
     private var hentainiQuery = ""
     private var hentainiGenre: String? = null
@@ -409,7 +415,13 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        if (showingHentaini && hentainiSelectedSeries != null) {
+        if (showingWatchAnimeHentai && watchAnimeSelectedSeries != null) {
+            watchAnimeSeriesRequestId++
+            watchAnimeSelectedSeries = null
+            watchAnimeEpisodes = emptyList()
+            watchAnimeSeriesLoading = false
+            showHome()
+        } else if (showingHentaini && hentainiSelectedSeries != null) {
             hentainiDetailRequestId++
             hentainiSelectedSeries = null
             showHome()
@@ -425,10 +437,76 @@ class MainActivity : Activity() {
         pageContent.addView(label("WATCH ANIME HENTAI", 22, white, true).apply {
             setPadding(0, dp(22), 0, dp(8))
         })
-        pageContent.addView(label("SEARCH ONLY • RESULTS FROM WATCHANIMEHENTAI.COM", 9, muted, true).apply {
+        pageContent.addView(label("EPISODES • ENGLISH DOWNLOADS", 9, muted, true).apply {
             letterSpacing = .08f
             setPadding(0, 0, 0, dp(12))
         })
+
+        watchAnimeSelectedSeries?.let { selected ->
+            pageContent.addView(actionButton("‹ BACK TO SEARCH RESULTS", false) {
+                watchAnimeSeriesRequestId++
+                watchAnimeSelectedSeries = null
+                watchAnimeEpisodes = emptyList()
+                watchAnimeSeriesLoading = false
+                showHome()
+            }, LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(10) })
+            pageContent.addView(label(selected.title, 18, white, true).apply {
+                setPadding(0, dp(5), 0, dp(12))
+            })
+            if (selected.thumbnail.isNotBlank()) {
+                val poster = ImageView(this).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    background = rounded(surface2, 14)
+                }
+                pageContent.addView(poster, LinearLayout.LayoutParams(dp(116), dp(156)).apply {
+                    bottomMargin = dp(12)
+                })
+                loadImage(selected.thumbnail, poster)
+            }
+            when {
+                watchAnimeSeriesLoading -> pageContent.addView(infoCard("Loading episode list..."))
+                watchAnimeEpisodes.isEmpty() -> pageContent.addView(infoCard("No episodes were found on this series page."))
+                else -> {
+                    pageContent.addView(label("${watchAnimeEpisodes.size} EPISODES", 10, accent, true).apply {
+                        setPadding(0, dp(4), 0, dp(10))
+                    })
+                    watchAnimeEpisodes.forEachIndexed { index, episode ->
+                        val row = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(dp(9), dp(9), dp(9), dp(9))
+                            background = rounded(cardSurface(), cardRadius())
+                        }
+                        val thumb = ImageView(this).apply {
+                            scaleType = ImageView.ScaleType.CENTER_CROP
+                            background = rounded(surface2, 9)
+                        }
+                        row.addView(thumb, LinearLayout.LayoutParams(dp(78), dp(104)).apply {
+                            marginEnd = dp(10)
+                        })
+                        if (episode.thumbnail.isNotBlank()) loadImage(episode.thumbnail, thumb)
+                        val detail = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                        detail.addView(label(episode.title, 14, white, true))
+                        detail.addView(label(if (episode.subbed) "SUBBED" else "ENGLISH OPTION CHECKED ON PAGE", 9, muted, true).apply {
+                            setPadding(0, dp(5), 0, dp(8))
+                        })
+                        detail.addView(actionButton("↓ DOWNLOAD", true) {
+                            downloadWatchAnimeEpisode(episode)
+                        }, LinearLayout.LayoutParams(-1, dp(40)))
+                        row.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
+                        pageContent.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                            bottomMargin = dp(9)
+                        })
+                        animateEntrance(row, index)
+                    }
+                }
+            }
+            setContentView(root)
+            animateScreen(root)
+            scroll.post { loadVisibleImages(pageContent) }
+            isDetailScreen = true
+            return
+        }
 
         search = EditText(this).apply {
             hint = "Search WatchAnimeHentai..."
@@ -503,6 +581,77 @@ class MainActivity : Activity() {
         isDetailScreen = false
     }
 
+    private fun openWatchAnimeSeries(series: WatchAnimeSearchResult) {
+        watchAnimeSelectedSeries = series
+        watchAnimeEpisodes = emptyList()
+        watchAnimeSeriesLoading = true
+        val requestId = ++watchAnimeSeriesRequestId
+        showHome()
+        worker.execute {
+            try {
+                val html = request(series.url)
+                val episodes = SiteParser.parseWatchAnimeSeries(Jsoup.parse(html, series.url), series.url)
+                main.post {
+                    if (isFinishing || !showingWatchAnimeHentai ||
+                        requestId != watchAnimeSeriesRequestId ||
+                        watchAnimeSelectedSeries?.url != series.url) return@post
+                    watchAnimeEpisodes = episodes
+                    watchAnimeSeriesLoading = false
+                    showHome()
+                }
+            } catch (_: Exception) {
+                main.post {
+                    if (isFinishing || requestId != watchAnimeSeriesRequestId) return@post
+                    watchAnimeSeriesLoading = false
+                    watchAnimeEpisodes = emptyList()
+                    Toast.makeText(this, "Could not load this episode list.", Toast.LENGTH_LONG).show()
+                    showHome()
+                }
+            }
+        }
+    }
+
+    private fun downloadWatchAnimeEpisode(episode: WatchAnimeEpisode) {
+        Toast.makeText(this, "Preparing English download...", Toast.LENGTH_SHORT).show()
+        worker.execute {
+            try {
+                val downloadPageUrl = episode.url.replace("/episodes/", "/download-hentai/")
+                val downloadPage = Jsoup.parse(request(downloadPageUrl), downloadPageUrl)
+                val englishEndpoint = SiteParser.parseWatchAnimeEnglishDownload(downloadPage, downloadPageUrl)
+                    ?: throw IllegalStateException("English download option was not found")
+                main.post {
+                    try {
+                        val fileName = "WatchAnimeHentai_Episode_${episode.number}.mp4"
+                        val downloadRequest = DownloadManager.Request(Uri.parse(englishEndpoint)).apply {
+                            setTitle("WatchAnimeHentai • Episode ${episode.number}")
+                            setDescription("English video download")
+                            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            setAllowedNetworkTypes(
+                                DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE
+                            )
+                            addRequestHeader("Referer", downloadPageUrl)
+                            addRequestHeader("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
+                            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                        }
+                        val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+                        manager.enqueue(downloadRequest)
+                        Toast.makeText(this, "Download started • check notifications", Toast.LENGTH_LONG).show()
+                    } catch (_: Exception) {
+                        Toast.makeText(this, "Could not start the download.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (_: Exception) {
+                main.post {
+                    if (!isFinishing) Toast.makeText(
+                        this,
+                        "English download link unavailable. The site may require an updated player link.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+    }
+
     private fun runWatchAnimeSearch(append: Boolean = false) {
         if (watchAnimeLoading || watchAnimeQuery.isBlank()) {
             if (watchAnimeQuery.isBlank()) status.text = "Enter a title to search."
@@ -559,7 +708,7 @@ class MainActivity : Activity() {
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
-                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.url)))
+                    openWatchAnimeSeries(result)
                 }
             }
             val poster = ImageView(this).apply {
