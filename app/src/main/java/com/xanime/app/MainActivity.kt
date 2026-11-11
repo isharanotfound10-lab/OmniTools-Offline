@@ -266,7 +266,6 @@ class MainActivity : Activity() {
             showingHentaini = false
             showingWatchAnimeHentai = true
             showingFavorites = false
-            showingWatchAnimeHentai = true
             showHome()
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
         pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
