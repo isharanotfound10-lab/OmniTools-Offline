@@ -3,7 +3,7 @@ package com.xanime.app
 import org.jsoup.nodes.Document
 import java.net.URI
 
-data class SearchResult(
+data class WatchAnimeSearchResult(val title: String, val url: String, val thumbnail: String, val genres: List<String>, val studio: String, val description: String)\n\ndata class SearchResult(
     val title: String,
     val url: String,
     val thumbnail: String,
@@ -56,7 +56,7 @@ object SiteParser {
         return found.values.toList()
     }
 
-    fun parseEpisode(doc: Document, pageUrl: String): EpisodeDetails {
+    fun parseWatchAnimeSearch(doc: Document): List<WatchAnimeSearchResult> {\n        val found = LinkedHashMap<String, WatchAnimeSearchResult>()\n        doc.select("article.search-result").forEach { card ->\n            val anchor = card.selectFirst("a.search-result-poster[href]") ?: card.selectFirst("h2.search-result-title a[href]") ?: return@forEach\n            val url = anchor.absUrl("href").takeIf { it.startsWith("https://www.watchanimehentai.com/info/") } ?: return@forEach\n            val title = card.selectFirst(".search-result-title a")?.text()?.trim().orEmpty().ifBlank { card.selectFirst("img[alt]")?.attr("alt")?.trim().orEmpty() }\n            if (title.isBlank()) return@forEach\n            val image = card.selectFirst(".search-result-poster img")\n            val thumbnail = image?.let { sequenceOf("data-src", "data-lazy-src", "src").map { key -> it.absUrl(key) }.firstOrNull { it.startsWith("https://") || it.startsWith("http://") } }.orEmpty()\n            val genres = card.select(".search-result-tags a").map { it.text().trim() }.filter { it.isNotBlank() }\n            val studio = card.select(".search-result-studios a").firstOrNull()?.text()?.trim().orEmpty()\n            val description = card.selectFirst(".search-result-description")?.text()?.trim().orEmpty()\n            found[url] = WatchAnimeSearchResult(title, url, thumbnail, genres, studio, description)\n        }\n        return found.values.toList()\n    }\n\n    fun parseEpisode(doc: Document, pageUrl: String): EpisodeDetails {
         val title = doc.selectFirst("h1")?.text()?.trim()
             ?: doc.title().substringBefore("|").trim()
         val episodePane = doc.selectFirst(".su-tabs-pane[data-title=Episodes]")
