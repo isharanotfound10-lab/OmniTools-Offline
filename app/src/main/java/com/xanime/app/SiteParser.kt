@@ -12,6 +12,15 @@ data class WatchAnimeSearchResult(
     val description: String
 )
 
+data class WatchAnimeEpisode(
+    val title: String,
+    val url: String,
+    val thumbnail: String,
+    val number: Int,
+    val subbed: Boolean
+)
+
+
 data class SearchResult(
     val title: String,
     val url: String,
@@ -63,6 +72,45 @@ object SiteParser {
             found[url] = SearchResult(title, url, thumbnail, duration)
         }
         return found.values.toList()
+    }
+
+    fun parseWatchAnimeSeries(doc: Document, pageUrl: String): List<WatchAnimeEpisode> {
+        val found = LinkedHashMap<String, WatchAnimeEpisode>()
+        doc.select("article.item.se.episodes").forEach { card ->
+            val anchor = card.selectFirst("a[href]") ?: return@forEach
+            val url = anchor.absUrl("href")
+                .takeIf { it.startsWith("https://www.watchanimehentai.com/episodes/") }
+                ?: return@forEach
+            val title = card.selectFirst(".data h3")?.text()?.trim()
+                ?: card.selectFirst(".season_m .c")?.text()?.trim()
+                ?: anchor.text().trim()
+            val number = Regex("(?i)episode\\s*(\\d+)")
+                .find(title)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+            if (number <= 0) return@forEach
+            val image = card.selectFirst(".poster img")
+            val thumbnail = image?.let {
+                sequenceOf("data-src", "data-lazy-src", "src")
+                    .map { key -> it.absUrl(key) }
+                    .firstOrNull { value -> value.startsWith("https://") || value.startsWith("http://") }
+            }.orEmpty()
+            val subbed = card.select(".ep_status, .status-sub").text()
+                .contains("subbed", ignoreCase = true)
+            found[url] = WatchAnimeEpisode("Episode $number", url, thumbnail, number, subbed)
+        }
+        return found.values.sortedBy { it.number }
+    }
+
+    fun parseWatchAnimeEnglishDownload(doc: Document, episodeUrl: String): String? {
+        val anchor = doc.select("a.button22[href]").firstOrNull {
+            it.text().contains("Download in English", ignoreCase = true)
+        } ?: doc.select("a[href]").firstOrNull {
+            it.text().contains("Download in English", ignoreCase = true)
+        } ?: return null
+        val resolved = anchor.absUrl("href")
+        return resolved.takeIf {
+            it.startsWith("https://www.watchanimehentai.com/players/") &&
+                it.contains("p2.php")
+        }
     }
 
     fun parseWatchAnimeSearch(doc: Document): List<WatchAnimeSearchResult> {
