@@ -589,7 +589,9 @@ class MainActivity : Activity() {
     }
 
     private fun addHentainiCard(series: HentainiSeries, output: LinearLayout) {
-        val card = LinearLayout(this).apply {
+        lateinit var card: LinearLayout
+        lateinit var favoriteButton: Button
+        card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(11), dp(11), dp(13), dp(11))
@@ -620,9 +622,20 @@ class MainActivity : Activity() {
         episodeCount.tag = series.id
         details.addView(episodeCount)
         card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-        card.addView(actionButton(if (isHentainiFavorite(series)) "♥" else "♡", false) {
+        favoriteButton = actionButton(if (isHentainiFavorite(series)) "♥" else "♡", false) {
             toggleHentainiFavorite(series)
-        }, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginStart = dp(5) })
+            val isSaved = isHentainiFavorite(series)
+            favoriteButton.text = if (isSaved) "♥" else "♡"
+            // Removing a saved card updates only this row; don't rebuild the
+            // whole Hentaini screen or reset the user's current scroll position.
+            if (showingHentainiFavorites && !isSaved) {
+                output.removeView(card)
+                if (output.childCount == 0) {
+                    output.addView(infoCard("No favorites yet. Tap the heart on any Hentaini series to save it here."))
+                }
+            }
+        }
+        card.addView(favoriteButton, LinearLayout.LayoutParams(dp(38), dp(38)).apply { marginStart = dp(5) })
         card.addView(label("OPEN  ›", 9, accent, true))
         output.addView(card, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
         animateEntrance(card, output.childCount - 1)
@@ -668,7 +681,6 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Added to Hentaini Favorites", Toast.LENGTH_SHORT).show()
         }
         prefs.edit().putStringSet("hentaini_favorite_series", entries).apply()
-        showHome()
     }
 
     private fun loadHentainiFavorites(): List<HentainiSeries> =
