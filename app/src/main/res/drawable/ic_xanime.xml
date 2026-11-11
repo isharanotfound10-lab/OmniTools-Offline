@@ -29,10 +29,10 @@
 
     <!-- The signature is intentionally large and horizontal: two dots, then a bar. -->
     <path android:fillColor="#28E4F6"
-        android:pathData="M43,69a4,4 0,1 1,-8 0a4,4 0,1 1,8 0z M43,84a4,4 0,1 1,-8 0a4,4 0,1 1,8 0z" />
+        android:pathData="M49,69a4,4 0,1 1,-8 0a4,4 0,1 1,8 0z M49,84a4,4 0,1 1,-8 0a4,4 0,1 1,8 0z" />
     <path android:fillColor="#00000000" android:strokeColor="#B86BFF"
         android:strokeWidth="8" android:strokeLineCap="round"
-        android:pathData="M69,65 V88" />
+        android:pathData="M61,65 V88" />
 
     <!-- Subtle baseline, not an enclosing border. -->
     <path android:fillColor="#00000000" android:strokeColor="#24DDF4"
