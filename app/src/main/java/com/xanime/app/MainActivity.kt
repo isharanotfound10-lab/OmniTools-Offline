@@ -400,6 +400,11 @@ class MainActivity : Activity() {
             })
             val savedList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             pageContent.addView(savedList, LinearLayout.LayoutParams(-1, -2))
+            if (saved.isNotEmpty()) {
+                pageContent.addView(actionButton("COPY DOWNLOAD STREAMS", false) {
+                    showHentainiBulkSeriesPicker(saved)
+                }, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(12) })
+            }
             if (saved.isEmpty()) savedList.addView(infoCard("No favorites yet. Tap the heart on any Hentaini series to save it here."))
             else saved.forEach { addHentainiCard(it, savedList) }
             setContentView(root)
@@ -667,6 +672,221 @@ class MainActivity : Activity() {
                     item.optString("hId"), item.optBoolean("hasEpisodes", true), item.optString("thumbnailUrl"))
             }.getOrNull()
         }.sortedBy { it.title.lowercase() }
+
+    private fun showHentainiBulkSeriesPicker(groups: List<HentainiSeries>) {
+        if (groups.isEmpty()) return
+        val selected = BooleanArray(groups.size)
+        AlertDialog.Builder(this)
+            .setTitle("Choose Hentaini series")
+            .setMultiChoiceItems(groups.map { it.title }.toTypedArray(), selected) { _, which, checked ->
+                selected[which] = checked
+            }
+            .setPositiveButton("CHOOSE STREAMS") { _, _ ->
+                val chosen = groups.filterIndexed { index, _ -> selected[index] }
+                if (chosen.isEmpty()) {
+                    Toast.makeText(this, "Select at least one series.", Toast.LENGTH_SHORT).show()
+                } else showHentainiBulkStreamPicker(chosen)
+            }
+            .setNegativeButton("CANCEL", null)
+            .show()
+    }
+
+    private fun showHentainiBulkStreamPicker(groups: List<HentainiSeries>) {
+        val providers = listOf(
+            "terabox" to "1024TERABOX   🔥 HOT",
+            "fireload" to "FIRELOAD   🔥 HOT",
+            "mediafire" to "MEDIAFIRE   🔥 HOT",
+            "mega" to "MEGA   🔥 HOT",
+            "yesterdaymail" to "YESTERDAYMEAIL   • Direct Video",
+            "other" to "Everything else"
+        )
+        val selected = BooleanArray(providers.size)
+        AlertDialog.Builder(this)
+            .setTitle("Choose download streams")
+            .setMultiChoiceItems(providers.map { it.second }.toTypedArray(), selected) { _, which, checked ->
+                selected[which] = checked
+            }
+            .setPositiveButton("SET PREFIXES") { _, _ ->
+                val chosen = providers.filterIndexed { index, _ -> selected[index] }.map { it.first }
+                if (chosen.isEmpty()) {
+                    Toast.makeText(this, "Choose at least one stream provider.", Toast.LENGTH_SHORT).show()
+                } else showHentainiBulkPrefixEditor(groups, chosen)
+            }
+            .setNegativeButton("BACK") { _, _ -> showHentainiBulkSeriesPicker(groups) }
+            .show()
+    }
+
+    private fun showHentainiBulkPrefixEditor(groups: List<HentainiSeries>, providers: List<String>) {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+        }
+        val addPrefix = android.widget.CheckBox(this).apply {
+            text = "Add prefix to each copied link"
+            isChecked = true
+        }
+        panel.addView(addPrefix, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        val inputs = linkedMapOf<String, EditText>()
+        val defaults = mapOf(
+            "terabox" to ".terabox",
+            "fireload" to ".download",
+            "mediafire" to ".mediafire",
+            "mega" to ".mega",
+            "yesterdaymail" to ".download",
+            "other" to ".download"
+        )
+        val labels = mapOf(
+            "terabox" to "1024TERABOX",
+            "fireload" to "FIRELOAD",
+            "mediafire" to "MEDIAFIRE",
+            "mega" to "MEGA",
+            "yesterdaymail" to "YESTERDAYMEAIL",
+            "other" to "EVERYTHING ELSE"
+        )
+        providers.forEach { provider ->
+            panel.addView(label(labels[provider].orEmpty() + " PREFIX", 10, accent, true).apply {
+                setPadding(0, dp(7), 0, dp(3))
+            })
+            val field = EditText(this).apply {
+                setText(defaults[provider].orEmpty())
+                hint = "Prefix"
+                setSingleLine(true)
+                setTextColor(white)
+                setHintTextColor(muted)
+                background = ripple(glassDrawable(12))
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+            }
+            inputs[provider] = field
+            panel.addView(field, LinearLayout.LayoutParams(-1, dp(44)).apply { bottomMargin = dp(4) })
+        }
+        addPrefix.setOnCheckedChangeListener { _, checked ->
+            inputs.values.forEach { it.isEnabled = checked }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Set prefixes before copying")
+            .setMessage("Each provider uses its own prefix. You can edit these now.")
+            .setView(panel)
+            .setPositiveButton("START COPYING") { _, _ ->
+                val prefixes = inputs.mapValues { it.value.text.toString().trim() }
+                startHentainiBulkCopy(groups, providers.toSet(), prefixes, addPrefix.isChecked)
+            }
+            .setNegativeButton("BACK") { _, _ -> showHentainiBulkStreamPicker(groups) }
+            .show()
+    }
+
+    private fun hentainiBulkProviderKey(stream: HentainiStream): String {
+        val host = Uri.parse(stream.url).host.orEmpty().lowercase()
+        val identity = host + " " + stream.host.lowercase()
+        return when {
+            identity.contains("1024terabox") || identity.contains("terabox") -> "terabox"
+            identity.contains("fireload") -> "fireload"
+            identity.contains("mediafire") -> "mediafire"
+            identity.contains("mega.nz") || stream.host.equals("MEGA", true) -> "mega"
+            identity.contains("yesterdaymail") -> "yesterdaymail"
+            else -> "other"
+        }
+    }
+
+    private fun startHentainiBulkCopy(
+        groups: List<HentainiSeries>,
+        selectedProviders: Set<String>,
+        prefixes: Map<String, String>,
+        addPrefix: Boolean
+    ) {
+        cancelBulkCopy(false)
+        val requestId = ++bulkCopyRequest
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        val progressText = label("Loading Hentaini episode streams...", 12, muted, false)
+        val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = true
+        }
+        panel.addView(progressText, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+        panel.addView(progressBar, LinearLayout.LayoutParams(-1, dp(5)))
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Hentaini bulk copy")
+            .setView(panel)
+            .setNegativeButton("CANCEL", null)
+            .create()
+        bulkCopyDialog = dialog
+        dialog.setOnCancelListener {
+            if (bulkCopyRequest == requestId) cancelBulkCopy(false)
+        }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setOnClickListener { cancelBulkCopy() }
+        }
+        dialog.show()
+
+        bulkCopyTask = detailWorker.submit {
+            val collected = LinkedHashMap<String, String>()
+            var episodesChecked = 0
+            var episodesFailed = 0
+            try {
+                groups.forEachIndexed { seriesIndex, series ->
+                    if (Thread.currentThread().isInterrupted) return@submit
+                    val episodes = runCatching { HentainiApi.loadEpisodes(series) }.getOrNull()
+                    if (episodes.isNullOrEmpty()) {
+                        episodesFailed++
+                        main.post {
+                            if (bulkCopyRequest == requestId && dialog.isShowing) {
+                                progressText.text = "Could not load episodes for " + series.title
+                            }
+                        }
+                        return@forEachIndexed
+                    }
+                    episodes.forEachIndexed { episodeIndex, episode ->
+                        if (Thread.currentThread().isInterrupted) return@submit
+                        val details = hentainiEpisodeCache[episode.url] ?: runCatching {
+                            HentainiApi.loadEpisodePage(episode)
+                        }.getOrNull()?.also { hentainiEpisodeCache[episode.url] = it }
+                        episodesChecked++
+                        if (details == null) {
+                            episodesFailed++
+                        } else {
+                            details.streams.forEach { stream ->
+                                val provider = hentainiBulkProviderKey(stream)
+                                if (provider in selectedProviders) {
+                                    collected.putIfAbsent(stream.url, prefixes[provider].orEmpty())
+                                }
+                            }
+                        }
+                        val checked = episodesChecked
+                        main.post {
+                            if (bulkCopyRequest == requestId && dialog.isShowing) {
+                                progressText.text = series.title + " • Series " + (seriesIndex + 1) + "/" + groups.size +
+                                    " • Episode " + (episodeIndex + 1) + "/" + episodes.size + " • " + checked + " checked"
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                // Keep any links already found if an individual page fails.
+            }
+            if (Thread.currentThread().isInterrupted) return@submit
+            val links = collected.toList()
+            main.post {
+                if (bulkCopyRequest != requestId || !dialog.isShowing) return@post
+                if (links.isEmpty()) {
+                    progressBar.visibility = View.GONE
+                    progressText.text = "No matching streams found. Checked " + episodesChecked +
+                        " episodes; " + episodesFailed + " pages failed."
+                    dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.text = "CLOSE"
+                    dialog.getButton(AlertDialog.BUTTON_NEGATIVE)?.setOnClickListener { dialog.dismiss() }
+                    return@post
+                }
+                progressBar.isIndeterminate = false
+                progressBar.max = links.size
+                progressBar.progress = 0
+                val clipboardEntries = links.map { (url, prefix) ->
+                    if (addPrefix && prefix.isNotBlank()) "$prefix $url" else url
+                }
+                progressText.text = "Found " + links.size + " unique streams. Copying one at a time..."
+                copyBulkLinksOneByOne(clipboardEntries, 0, requestId, dialog, progressText, progressBar, episodesFailed)
+            }
+        }
+    }
 
     private fun showHentainiSeries(series: HentainiSeries) {
         showingHentaini = true
@@ -1507,7 +1727,7 @@ class MainActivity : Activity() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("XAnime link " + (index + 1), links[index]))
         progressBar.progress = index + 1
-        progressText.text = "Copied " + (index + 1) + " / " + links.size + " • Keep XAnime open"
+        progressText.text = "Copied " + (index + 1) + " / " + links.size + " • Keep the app open"
         val next = Runnable {
             copyBulkLinksOneByOne(links, index + 1, requestId, dialog, progressText, progressBar, failedPages)
         }
