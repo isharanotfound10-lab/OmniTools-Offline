@@ -418,7 +418,14 @@ class MainActivity : Activity() {
             background = ripple(glassDrawable(16))
             setText(hentainiQuery)
         }
-        pageContent.addView(input, LinearLayout.LayoutParams(-1, dp(52)))
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchRow.addView(input, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+            marginEnd = dp(8)
+        })
+        pageContent.addView(searchRow, LinearLayout.LayoutParams(-1, dp(52)))
 
         val genreScroller = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val genreRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -462,18 +469,10 @@ class MainActivity : Activity() {
             hentainiGenre = null
             hentainiSearch(hentainiQuery, true, statusView, progressView, results, loadMore, null)
         }
-        val debounce = Runnable { submitSearch() }
-        input.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                main.removeCallbacks(debounce)
-                main.postDelayed(debounce, 500)
-            }
-            override fun afterTextChanged(s: Editable?) = Unit
-        })
+        searchRow.addView(actionButton("SEARCH ↗") { submitSearch() },
+            LinearLayout.LayoutParams(dp(100), dp(48)))
         input.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                main.removeCallbacks(debounce)
                 submitSearch()
                 true
             } else false
