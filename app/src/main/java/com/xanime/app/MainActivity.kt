@@ -112,6 +112,12 @@ class MainActivity : Activity() {
     private var isDetailScreen = false
     private var showingFavorites = false
     private var showingHentaini = false
+    private var showingWatchAnimeHentai = false
+    private var watchAnimeQuery = ""
+    private var watchAnimePage = 1
+    private var watchAnimeRequestId = 0
+    private var watchAnimeLoading = false
+    private var watchAnimeResults: List<WatchAnimeSearchResult> = emptyList()
     private var showingHentainiFavorites = false
     private var hentainiQuery = ""
     private var hentainiGenre: String? = null
@@ -221,35 +227,56 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(actionButton(
-            if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
-            else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
-        ) {
-            if (showingHentaini) showingHentainiFavorites = !showingHentainiFavorites
-            else showingFavorites = !showingFavorites
-            showHome()
-        }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
+        if (!showingWatchAnimeHentai) {
+            header.addView(actionButton(
+                if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
+                else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
+            ) {
+                if (showingHentaini) showingHentainiFavorites = !showingHentainiFavorites
+                else showingFavorites = !showingFavorites
+                showHome()
+            }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(7) })
+
+        }
         header.addView(actionButton("⚙", false) { showSettings() },
             LinearLayout.LayoutParams(dp(44), dp(44)))
         pageContent.addView(header)
 
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        sourceTabs.addView(actionButton("XAnime", !showingHentaini) {
+        sourceTabs.addView(actionButton("XAnime", !showingHentaini && !showingWatchAnimeHentai) {
+            if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = false
+            showingWatchAnimeHentai = false
             showingFavorites = keepFavorites
+            watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(8) })
+        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
         sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
+            if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = true
+            showingWatchAnimeHentai = false
             showingHentainiFavorites = keepFavorites
+            watchAnimeLoading = false
+            showHome()
+        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
+        sourceTabs.addView(actionButton("WatchAnimeHentai", showingWatchAnimeHentai) {
+            if (showingWatchAnimeHentai) return@actionButton
+            showingHentaini = false
+            showingWatchAnimeHentai = true
+            showingFavorites = false
+            showingWatchAnimeHentai = true
             showHome()
         }, LinearLayout.LayoutParams(0, dp(40), 1f))
         pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
 
         if (showingHentaini) {
             showHentainiHome()
+            return
+        }
+        if (showingWatchAnimeHentai) {
+            showWatchAnimeHentaiHome()
             return
         }
 
@@ -393,6 +420,190 @@ class MainActivity : Activity() {
         } else if (isDetailScreen && (hasCachedSearch || showingFavorites)) showHome() else super.onBackPressed()
     }
 
+
+
+    private fun showWatchAnimeHentaiHome() {
+        pageContent.addView(label("WATCH ANIME HENTAI", 22, white, true).apply {
+            setPadding(0, dp(22), 0, dp(8))
+        })
+        pageContent.addView(label("SEARCH ONLY • RESULTS FROM WATCHANIMEHENTAI.COM", 9, muted, true).apply {
+            letterSpacing = .08f
+            setPadding(0, 0, 0, dp(12))
+        })
+
+        search = EditText(this).apply {
+            hint = "Search WatchAnimeHentai..."
+            setHintTextColor(muted)
+            setTextColor(white)
+            textSize = 14f
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(13), 0, dp(10), 0)
+            background = ripple(glassDrawable(14))
+            setText(watchAnimeQuery)
+        }
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchRow.addView(search, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+            marginEnd = dp(7)
+        })
+        searchRow.addView(actionButton("SEARCH ↗") {
+            watchAnimeQuery = search.text.toString().trim()
+            watchAnimePage = 1
+            watchAnimeResults = emptyList()
+            runWatchAnimeSearch()
+        }, LinearLayout.LayoutParams(dp(88), dp(44)))
+        pageContent.addView(searchRow, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(7)
+        })
+        search.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                watchAnimeQuery = search.text.toString().trim()
+                watchAnimePage = 1
+                watchAnimeResults = emptyList()
+                runWatchAnimeSearch()
+                true
+            } else false
+        }
+
+        status = label(
+            if (watchAnimeQuery.isBlank()) "Search the WatchAnimeHentai catalogue"
+            else "Results for: $watchAnimeQuery",
+            13, muted, true
+        ).apply { setPadding(0, dp(16), 0, dp(8)) }
+        pageContent.addView(status)
+        progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            visibility = View.GONE
+            isIndeterminate = true
+        }
+        pageContent.addView(progress, LinearLayout.LayoutParams(-1, dp(4)))
+        content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(10))
+        }
+        pageContent.addView(content, LinearLayout.LayoutParams(-1, -2))
+        pageText = label("WATCHANIMEHENTAI SEARCH", 10, muted, true).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(4))
+        }
+        pageContent.addView(pageText)
+
+        if (watchAnimeResults.isNotEmpty()) {
+            status.text = "${watchAnimeResults.size} WatchAnimeHentai results"
+            renderWatchAnimeResults(watchAnimeResults)
+        } else if (watchAnimeQuery.isNotBlank() && !watchAnimeLoading) {
+            runWatchAnimeSearch()
+        } else if (watchAnimeQuery.isBlank()) {
+            content.addView(infoCard("Enter a title and tap SEARCH. This source has no filters in this version."))
+        }
+        setContentView(root)
+        animateScreen(root)
+        scroll.post { loadVisibleImages(pageContent) }
+        isDetailScreen = false
+    }
+
+    private fun runWatchAnimeSearch(append: Boolean = false) {
+        if (watchAnimeLoading || watchAnimeQuery.isBlank()) {
+            if (watchAnimeQuery.isBlank()) status.text = "Enter a title to search."
+            return
+        }
+        watchAnimeLoading = true
+        val requestId = ++watchAnimeRequestId
+        val requestedPage = watchAnimePage
+        status.text = if (append) "Loading more results..." else "Searching WatchAnimeHentai..."
+        progress.visibility = View.VISIBLE
+        if (!append) content.removeAllViews()
+        pageText.text = "SEARCHING • PAGE $requestedPage"
+        worker.execute {
+            try {
+                val encoded = URLEncoder.encode(watchAnimeQuery.trim(), "UTF-8")
+                val address = "https://www.watchanimehentai.com/search/$encoded/" +
+                    if (requestedPage > 1) "?pagination=$requestedPage" else ""
+                val parsed = SiteParser.parseWatchAnimeSearch(Jsoup.parse(request(address), address))
+                main.post {
+                    if (isFinishing || !showingWatchAnimeHentai || requestId != watchAnimeRequestId) return@post
+                    watchAnimeLoading = false
+                    progress.visibility = View.GONE
+                    val merged = if (append) watchAnimeResults + parsed else parsed
+                    watchAnimeResults = merged.distinctBy { it.url }
+                    status.text = if (watchAnimeResults.isEmpty()) "No results found on WatchAnimeHentai"
+                        else "${watchAnimeResults.size} WatchAnimeHentai results"
+                    renderWatchAnimeResults(watchAnimeResults)
+                    pageText.text = "WATCHANIMEHENTAI • PAGE $requestedPage"
+                }
+            } catch (_: Exception) {
+                main.post {
+                    if (isFinishing || !showingWatchAnimeHentai || requestId != watchAnimeRequestId) return@post
+                    watchAnimeLoading = false
+                    progress.visibility = View.GONE
+                    status.text = "WatchAnimeHentai search unavailable"
+                    if (!append) content.addView(infoCard("Could not load WatchAnimeHentai results. Check your connection and try again."))
+                    pageText.text = "SEARCH FAILED"
+                }
+            }
+        }
+    }
+
+    private fun renderWatchAnimeResults(results: List<WatchAnimeSearchResult>) {
+        content.removeAllViews()
+        if (results.isEmpty()) {
+            content.addView(infoCard("No results found. Try another search."))
+            return
+        }
+        results.forEachIndexed { index, result ->
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                background = rounded(cardSurface(), cardRadius())
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.url)))
+                }
+            }
+            val poster = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = rounded(surface2, 10)
+            }
+            card.addView(poster, LinearLayout.LayoutParams(dp(104), dp(150)).apply {
+                marginEnd = dp(12)
+            })
+            if (result.thumbnail.isNotBlank()) loadImage(result.thumbnail, poster)
+            val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            info.addView(label(result.title, 15, white, true).apply { maxLines = 3 })
+            if (result.genres.isNotEmpty()) {
+                info.addView(label(result.genres.joinToString(" • "), 10, muted, true).apply {
+                    setPadding(0, dp(6), 0, dp(4))
+                    maxLines = 3
+                })
+            }
+            if (result.studio.isNotBlank()) info.addView(label(result.studio, 11, accent, true))
+            if (result.description.isNotBlank()) {
+                info.addView(label(result.description, 12, muted, false).apply {
+                    maxLines = 4
+                    setPadding(0, dp(5), 0, 0)
+                })
+            }
+            card.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
+            content.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(12)
+            })
+            animateEntrance(card, index)
+        }
+        if (watchAnimePage < 10) {
+            content.addView(actionButton("NEXT PAGE  →") {
+                if (!watchAnimeLoading) {
+                    watchAnimePage++
+                    runWatchAnimeSearch(append = true)
+                }
+            }, LinearLayout.LayoutParams(-1, dp(46)).apply {
+                topMargin = dp(8)
+                bottomMargin = dp(12)
+            })
+        }
+    }
 
     private fun showHentainiHome() {
         pageContent.addView(label(if (showingHentainiFavorites) "YOUR FAVORITES" else "HENTAINI", 22, white, true).apply {
