@@ -271,7 +271,7 @@ class MainActivity : Activity() {
         pageText.text = "SEARCHING WATCH ANIME HENTAI • PAGE $requestedPage"
         worker.execute {
             try {
-                val encoded = URLEncoder.encode(query.trim(), "UTF-8").replace("+", "%20")
+                val encoded = URLEncoder.encode(query.trim(), "UTF-8")
                 val address = "https://www.watchanimehentai.com/search/$encoded/" + if (requestedPage > 1) "?pagination=$requestedPage" else ""
                 val parsed = SiteParser.parseWatchAnimeSearch(Jsoup.parse(request(address), address))
                 main.post {
