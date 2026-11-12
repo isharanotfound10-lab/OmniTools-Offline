@@ -70,6 +70,7 @@ class MainActivity : Activity() {
     private val muted = Color.rgb(174, 163, 193)
     private val white = Color.WHITE
     private val worker = Executors.newFixedThreadPool(2)
+    private var hitomiSearchRequestId = 0
     private val detailWorker = Executors.newFixedThreadPool(4)
     private val imageWorker = Executors.newFixedThreadPool(3)
     private val pendingImages = ConcurrentHashMap<String, MutableList<WeakReference<ImageView>>>()
