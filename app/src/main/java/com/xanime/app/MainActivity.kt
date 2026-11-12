@@ -114,6 +114,7 @@ class MainActivity : Activity() {
     private var isDetailScreen = false
     private var showingFavorites = false
     private var showingComics = false
+    private var selectedComicSource = "HentaiRead"
     private var showingHentaini = false
     private var showingWatchAnimeHentai = false
     private var watchAnimeQuery = ""
@@ -362,28 +363,42 @@ class MainActivity : Activity() {
                 letterSpacing = .12f
                 setPadding(0, dp(3), 0, dp(9))
             })
-            // HentaiRead keeps its place as a source, but is presented as a
-            // prominent standalone button rather than a small tab.
-            pageContent.addView(actionButton("📖  HentaiRead  •  READ", true) {
-                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
-            }.apply {
-                textSize = 16f
-                elevation = dp(5).toFloat()
-            }, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(4) })
-            pageContent.addView(infoCard("Click Read to Browse And Read Hentai Manga. Enjoy!"),
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+            // Keep all comic sources in the same normal tab row.
             val comicTabs = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
-            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ", "DOWNLOAD"), false, 5) {
-                Toast.makeText(this, "HitomiLA will be added later", Toast.LENGTH_SHORT).show()
+            addWebsiteTab(comicTabs, "HentaiRead", listOf("READ"),
+                selectedComicSource == "HentaiRead", 5) {
+                selectedComicSource = "HentaiRead"
+                showHome()
             }
-            addWebsiteTab(comicTabs, "AllPornComic", emptyList(), false) {
-                Toast.makeText(this, "AllPornComic will be added later", Toast.LENGTH_SHORT).show()
+            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ", "DOWNLOAD"),
+                selectedComicSource == "HitomiLA", 5) {
+                selectedComicSource = "HitomiLA"
+                showHome()
+            }
+            addWebsiteTab(comicTabs, "AllPornComic", emptyList(),
+                selectedComicSource == "AllPornComic") {
+                selectedComicSource = "AllPornComic"
+                showHome()
             }
             pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, -2).apply {
-                topMargin = dp(14)
+                topMargin = dp(12)
             })
+
+            when (selectedComicSource) {
+                "HentaiRead" -> {
+                    pageContent.addView(infoCard("Click Read to Browse And Read Hentai Manga. Enjoy!"),
+                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+                    pageContent.addView(actionButton("📖  READ", true) {
+                        startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+                }
+                "HitomiLA" -> pageContent.addView(infoCard("HitomiLA will be added later."),
+                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+                "AllPornComic" -> pageContent.addView(infoCard("AllPornComic will be added later."),
+                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+            }
             setContentView(root)
             animateScreen(root)
             return
