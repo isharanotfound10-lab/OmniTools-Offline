@@ -365,13 +365,6 @@ class MainActivity : Activity() {
             val comicTabs = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
-            addWebsiteTab(
-                comicTabs, "HentaiRead", listOf("READ"), true, 5,
-                footerActionLabel = "Read",
-                footerAction = { startActivity(Intent(this, HentaiReadComicsActivity::class.java)) }
-            ) {
-                // Selecting the HentaiRead source no longer opens the reader.
-            }
             addWebsiteTab(comicTabs, "HitomiLA", listOf("READ", "DOWNLOAD"), false, 5) {
                 Toast.makeText(this, "HitomiLA will be added later", Toast.LENGTH_SHORT).show()
             }
@@ -379,8 +372,14 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "AllPornComic will be added later", Toast.LENGTH_SHORT).show()
             }
             pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, -2))
-            pageContent.addView(infoCard("HentaiRead is available now. The other website tabs are placeholders for future integrations."),
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+            pageContent.addView(infoCard("Click Read to Browse And Read Hentai Manga. Enjoy!"),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
+            pageContent.addView(actionButton("📖  READ", true) {
+                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+            }.apply {
+                textSize = 16f
+                elevation = dp(5).toFloat()
+            }, LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(12) })
             setContentView(root)
             animateScreen(root)
             return
