@@ -212,7 +212,13 @@ class HentaiReadComicsActivity : Activity() {
     private fun openWeb(url: String) {
         currentScreen = "reader"
         webView?.destroy()
-        base("HENTAIREAD READER") { onBackPressed() }
+        root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(10))
+            setBackgroundColor(bg)
+        }
+        root.addView(button("‹ BACK TO COMIC", false) { onBackPressed() },
+            LinearLayout.LayoutParams(-1, dp(42)).apply { bottomMargin = dp(8) })
         val view = WebView(this)
         webView = view
         CookieManager.getInstance().setAcceptCookie(true)
@@ -222,7 +228,8 @@ class HentaiReadComicsActivity : Activity() {
         view.settings.userAgentString = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
         view.webChromeClient = WebChromeClient()
         view.webViewClient = WebViewClient()
-        body.addView(view, LinearLayout.LayoutParams(-1, -1))
+        root.addView(view, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
         view.loadUrl(url)
     }
 
