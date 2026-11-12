@@ -127,8 +127,7 @@ class HitomiWebViewActivity : Activity() {
                 val host = request?.url?.host?.lowercase().orEmpty()
                 val path = request?.url?.path?.lowercase().orEmpty()
                 val isKnownAd = host == "chaseherbalpasty.com" ||
-                    host.endsWith(".chaseherbalpasty.com") ||
-                    path.contains("/lv/esnk/") && host != "hitomi.la"
+                    host.endsWith(".chaseherbalpasty.com")
                 if (isKnownAd) {
                     return WebResourceResponse("text/plain", "UTF-8", ByteArrayInputStream(ByteArray(0)))
                 }
@@ -166,9 +165,10 @@ class HitomiWebViewActivity : Activity() {
                 // Hitomi occasionally serves a transient 404 on the first gallery navigation.
                 // Retry this exact URL once; never enter an automatic refresh loop.
                 mainHandler.postDelayed({
-                    if (!isFinishing && !isDestroyed && webView === view &&
-                        view?.url == failedUrl) {
-                        view.reload()
+                    val browser = view ?: return@postDelayed
+                    if (!isFinishing && !isDestroyed && webView === browser &&
+                        browser.url == failedUrl) {
+                        browser.reload()
                     }
                 }, 650L)
             }
