@@ -240,6 +240,10 @@ class HentaiReadComicsActivity : Activity() {
     /** Cosmetic cleanup for common ad containers; does not remove comic images or reader controls. */
     private val adCleanupScript = """
         (function() {
+          // Only apply reader-specific banner cleanup on actual comic page URLs.
+          if (!/\\/english\\/p\\//i.test(location.pathname)) return;
+
+          var styleId = 'xanime-reader-ad-cleanup';
           var css = [
             '.adsbygoogle', '.ad-container', '.ad-wrapper', '.ads-container',
             '.ads-wrapper', '.advert', '.advertisement', '.advertising',
@@ -249,19 +253,73 @@ class HentaiReadComicsActivity : Activity() {
           ].join(',') + '{display:none!important;visibility:hidden!important;' +
             'max-height:0!important;min-height:0!important;height:0!important;' +
             'margin:0!important;padding:0!important;border:0!important;}';
-          function install() {
+
+          function hasComicImage(node) {
+            if (!node || !node.querySelectorAll) return false;
+            var images = node.querySelectorAll('img');
+            for (var i = 0; i < images.length; i++) {
+              var src = images[i].currentSrc || images[i].src || '';
+              if (/henread\\.xyz/i.test(src)) return true;
+            }
+            return false;
+          }
+
+          function hideAdNode(node) {
+            if (!node || node.nodeType !== 1 || hasComicImage(node)) return;
+            node.style.setProperty('display', 'none', 'important');
+            node.style.setProperty('height', '0', 'important');
+            node.style.setProperty('min-height', '0', 'important');
+            node.style.setProperty('max-height', '0', 'important');
+            node.style.setProperty('margin', '0', 'important');
+            node.style.setProperty('padding', '0', 'important');
+          }
+
+          function clean() {
             if (!document.documentElement) return;
-            var style = document.getElementById('xanime-ad-cleanup');
-            if (!style) {
-              style = document.createElement('style');
-              style.id = 'xanime-ad-cleanup';
+            if (!document.getElementById(styleId)) {
+              var style = document.createElement('style');
+              style.id = styleId;
               style.textContent = css;
               (document.head || document.documentElement).appendChild(style);
             }
+
+            // Catch ad iframes even when the site uses generated class names.
+            var frames = document.querySelectorAll('iframe[src], iframe[id], iframe[name]');
+            for (var i = 0; i < frames.length; i++) {
+              var frame = frames[i];
+              var details = [
+                frame.src, frame.id, frame.name,
+                frame.getAttribute('title'), frame.getAttribute('aria-label')
+              ].join(' ').toLowerCase();
+              if (!/(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|(^|[\\W_])ads?([\\W_]|$))/i.test(details)) continue;
+
+              var target = frame;
+              hideAdNode(target);
+              for (var level = 0; level < 2 && target.parentElement; level++) {
+                var parent = target.parentElement;
+                if (hasComicImage(parent)) break;
+                hideAdNode(parent);
+                target = parent;
+              }
+            }
+
+            // Hide clearly named ad blocks, but never an element containing a comic page image.
+            var candidates = document.querySelectorAll('[id], [class], [data-ad], [aria-label]');
+            for (var j = 0; j < candidates.length; j++) {
+              var el = candidates[j];
+              if (el.id === styleId || hasComicImage(el)) continue;
+              var label = [
+                el.id, typeof el.className === 'string' ? el.className : '',
+                el.getAttribute('data-ad'), el.getAttribute('aria-label')
+              ].join(' ').toLowerCase();
+              if (/(^|[\\W_])(ad|ads|advert|advertisement|banner-ad)([\\W_]|$)/i.test(label)) hideAdNode(el);
+            }
           }
-          install();
-          new MutationObserver(install).observe(document.documentElement, {
-            childList: true, subtree: true
+
+          clean();
+          new MutationObserver(clean).observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['src', 'class', 'id']
           });
         })();
     """.trimIndent()
