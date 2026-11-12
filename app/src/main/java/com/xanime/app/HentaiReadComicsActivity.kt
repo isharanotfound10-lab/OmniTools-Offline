@@ -119,7 +119,7 @@ class HentaiReadComicsActivity : Activity() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                             if (routed || url.isNullOrBlank() || url == "about:blank") return
                             routed = true
-                            if (allowMainFrameUrl(url)) {
+                            if (!allowMainFrameUrl(url)) {
                                 webView?.loadUrl(url)
                             }
                             closePopup(popup)
@@ -130,7 +130,7 @@ class HentaiReadComicsActivity : Activity() {
                             if (url == "about:blank") return false
                             if (!routed) {
                                 routed = true
-                                if (allowMainFrameUrl(url)) webView?.loadUrl(url)
+                                if (!allowMainFrameUrl(url)) webView?.loadUrl(url)
                                 closePopup(popup)
                             }
                             return true
