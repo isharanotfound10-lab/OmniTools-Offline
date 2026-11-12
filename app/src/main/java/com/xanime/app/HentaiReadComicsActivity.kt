@@ -6,24 +6,24 @@ import android.os.Bundle
 import android.os.Message
 import android.net.Uri
 import android.view.Gravity
-import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
-import android.webkit.WebResourceRequest
 
 /**
- * HentaiRead is intentionally hosted in a normal in-app WebView.
- * The website handles its own scripts, reader navigation, images and any
- * verification pages; this activity does not scrape or download comic pages.
+ * HentaiRead is hosted in a normal in-app WebView.
+ * The website handles its own scripts, reader navigation, images and verification pages;
+ * this activity does not scrape or download comic pages.
  */
 class HentaiReadComicsActivity : Activity() {
     private var webView: WebView? = null
+    private var popupWebView: WebView? = null
     private lateinit var progress: ProgressBar
     private lateinit var pageTitle: TextView
 
@@ -73,43 +73,106 @@ class HentaiReadComicsActivity : Activity() {
         }
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(3)))
 
-        val browser = WebView(this)
+        val browser = createBrowser()
         webView = browser
-        browser.settings.javaScriptEnabled = true
-        browser.settings.domStorageEnabled = true
-        browser.settings.loadsImagesAutomatically = true
-        browser.settings.useWideViewPort = true
-        browser.settings.loadWithOverviewMode = true
-        browser.settings.javaScriptCanOpenWindowsAutomatically = false
-        browser.settings.setSupportMultipleWindows(true)
-        browser.webChromeClient = object : WebChromeClient() {
-            override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                progress.progress = newProgress
-                progress.visibility = if (newProgress >= 100) android.view.View.GONE else android.view.View.VISIBLE
-            }
-
-            override fun onReceivedTitle(view: WebView?, title: String?) {
-                pageTitle.text = title?.take(28)?.ifBlank { "HENTAIREAD" } ?: "HENTAIREAD"
-            }
-
-            // Never create a second window for ad/pop-up scripts.
-            override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean = false
-        }
-        browser.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                if (request == null || !request.isForMainFrame) return false
-                return allowMainFrameUrl(request.url.toString())
-            }
-
-            @Suppress("DEPRECATION")
-            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
-                if (url.isNullOrBlank()) return true
-                return allowMainFrameUrl(url)
-            }
-        }
         root.addView(browser, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
         browser.loadUrl("https://hentairead.com/")
+    }
+
+    private fun createBrowser(): WebView {
+        return WebView(this).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.loadsImagesAutomatically = true
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            // HentaiRead's user-initiated reader links may use target=_blank.
+            settings.javaScriptCanOpenWindowsAutomatically = false
+            settings.setSupportMultipleWindows(true)
+
+            webChromeClient = object : WebChromeClient() {
+                override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                    progress.progress = newProgress
+                    progress.visibility = if (newProgress >= 100) android.view.View.GONE else android.view.View.VISIBLE
+                }
+
+                override fun onReceivedTitle(view: WebView?, title: String?) {
+                    pageTitle.text = title?.take(28)?.ifBlank { "HENTAIREAD" } ?: "HENTAIREAD"
+                }
+
+                // Accept only user-initiated new windows and route their first real
+                // HentaiRead URL into the existing browser instead of opening a tab.
+                override fun onCreateWindow(
+                    view: WebView?,
+                    isDialog: Boolean,
+                    isUserGesture: Boolean,
+                    resultMsg: Message?
+                ): Boolean {
+                    if (!isUserGesture || resultMsg == null || popupWebView != null) return false
+
+                    val popup = WebView(this@HentaiReadComicsActivity)
+                    popupWebView = popup
+                    popup.webViewClient = object : WebViewClient() {
+                        private var routed = false
+
+                        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                            if (routed || url.isNullOrBlank() || url == "about:blank") return
+                            routed = true
+                            if (allowMainFrameUrl(url)) {
+                                webView?.loadUrl(url)
+                            }
+                            closePopup(popup)
+                        }
+
+                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                            val url = request?.url?.toString() ?: return true
+                            if (url == "about:blank") return false
+                            if (!routed) {
+                                routed = true
+                                if (allowMainFrameUrl(url)) webView?.loadUrl(url)
+                                closePopup(popup)
+                            }
+                            return true
+                        }
+                    }
+
+                    val transport = resultMsg.obj as? WebView.WebViewTransport ?: run {
+                        closePopup(popup)
+                        return false
+                    }
+                    transport.webView = popup
+                    resultMsg.sendToTarget()
+                    return true
+                }
+
+                override fun onCloseWindow(window: WebView?) {
+                    if (window === popupWebView) closePopup(window)
+                }
+            }
+
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    if (request == null || !request.isForMainFrame) return false
+                    return allowMainFrameUrl(request.url.toString())
+                }
+
+                @Suppress("DEPRECATION")
+                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                    if (url.isNullOrBlank()) return true
+                    return allowMainFrameUrl(url)
+                }
+            }
+        }
+    }
+
+    private fun closePopup(popup: WebView?) {
+        if (popup == null) return
+        if (popupWebView === popup) popupWebView = null
+        popup.stopLoading()
+        popup.webChromeClient = null
+        popup.webViewClient = WebViewClient()
+        popup.destroy()
     }
 
     override fun onBackPressed() {
@@ -118,6 +181,7 @@ class HentaiReadComicsActivity : Activity() {
     }
 
     override fun onDestroy() {
+        closePopup(popupWebView)
         webView?.apply {
             stopLoading()
             webChromeClient = null
@@ -128,7 +192,7 @@ class HentaiReadComicsActivity : Activity() {
         super.onDestroy()
     }
 
-    /** Keep top-level browsing on HentaiRead; subresources (including reader images) remain untouched. */
+    /** Keep top-level browsing on HentaiRead; reader images and other subresources remain untouched. */
     private fun allowMainFrameUrl(rawUrl: String): Boolean {
         val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return true
         val scheme = uri.scheme?.lowercase() ?: return true
