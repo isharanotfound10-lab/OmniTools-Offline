@@ -241,7 +241,7 @@ class HentaiReadComicsActivity : Activity() {
     private val adCleanupScript = """
         (function() {
           // Only apply reader-specific banner cleanup on actual comic page URLs.
-          if (!/\\/english\\/p\\//i.test(location.pathname)) return;
+          if (!/\/english\/p\//i.test(location.pathname)) return;
 
           var styleId = 'xanime-reader-ad-cleanup';
           var css = [
@@ -259,7 +259,7 @@ class HentaiReadComicsActivity : Activity() {
             var images = node.querySelectorAll('img');
             for (var i = 0; i < images.length; i++) {
               var src = images[i].currentSrc || images[i].src || '';
-              if (/henread\\.xyz/i.test(src)) return true;
+              if (/henread\.xyz/i.test(src)) return true;
             }
             return false;
           }
@@ -291,7 +291,7 @@ class HentaiReadComicsActivity : Activity() {
                 frame.src, frame.id, frame.name,
                 frame.getAttribute('title'), frame.getAttribute('aria-label')
               ].join(' ').toLowerCase();
-              if (!/(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|(^|[\\W_])ads?([\\W_]|$))/i.test(details)) continue;
+              if (!/(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|(^|[\W_])ads?([\W_]|$))/i.test(details)) continue;
 
               var target = frame;
               hideAdNode(target);
@@ -312,7 +312,7 @@ class HentaiReadComicsActivity : Activity() {
                 el.id, typeof el.className === 'string' ? el.className : '',
                 el.getAttribute('data-ad'), el.getAttribute('aria-label')
               ].join(' ').toLowerCase();
-              if (/(^|[\\W_])(ad|ads|advert|advertisement|banner-ad)([\\W_]|$)/i.test(label)) hideAdNode(el);
+              if (/(^|[\W_])(ad|ads|advert|advertisement|banner-ad)([\W_]|$)/i.test(label)) hideAdNode(el);
             }
           }
 
