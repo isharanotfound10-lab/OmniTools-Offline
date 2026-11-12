@@ -241,7 +241,8 @@ class HentaiReadComicsActivity : Activity() {
     private val adCleanupScript = """
         (function() {
           // Apply precise JADS slot cleanup on comic detail and reader pages only.
-          if (!(/\\/english\\/p\\//i.test(location.pathname) || /\\/hentai\\//i.test(location.pathname))) return;
+          var path = location.pathname.toLowerCase();
+          if (path.indexOf('/english/p/') === -1 && path.indexOf('/hentai/') === -1) return;
 
           var styleId = 'xanime-reader-ad-cleanup';
           var css = [
