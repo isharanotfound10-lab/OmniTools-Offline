@@ -33,7 +33,7 @@ object HentaiReadParser {
                     .firstOrNull { value -> value.startsWith("https://") }
             }.orEmpty().ifBlank {
                 val style = card.selectFirst(".manga-item__img-inner")?.attr("style").orEmpty()
-                Regex("""url\\(['"]?(https?://[^)'"]+)""").find(style)?.groupValues?.getOrNull(1).orEmpty()
+                Regex("""url\(['"]?(https?://[^)'"]+)""").find(style)?.groupValues?.getOrNull(1).orEmpty()
             }
             val title = sequenceOf(
                 anchor.attr("title").trim(),
