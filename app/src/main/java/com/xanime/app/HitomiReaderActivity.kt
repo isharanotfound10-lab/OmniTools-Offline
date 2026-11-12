@@ -165,10 +165,19 @@ class HitomiReaderActivity : Activity() {
                 val code = connection.responseCode
                 if (code !in 200..299) throw IllegalStateException("HTTP $code")
                 val bitmap = connection.inputStream.use { input ->
-                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    input.mark(1024 * 1024)
                     val bytes = input.readBytes()
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    val targetWidth = resources.displayMetrics.widthPixels.coerceAtLeast(480)
+                    var sampleSize = 1
+                    while (bounds.outWidth / (sampleSize * 2) >= targetWidth) {
+                        sampleSize *= 2
+                    }
+                    val decodeOptions = BitmapFactory.Options().apply {
+                        inSampleSize = sampleSize
+                        inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
+                    }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
                 }
                 runOnUiThread {
                     if (!isFinishing && bitmap != null) image.setImageBitmap(bitmap)
