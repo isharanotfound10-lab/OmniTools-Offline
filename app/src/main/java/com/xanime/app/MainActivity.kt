@@ -365,16 +365,16 @@ class MainActivity : Activity() {
             val comicTabs = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
-            comicTabs.addView(actionButton("HentaiRead", true) {
+            addWebsiteTab(comicTabs, "HentaiRead", listOf("READ"), true, 5) {
                 startActivity(Intent(this, HentaiReadComicsActivity::class.java))
-            }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { marginEnd = dp(5) })
-            comicTabs.addView(actionButton("HitomiLA", false) {
+            }
+            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ", "DOWNLOAD"), false, 5) {
                 Toast.makeText(this, "HitomiLA will be added later", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { marginEnd = dp(5) })
-            comicTabs.addView(actionButton("AllPornComic", false) {
+            }
+            addWebsiteTab(comicTabs, "AllPornComic", emptyList(), false) {
                 Toast.makeText(this, "AllPornComic will be added later", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(0, dp(43), 1f))
-            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, dp(46)))
+            }
+            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, -2))
             pageContent.addView(infoCard("HentaiRead is available now. The other website tabs are placeholders for future integrations."),
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
             setContentView(root)
@@ -383,7 +383,8 @@ class MainActivity : Activity() {
         }
 
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        sourceTabs.addView(actionButton("XAnime", !showingHentaini && !showingWatchAnimeHentai) {
+        addWebsiteTab(sourceTabs, "XAnime", listOf("DIRECT LINKS"),
+            !showingHentaini && !showingWatchAnimeHentai, 6) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = false
@@ -391,8 +392,9 @@ class MainActivity : Activity() {
             showingFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
-        sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
+        }
+        addWebsiteTab(sourceTabs, "Hentaini",
+            listOf("MEGA", "MEDIAFIRE", "TERABOX", "DIRECT LINKS"), showingHentaini, 6) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = true
@@ -400,15 +402,16 @@ class MainActivity : Activity() {
             showingHentainiFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
-        sourceTabs.addView(actionButton("WatchAnimeHentai", showingWatchAnimeHentai) {
-            if (showingWatchAnimeHentai) return@actionButton
+        }
+        addWebsiteTab(sourceTabs, "WatchAnimeHentai", listOf("IN-APP DOWNLOAD"),
+            showingWatchAnimeHentai) {
+            if (showingWatchAnimeHentai) return@addWebsiteTab
             showingHentaini = false
             showingWatchAnimeHentai = true
             showingFavorites = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+        }
+        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 
         if (showingHentaini) {
             showHentainiHome()
@@ -2905,6 +2908,37 @@ class MainActivity : Activity() {
             }
             false
         }
+    }
+
+    private fun addWebsiteTab(
+        container: LinearLayout,
+        title: String,
+        tags: List<String>,
+        selected: Boolean,
+        endMargin: Int = 0,
+        action: () -> Unit
+    ) {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        column.addView(actionButton(title, selected, action),
+            LinearLayout.LayoutParams(-1, dp(43)))
+        if (tags.isNotEmpty()) {
+            column.addView(TextView(this).apply {
+                text = tags.joinToString("  ·  ")
+                textSize = 8f
+                setTextColor(muted)
+                gravity = Gravity.CENTER
+                maxLines = 2
+                setLineSpacing(dp(1).toFloat(), 1f)
+                setPadding(dp(3), dp(7), dp(3), dp(6))
+                background = glassDrawable(10)
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
+        }
+        container.addView(column, LinearLayout.LayoutParams(0, -2, 1f).apply {
+            if (endMargin > 0) marginEnd = dp(endMargin)
+        })
     }
 
     private fun infoCard(message: String) = TextView(this).apply {
