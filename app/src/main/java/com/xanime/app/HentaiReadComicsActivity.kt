@@ -93,12 +93,12 @@ class HentaiReadComicsActivity : Activity() {
 
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    progress.progress = newProgress
-                    progress.visibility = if (newProgress >= 100) android.view.View.GONE else android.view.View.VISIBLE
+                    this@HentaiReadComicsActivity.progress.progress = newProgress
+                    this@HentaiReadComicsActivity.progress.visibility = if (newProgress >= 100) android.view.View.GONE else android.view.View.VISIBLE
                 }
 
                 override fun onReceivedTitle(view: WebView?, title: String?) {
-                    pageTitle.text = title?.take(28)?.ifBlank { "HENTAIREAD" } ?: "HENTAIREAD"
+                    this@HentaiReadComicsActivity.pageTitle.text = title?.take(28)?.ifBlank { "HENTAIREAD" } ?: "HENTAIREAD"
                 }
 
                 // Accept only user-initiated new windows and route their first real
