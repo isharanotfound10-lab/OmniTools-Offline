@@ -25,6 +25,7 @@ android {
 
 dependencies {
     implementation("org.jsoup:jsoup:1.18.3")
+    implementation("org.mozilla:rhino:1.7.15")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }
