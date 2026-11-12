@@ -10,6 +10,8 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import java.io.ByteArrayInputStream
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -152,6 +154,27 @@ class HentaiReadComicsActivity : Activity() {
             }
 
             webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                    val host = request?.url?.host?.lowercase() ?: return null
+                    return if (isKnownAdHost(host)) {
+                        WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            204,
+                            "No Content",
+                            emptyMap(),
+                            ByteArrayInputStream(ByteArray(0))
+                        )
+                    } else {
+                        super.shouldInterceptRequest(view, request)
+                    }
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    view?.evaluateJavascript(adCleanupScript, null)
+                }
+
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     if (request == null || !request.isForMainFrame) return false
                     return allowMainFrameUrl(request.url.toString())
@@ -191,6 +214,57 @@ class HentaiReadComicsActivity : Activity() {
         webView = null
         super.onDestroy()
     }
+
+    /** Block only dedicated advertising networks; HentaiRead and henread.xyz content stays untouched. */
+    private fun isKnownAdHost(host: String): Boolean {
+        val blockedDomains = listOf(
+            "doubleclick.net",
+            "googlesyndication.com",
+            "googleadservices.com",
+            "googletagservices.com",
+            "adservice.google.com",
+            "popads.net",
+            "popcash.net",
+            "exoclick.com",
+            "juicyads.com",
+            "trafficjunky.com",
+            "onclickads.net",
+            "propellerads.com",
+            "adsterra.com",
+            "taboola.com",
+            "outbrain.com"
+        )
+        return blockedDomains.any { host == it || host.endsWith(".$it") }
+    }
+
+    /** Cosmetic cleanup for common ad containers; does not remove comic images or reader controls. */
+    private val adCleanupScript = """
+        (function() {
+          var css = [
+            '.adsbygoogle', '.ad-container', '.ad-wrapper', '.ads-container',
+            '.ads-wrapper', '.advert', '.advertisement', '.advertising',
+            '[data-ad]', '[id^="google_ads"]', '[id*="advert"]',
+            '[class*="advert"]', 'iframe[src*="doubleclick"]',
+            'iframe[src*="googlesyndication"]'
+          ].join(',') + '{display:none!important;visibility:hidden!important;' +
+            'max-height:0!important;min-height:0!important;height:0!important;' +
+            'margin:0!important;padding:0!important;border:0!important;}';
+          function install() {
+            if (!document.documentElement) return;
+            var style = document.getElementById('xanime-ad-cleanup');
+            if (!style) {
+              style = document.createElement('style');
+              style.id = 'xanime-ad-cleanup';
+              style.textContent = css;
+              (document.head || document.documentElement).appendChild(style);
+            }
+          }
+          install();
+          new MutationObserver(install).observe(document.documentElement, {
+            childList: true, subtree: true
+          });
+        })();
+    """.trimIndent()
 
     /** Keep top-level browsing on HentaiRead; reader images and other subresources remain untouched. */
     private fun allowMainFrameUrl(rawUrl: String): Boolean {
