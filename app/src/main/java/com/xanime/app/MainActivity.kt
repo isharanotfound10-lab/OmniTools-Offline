@@ -3076,9 +3076,9 @@ class MainActivity : Activity() {
                             })
                             card.isClickable = true
                             card.setOnClickListener {
-                                startActivity(Intent(this, HitomiReaderActivity::class.java).apply {
-                                    putExtra(HitomiReaderActivity.EXTRA_GALLERY_ID, item.id)
-                                    putExtra(HitomiReaderActivity.EXTRA_TITLE, item.title)
+                                startActivity(Intent(this, HitomiWebViewActivity::class.java).apply {
+                                    putExtra(HitomiWebViewActivity.EXTRA_URL, item.url)
+                                    putExtra(HitomiWebViewActivity.EXTRA_TITLE, item.title)
                                 })
                             }
                             resultsContainer.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
