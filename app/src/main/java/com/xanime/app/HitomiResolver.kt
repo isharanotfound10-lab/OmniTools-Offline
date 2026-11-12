@@ -34,7 +34,7 @@ object HitomiResolver {
             context.languageVersion = Context.VERSION_ES6
             // The resolver only needs JavaScript built-ins. Do not expose Java classes
             // to the remote site scripts.
-            context.classShutter = ClassShutter { false }
+            context.setClassShutter(ClassShutter { false })
             val scope: Scriptable = context.initStandardObjects()
             context.evaluateString(scope, "var navigator = {}; navigator.userAgent = 'XAnime Android';", "bootstrap", 1, null)
             context.evaluateString(scope, commonFunctions, "hitomi-common.js", 1, null)
