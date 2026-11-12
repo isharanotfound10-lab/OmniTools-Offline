@@ -8,6 +8,7 @@
         android:roundIcon="@drawable/ic_xanime"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:supportsRtl="true">
+        <activity android:name="com.xanime.app.HitomiReaderActivity" android:exported="false" />
         <activity android:name="com.xanime.app.HentaiReadComicsActivity" android:exported="false" />
         <activity android:name="com.xanime.app.MainActivity" android:exported="true">
             <intent-filter>
