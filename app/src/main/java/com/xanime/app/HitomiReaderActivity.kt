@@ -91,7 +91,7 @@ class HitomiReaderActivity : Activity() {
         root.addView(progress, LinearLayout.LayoutParams(dp(32), dp(32)).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         })
-        val scroll = ScrollView(this).apply { fillViewport = false }
+        val scroll = ScrollView(this).apply { isFillViewport = false }
         pageList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(pageList, ViewGroup.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
