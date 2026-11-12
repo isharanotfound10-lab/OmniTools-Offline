@@ -359,9 +359,12 @@ class MainActivity : Activity() {
                 setPadding(0, dp(20), 0, dp(8))
             })
             pageContent.addView(
-                infoCard("The Comics category is separate from Hentai. Comic browsing will be added here."),
+                infoCard("Browse HentaiRead comics here. This section is separate from the existing Hentai sources."),
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }
             )
+            pageContent.addView(actionButton("OPEN HENTAIREAD COMICS  ↗") {
+                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+            }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(12) })
             setContentView(root)
             animateScreen(root)
             return
