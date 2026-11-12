@@ -362,6 +362,16 @@ class MainActivity : Activity() {
                 letterSpacing = .12f
                 setPadding(0, dp(3), 0, dp(9))
             })
+            // HentaiRead keeps its place as a source, but is presented as a
+            // prominent standalone button rather than a small tab.
+            pageContent.addView(actionButton("📖  HentaiRead  •  READ", true) {
+                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+            }.apply {
+                textSize = 16f
+                elevation = dp(5).toFloat()
+            }, LinearLayout.LayoutParams(-1, dp(58)).apply { topMargin = dp(4) })
+            pageContent.addView(infoCard("Click Read to Browse And Read Hentai Manga. Enjoy!"),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
             val comicTabs = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
@@ -371,15 +381,9 @@ class MainActivity : Activity() {
             addWebsiteTab(comicTabs, "AllPornComic", emptyList(), false) {
                 Toast.makeText(this, "AllPornComic will be added later", Toast.LENGTH_SHORT).show()
             }
-            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, -2))
-            pageContent.addView(infoCard("Click Read to Browse And Read Hentai Manga. Enjoy!"),
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16) })
-            pageContent.addView(actionButton("📖  READ", true) {
-                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
-            }.apply {
-                textSize = 16f
-                elevation = dp(5).toFloat()
-            }, LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(12) })
+            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(14)
+            })
             setContentView(root)
             animateScreen(root)
             return
