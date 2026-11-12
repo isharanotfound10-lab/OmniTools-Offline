@@ -365,8 +365,12 @@ class MainActivity : Activity() {
             val comicTabs = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
-            addWebsiteTab(comicTabs, "HentaiRead", listOf("READ"), true, 5) {
-                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+            addWebsiteTab(
+                comicTabs, "HentaiRead", listOf("READ"), true, 5,
+                footerActionLabel = "Read",
+                footerAction = { startActivity(Intent(this, HentaiReadComicsActivity::class.java)) }
+            ) {
+                // Selecting the HentaiRead source no longer opens the reader.
             }
             addWebsiteTab(comicTabs, "HitomiLA", listOf("READ", "DOWNLOAD"), false, 5) {
                 Toast.makeText(this, "HitomiLA will be added later", Toast.LENGTH_SHORT).show()
@@ -2916,6 +2920,8 @@ class MainActivity : Activity() {
         tags: List<String>,
         selected: Boolean,
         endMargin: Int = 0,
+        footerActionLabel: String? = null,
+        footerAction: (() -> Unit)? = null,
         action: () -> Unit
     ) {
         val column = LinearLayout(this).apply {
@@ -2935,6 +2941,10 @@ class MainActivity : Activity() {
                 setPadding(dp(3), dp(7), dp(3), dp(6))
                 background = glassDrawable(10)
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
+        }
+        if (footerActionLabel != null && footerAction != null) {
+            column.addView(actionButton(footerActionLabel, true, footerAction),
+                LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
         }
         container.addView(column, LinearLayout.LayoutParams(0, -2, 1f).apply {
             if (endMargin > 0) marginEnd = dp(endMargin)
