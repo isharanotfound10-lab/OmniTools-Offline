@@ -373,7 +373,7 @@ class MainActivity : Activity() {
                 selectedComicSource = "HentaiRead"
                 showHome()
             }
-            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ", "DOWNLOAD"),
+            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ"),
                 selectedComicSource == "HitomiLA", 5) {
                 selectedComicSource = "HitomiLA"
                 showHome()
@@ -3074,13 +3074,14 @@ class MainActivity : Activity() {
                                 setTextColor(muted)
                                 setPadding(0, dp(5), 0, 0)
                             })
-                            card.isClickable = true
-                            card.setOnClickListener {
+                            card.addView(actionButton("📖  READ", true) {
                                 startActivity(Intent(this, HitomiWebViewActivity::class.java).apply {
                                     putExtra(HitomiWebViewActivity.EXTRA_URL, item.url)
                                     putExtra(HitomiWebViewActivity.EXTRA_TITLE, item.title)
                                 })
-                            }
+                            }, LinearLayout.LayoutParams(-1, dp(40)).apply {
+                                topMargin = dp(10)
+                            })
                             resultsContainer.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
                                 bottomMargin = dp(8)
                             })
