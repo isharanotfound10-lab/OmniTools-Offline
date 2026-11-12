@@ -3074,6 +3074,13 @@ class MainActivity : Activity() {
                                 setTextColor(muted)
                                 setPadding(0, dp(5), 0, 0)
                             })
+                            card.isClickable = true
+                            card.setOnClickListener {
+                                startActivity(Intent(this, HitomiReaderActivity::class.java).apply {
+                                    putExtra(HitomiReaderActivity.EXTRA_GALLERY_ID, item.id)
+                                    putExtra(HitomiReaderActivity.EXTRA_TITLE, item.title)
+                                })
+                            }
                             resultsContainer.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
                                 bottomMargin = dp(8)
                             })
