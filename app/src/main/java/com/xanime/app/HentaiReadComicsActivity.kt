@@ -245,6 +245,7 @@ class HentaiReadComicsActivity : Activity() {
 
           var styleId = 'xanime-reader-ad-cleanup';
           var css = [
+            '[data-jads-slot="top"]', '[data-jads-slot="bottom"]',
             '.adsbygoogle', '.ad-container', '.ad-wrapper', '.ads-container',
             '.ads-wrapper', '.advert', '.advertisement', '.advertising',
             '[data-ad]', '[id^="google_ads"]', '[id*="advert"]',
@@ -282,6 +283,10 @@ class HentaiReadComicsActivity : Activity() {
               style.textContent = css;
               (document.head || document.documentElement).appendChild(style);
             }
+
+            // HentaiRead's confirmed JADS banner slots; hide their entire 100px wrappers.
+            var jadsSlots = document.querySelectorAll('[data-jads-slot="top"], [data-jads-slot="bottom"]');
+            for (var s = 0; s < jadsSlots.length; s++) hideAdNode(jadsSlots[s]);
 
             // Catch ad iframes even when the site uses generated class names.
             var frames = document.querySelectorAll('iframe[src], iframe[id], iframe[name]');
