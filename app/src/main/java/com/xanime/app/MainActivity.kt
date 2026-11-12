@@ -394,8 +394,7 @@ class MainActivity : Activity() {
                         startActivity(Intent(this, HentaiReadComicsActivity::class.java))
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
                 }
-                "HitomiLA" -> pageContent.addView(infoCard("HitomiLA will be added later."),
-                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+                "HitomiLA" -> showHitomiLaHome()
                 "AllPornComic" -> pageContent.addView(infoCard("AllPornComic will be added later."),
                     LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
             }
@@ -2929,6 +2928,159 @@ class MainActivity : Activity() {
                         .setInterpolator(android.view.animation.OvershootInterpolator(1.15f)).start()
             }
             false
+        }
+    }
+
+
+    private data class HitomiGalleryResult(
+        val id: String,
+        val title: String,
+        val url: String
+    )
+
+    // Native HitomiLA search screen. Search is restricted to gallery titles.
+    private fun showHitomiLaHome() {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        panel.addView(label("HITOMI.LA", 18, white, true).apply {
+            setPadding(0, dp(16), 0, dp(5))
+        })
+        panel.addView(label("SEARCH GALLERIES BY TITLE", 9, muted, true).apply {
+            letterSpacing = .1f
+            setPadding(0, 0, 0, dp(9))
+        })
+
+        val input = EditText(this).apply {
+            hint = "Enter a gallery title..."
+            setHintTextColor(muted)
+            setTextColor(white)
+            textSize = 14f
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(13), 0, dp(10), 0)
+            background = ripple(glassDrawable(14))
+        }
+        val statusText = TextView(this).apply {
+            text = "Search HitomiLA galleries by name."
+            textSize = 12f
+            setTextColor(muted)
+            setPadding(dp(2), dp(12), dp(2), dp(8))
+        }
+        val results = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val searchButton = actionButton("SEARCH ↗", true) {
+            runHitomiTitleSearch(input.text.toString(), results, statusText)
+        }
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchRow.addView(input, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+            marginEnd = dp(7)
+        })
+        searchRow.addView(searchButton, LinearLayout.LayoutParams(dp(96), dp(46)))
+        panel.addView(searchRow, LinearLayout.LayoutParams(-1, -2))
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                runHitomiTitleSearch(input.text.toString(), results, statusText)
+                true
+            } else false
+        }
+        panel.addView(statusText, LinearLayout.LayoutParams(-1, -2))
+        panel.addView(results, LinearLayout.LayoutParams(-1, -2))
+        pageContent.addView(panel, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(10)
+        })
+    }
+
+    private fun runHitomiTitleSearch(
+        rawQuery: String,
+        resultsContainer: LinearLayout,
+        statusText: TextView
+    ) {
+        val term = rawQuery.trim()
+        if (term.isEmpty()) {
+            statusText.text = "Enter a gallery title to search."
+            resultsContainer.removeAllViews()
+            return
+        }
+
+        val requestId = ++hitomiSearchRequestId
+        resultsContainer.removeAllViews()
+        statusText.text = "Searching HitomiLA..."
+        worker.execute {
+            var connection: HttpURLConnection? = null
+            try {
+                val expression = "title:$term"
+                val encoded = URLEncoder.encode(expression, "UTF-8")
+                val url = URL("https://hitomi.la/search.html?$encoded")
+                connection = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 20000
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36")
+                    setRequestProperty("Accept", "text/html,application/xhtml+xml")
+                    setRequestProperty("Referer", "https://hitomi.la/")
+                }
+                val code = connection.responseCode
+                if (code !in 200..299) throw IllegalStateException("HitomiLA returned HTTP $code")
+                val html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+                val document = Jsoup.parse(html, "https://hitomi.la/")
+                val cards = document.select(".gallery-content > div")
+                val found = mutableListOf<HitomiGalleryResult>()
+                for (card in cards) {
+                    val link = card.selectFirst("h1 a[href*=/galleries/]")
+                        ?: card.selectFirst("a[href*=/galleries/]")
+                        ?: continue
+                    val href = link.attr("href")
+                    val id = Regex("/galleries/(\\d+)").find(href)?.groupValues?.getOrNull(1)
+                        ?: continue
+                    val title = link.text().trim()
+                    if (title.isNotEmpty() && title.contains(term, ignoreCase = true)) {
+                        found.add(HitomiGalleryResult(id, title, "https://hitomi.la/galleries/$id.html"))
+                    }
+                }
+                runOnUiThread {
+                    if (requestId != hitomiSearchRequestId || isFinishing) return@runOnUiThread
+                    resultsContainer.removeAllViews()
+                    if (found.isEmpty()) {
+                        statusText.text = "No matching gallery titles found."
+                    } else {
+                        statusText.text = "Found ${found.size} matching galleries."
+                        found.distinctBy { it.id }.take(30).forEach { item ->
+                            val card = LinearLayout(this).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(dp(14), dp(12), dp(14), dp(12))
+                                background = glassDrawable(14)
+                            }
+                            card.addView(TextView(this).apply {
+                                text = item.title
+                                textSize = 13f
+                                setTextColor(white)
+                                typeface = Typeface.DEFAULT_BOLD
+                            })
+                            card.addView(TextView(this).apply {
+                                text = "Gallery #${item.id}"
+                                textSize = 10f
+                                setTextColor(muted)
+                                setPadding(0, dp(5), 0, 0)
+                            })
+                            resultsContainer.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+                                bottomMargin = dp(8)
+                            })
+                        }
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    if (requestId != hitomiSearchRequestId || isFinishing) return@runOnUiThread
+                    statusText.text = "Search failed: ${error.message ?: "Unable to reach HitomiLA"}"
+                }
+            } finally {
+                connection?.disconnect()
+            }
         }
     }
 
