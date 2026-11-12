@@ -70,6 +70,7 @@ class MainActivity : Activity() {
     private val muted = Color.rgb(174, 163, 193)
     private val white = Color.WHITE
     private val worker = Executors.newFixedThreadPool(2)
+    private var hitomiSearchRequestId = 0
     private val detailWorker = Executors.newFixedThreadPool(4)
     private val imageWorker = Executors.newFixedThreadPool(3)
     private val pendingImages = ConcurrentHashMap<String, MutableList<WeakReference<ImageView>>>()
@@ -114,6 +115,7 @@ class MainActivity : Activity() {
     private var isDetailScreen = false
     private var showingFavorites = false
     private var showingComics = false
+    private var selectedComicSource = "HentaiRead"
     private var showingHentaini = false
     private var showingWatchAnimeHentai = false
     private var watchAnimeQuery = ""
@@ -362,28 +364,49 @@ class MainActivity : Activity() {
                 letterSpacing = .12f
                 setPadding(0, dp(3), 0, dp(9))
             })
+            // Keep all comic sources in the same normal tab row.
             val comicTabs = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
-            comicTabs.addView(actionButton("HentaiRead", true) {
-                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
-            }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { marginEnd = dp(5) })
-            comicTabs.addView(actionButton("HitomiLA", false) {
-                Toast.makeText(this, "HitomiLA will be added later", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { marginEnd = dp(5) })
-            comicTabs.addView(actionButton("AllPornComic", false) {
-                Toast.makeText(this, "AllPornComic will be added later", Toast.LENGTH_SHORT).show()
-            }, LinearLayout.LayoutParams(0, dp(43), 1f))
-            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, dp(46)))
-            pageContent.addView(infoCard("HentaiRead is available now. The other website tabs are placeholders for future integrations."),
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+            addWebsiteTab(comicTabs, "HentaiRead", listOf("READ"),
+                selectedComicSource == "HentaiRead", 5) {
+                selectedComicSource = "HentaiRead"
+                showHome()
+            }
+            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ"),
+                selectedComicSource == "HitomiLA", 5) {
+                selectedComicSource = "HitomiLA"
+                showHome()
+            }
+            addWebsiteTab(comicTabs, "AllPornComic", emptyList(),
+                selectedComicSource == "AllPornComic") {
+                selectedComicSource = "AllPornComic"
+                showHome()
+            }
+            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(12)
+            })
+
+            when (selectedComicSource) {
+                "HentaiRead" -> {
+                    pageContent.addView(infoCard("Click Read to Browse And Read Hentai Manga. Enjoy!"),
+                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+                    pageContent.addView(actionButton("📖  READ", true) {
+                        startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+                }
+                "HitomiLA" -> showHitomiLaHome()
+                "AllPornComic" -> pageContent.addView(infoCard("AllPornComic will be added later."),
+                    LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+            }
             setContentView(root)
             animateScreen(root)
             return
         }
 
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        sourceTabs.addView(actionButton("XAnime", !showingHentaini && !showingWatchAnimeHentai) {
+        addWebsiteTab(sourceTabs, "XAnime", listOf("DIRECT LINKS"),
+            !showingHentaini && !showingWatchAnimeHentai, 6) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = false
@@ -391,8 +414,9 @@ class MainActivity : Activity() {
             showingFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
-        sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
+        }
+        addWebsiteTab(sourceTabs, "Hentaini",
+            listOf("MEGA", "MEDIAFIRE", "TERABOX", "DIRECT LINKS"), showingHentaini, 6) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = true
@@ -400,15 +424,16 @@ class MainActivity : Activity() {
             showingHentainiFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
-        sourceTabs.addView(actionButton("WatchAnimeHentai", showingWatchAnimeHentai) {
-            if (showingWatchAnimeHentai) return@actionButton
+        }
+        addWebsiteTab(sourceTabs, "WatchAnimeHentai", listOf("IN-APP DOWNLOAD"),
+            showingWatchAnimeHentai) {
+            if (showingWatchAnimeHentai) return@addWebsiteTab
             showingHentaini = false
             showingWatchAnimeHentai = true
             showingFavorites = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+        }
+        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 
         if (showingHentaini) {
             showHentainiHome()
@@ -2905,6 +2930,58 @@ class MainActivity : Activity() {
             }
             false
         }
+    }
+
+
+    // HitomiLA follows the same website-WebView flow as HentaiRead.
+    private fun showHitomiLaHome() {
+        pageContent.addView(
+            infoCard("Click Read to browse and read galleries on HitomiLA."),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) }
+        )
+        pageContent.addView(actionButton("📖  READ", true) {
+            startActivity(Intent(this, HitomiWebViewActivity::class.java).apply {
+                putExtra(HitomiWebViewActivity.EXTRA_URL, "https://hitomi.la/")
+                putExtra(HitomiWebViewActivity.EXTRA_TITLE, "HitomiLA")
+            })
+        }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+    }
+
+    private fun addWebsiteTab(
+        container: LinearLayout,
+        title: String,
+        tags: List<String>,
+        selected: Boolean,
+        endMargin: Int = 0,
+        footerActionLabel: String? = null,
+        footerAction: (() -> Unit)? = null,
+        action: () -> Unit
+    ) {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        column.addView(actionButton(title, selected, action),
+            LinearLayout.LayoutParams(-1, dp(43)))
+        if (tags.isNotEmpty()) {
+            column.addView(TextView(this).apply {
+                text = tags.joinToString("  ·  ")
+                textSize = 8f
+                setTextColor(muted)
+                gravity = Gravity.CENTER
+                maxLines = 2
+                setLineSpacing(dp(1).toFloat(), 1f)
+                setPadding(dp(3), dp(7), dp(3), dp(6))
+                background = glassDrawable(10)
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
+        }
+        if (footerActionLabel != null && footerAction != null) {
+            column.addView(actionButton(footerActionLabel, true, footerAction),
+                LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
+        }
+        container.addView(column, LinearLayout.LayoutParams(0, -2, 1f).apply {
+            if (endMargin > 0) marginEnd = dp(endMargin)
+        })
     }
 
     private fun infoCard(message: String) = TextView(this).apply {

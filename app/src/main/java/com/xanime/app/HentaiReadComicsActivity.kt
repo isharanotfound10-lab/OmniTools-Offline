@@ -10,6 +10,8 @@ import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import java.io.ByteArrayInputStream
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -152,6 +154,27 @@ class HentaiReadComicsActivity : Activity() {
             }
 
             webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                    val host = request?.url?.host?.lowercase() ?: return null
+                    return if (isKnownAdHost(host)) {
+                        WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            204,
+                            "No Content",
+                            emptyMap(),
+                            ByteArrayInputStream(ByteArray(0))
+                        )
+                    } else {
+                        super.shouldInterceptRequest(view, request)
+                    }
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    view?.evaluateJavascript(adCleanupScript, null)
+                }
+
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     if (request == null || !request.isForMainFrame) return false
                     return allowMainFrameUrl(request.url.toString())
@@ -191,6 +214,121 @@ class HentaiReadComicsActivity : Activity() {
         webView = null
         super.onDestroy()
     }
+
+    /** Block only dedicated advertising networks; HentaiRead and henread.xyz content stays untouched. */
+    private fun isKnownAdHost(host: String): Boolean {
+        val blockedDomains = listOf(
+            "doubleclick.net",
+            "googlesyndication.com",
+            "googleadservices.com",
+            "googletagservices.com",
+            "adservice.google.com",
+            "popads.net",
+            "popcash.net",
+            "exoclick.com",
+            "juicyads.com",
+            "trafficjunky.com",
+            "onclickads.net",
+            "propellerads.com",
+            "adsterra.com",
+            "taboola.com",
+            "outbrain.com"
+        )
+        return blockedDomains.any { host == it || host.endsWith(".$it") }
+    }
+
+    /** Cosmetic cleanup for common ad containers; does not remove comic images or reader controls. */
+    private val adCleanupScript = """
+        (function() {
+          // Apply precise JADS slot cleanup on comic detail and reader pages only.
+          var path = location.pathname.toLowerCase();
+          if (path.indexOf('/english/p/') === -1 && path.indexOf('/hentai/') === -1) return;
+
+          var styleId = 'xanime-reader-ad-cleanup';
+          var css = [
+            '[data-jads-slot="top"]', '[data-jads-slot="bottom"]',
+            '.adsbygoogle', '.ad-container', '.ad-wrapper', '.ads-container',
+            '.ads-wrapper', '.advert', '.advertisement', '.advertising',
+            '[data-ad]', '[id^="google_ads"]', '[id*="advert"]',
+            '[class*="advert"]', 'iframe[src*="doubleclick"]',
+            'iframe[src*="googlesyndication"]'
+          ].join(',') + '{display:none!important;visibility:hidden!important;' +
+            'max-height:0!important;min-height:0!important;height:0!important;' +
+            'margin:0!important;padding:0!important;border:0!important;}';
+
+          function hasComicImage(node) {
+            if (!node || !node.querySelectorAll) return false;
+            var images = node.querySelectorAll('img');
+            for (var i = 0; i < images.length; i++) {
+              var src = images[i].currentSrc || images[i].src || '';
+              if (/henread\.xyz/i.test(src)) return true;
+            }
+            return false;
+          }
+
+          function hideAdNode(node) {
+            if (!node || node.nodeType !== 1 || hasComicImage(node)) return;
+            node.style.setProperty('display', 'none', 'important');
+            node.style.setProperty('height', '0', 'important');
+            node.style.setProperty('min-height', '0', 'important');
+            node.style.setProperty('max-height', '0', 'important');
+            node.style.setProperty('margin', '0', 'important');
+            node.style.setProperty('padding', '0', 'important');
+          }
+
+          function clean() {
+            if (!document.documentElement) return;
+            if (!document.getElementById(styleId)) {
+              var style = document.createElement('style');
+              style.id = styleId;
+              style.textContent = css;
+              (document.head || document.documentElement).appendChild(style);
+            }
+
+            // HentaiRead's confirmed JADS banner slots; hide their entire 100px wrappers.
+            var jadsSlots = document.querySelectorAll('[data-jads-slot="top"], [data-jads-slot="bottom"]');
+            for (var s = 0; s < jadsSlots.length; s++) hideAdNode(jadsSlots[s]);
+
+            // Catch ad iframes even when the site uses generated class names.
+            var frames = document.querySelectorAll('iframe[src], iframe[id], iframe[name]');
+            for (var i = 0; i < frames.length; i++) {
+              var frame = frames[i];
+              var details = [
+                frame.src, frame.id, frame.name,
+                frame.getAttribute('title'), frame.getAttribute('aria-label')
+              ].join(' ').toLowerCase();
+              if (!/(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|(^|[\W_])ads?([\W_]|$))/i.test(details)) continue;
+
+              var target = frame;
+              hideAdNode(target);
+              for (var level = 0; level < 2 && target.parentElement; level++) {
+                var parent = target.parentElement;
+                if (hasComicImage(parent)) break;
+                hideAdNode(parent);
+                target = parent;
+              }
+            }
+
+            // Hide clearly named ad blocks, but never an element containing a comic page image.
+            var candidates = document.querySelectorAll('[id], [class], [data-ad], [aria-label]');
+            for (var j = 0; j < candidates.length; j++) {
+              var el = candidates[j];
+              if (el.id === styleId || hasComicImage(el)) continue;
+              var label = [
+                el.id, typeof el.className === 'string' ? el.className : '',
+                el.getAttribute('data-ad'), el.getAttribute('aria-label')
+              ].join(' ').toLowerCase();
+              if (/(^|[\W_])(ad|ads|advert|advertisement|banner-ad)([\W_]|$)/i.test(label)) hideAdNode(el);
+            }
+          }
+
+          clean();
+          new MutationObserver(clean).observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['src', 'class', 'id']
+          });
+        })();
+    """.trimIndent()
 
     /** Keep top-level browsing on HentaiRead; reader images and other subresources remain untouched. */
     private fun allowMainFrameUrl(rawUrl: String): Boolean {
