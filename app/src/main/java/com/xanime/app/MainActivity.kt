@@ -358,10 +358,25 @@ class MainActivity : Activity() {
             pageContent.addView(label("COMICS", 22, white, true).apply {
                 setPadding(0, dp(20), 0, dp(8))
             })
-            pageContent.addView(
-                infoCard("The Comics category is separate from Hentai. Comic browsing will be added here."),
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }
-            )
+            pageContent.addView(label("CHOOSE A WEBSITE", 9, muted, true).apply {
+                letterSpacing = .12f
+                setPadding(0, dp(3), 0, dp(9))
+            })
+            val comicTabs = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            comicTabs.addView(actionButton("HentaiRead", true) {
+                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+            }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { marginEnd = dp(5) })
+            comicTabs.addView(actionButton("HitomiLA", false) {
+                Toast.makeText(this, "HitomiLA will be added later", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { marginEnd = dp(5) })
+            comicTabs.addView(actionButton("AllPornComic", false) {
+                Toast.makeText(this, "AllPornComic will be added later", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(0, dp(43), 1f))
+            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, dp(46)))
+            pageContent.addView(infoCard("HentaiRead is available now. The other website tabs are placeholders for future integrations."),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
             setContentView(root)
             animateScreen(root)
             return
