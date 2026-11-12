@@ -3014,8 +3014,8 @@ class MainActivity : Activity() {
         worker.execute {
             var connection: HttpURLConnection? = null
             try {
-                val expression = "title:$term"
-                val encoded = URLEncoder.encode(expression, "UTF-8")
+                // Hitomi's search page expects the raw search expression, not a title: prefix.
+                val encoded = URLEncoder.encode(term, "UTF-8")
                 val url = URL("https://hitomi.la/search.html?$encoded")
                 connection = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
@@ -3029,18 +3029,24 @@ class MainActivity : Activity() {
                 if (code !in 200..299) throw IllegalStateException("HitomiLA returned HTTP $code")
                 val html = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
                 val document = Jsoup.parse(html, "https://hitomi.la/")
-                val cards = document.select(".gallery-content > div")
                 val found = mutableListOf<HitomiGalleryResult>()
-                for (card in cards) {
-                    val link = card.selectFirst("h1 a[href*=/galleries/]")
-                        ?: card.selectFirst("a[href*=/galleries/]")
-                        ?: continue
+                // Hitomi gallery links can use category paths such as /manga/ or /doujinshi/,
+                // not only the legacy /galleries/ path.
+                val galleryLinks = document.select(
+                    ".gallery-content a[href], a[href*=/galleries/], a[href*=/manga/], " +
+                        "a[href*=/doujinshi/], a[href*=/artistcg/], a[href*=/gamecg/]"
+                )
+                for (link in galleryLinks) {
                     val href = link.attr("href")
-                    val id = Regex("/galleries/(\\d+)").find(href)?.groupValues?.getOrNull(1)
+                    if (!href.endsWith(".html", ignoreCase = true)) continue
+                    val id = Regex("(?:/galleries/|/[^/]+/)[^/]*?(\\d+)\\.html(?:$|[?#])")
+                        .find(href)?.groupValues?.getOrNull(1)
                         ?: continue
                     val title = link.text().trim()
+                        .ifEmpty { link.parent()?.selectFirst("h1")?.text()?.trim().orEmpty() }
                     if (title.isNotEmpty() && title.contains(term, ignoreCase = true)) {
-                        found.add(HitomiGalleryResult(id, title, "https://hitomi.la/galleries/$id.html"))
+                        val absoluteUrl = if (href.startsWith("http")) href else "https://hitomi.la$href"
+                        found.add(HitomiGalleryResult(id, title, absoluteUrl))
                     }
                 }
                 runOnUiThread {
