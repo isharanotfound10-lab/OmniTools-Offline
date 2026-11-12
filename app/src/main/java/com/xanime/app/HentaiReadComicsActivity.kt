@@ -240,8 +240,8 @@ class HentaiReadComicsActivity : Activity() {
     /** Cosmetic cleanup for common ad containers; does not remove comic images or reader controls. */
     private val adCleanupScript = """
         (function() {
-          // Only apply reader-specific banner cleanup on actual comic page URLs.
-          if (!/\/english\/p\//i.test(location.pathname)) return;
+          // Apply precise JADS slot cleanup on comic detail and reader pages only.
+          if (!(/\\/english\\/p\\//i.test(location.pathname) || /\\/hentai\\//i.test(location.pathname))) return;
 
           var styleId = 'xanime-reader-ad-cleanup';
           var css = [
