@@ -397,68 +397,14 @@ class MainActivity : Activity() {
                 }
                 "HitomiLA" -> showHitomiLaHome()
                 "AllPornComic" -> {
-                    pageContent.addView(infoCard("Choose a website supported by COMIX ZIP Downloader."),
+                    pageContent.addView(infoCard("Click Read to Browse And Read AllPornComic."), 
                         LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-                    val supportedComicSites = listOf(
-                        "ILikeComix" to "https://ilikecomix.com/",
-                        "E-Hentai" to "https://e-hentai.org/",
-                        "nhentai" to "https://nhentai.net/",
-                        "8Muses" to "https://8muses.com/",
-                        "ComixHere" to "https://comixhere.xyz/",
-                        "SexKomix6" to "https://sexkomix6.com/",
-                        "SexKomix22" to "https://sexkomix22.com/",
-                        "AllPornComic" to "https://allporncomic.com/",
-                        "SVSComics" to "https://svscomics.com/",
-                        "Free Adult Comix" to "https://freeadultcomix.com/",
-                        "XYZComics" to "https://xyzcomics.com/",
-                        "KingComix" to "https://kingcomix.com/",
-                        "XlecX" to "https://xlecx.com/",
-                        "XlecX.one" to "https://xlecx.one/",
-                        "XcartX" to "https://xcartx.com/",
-                        "BestPornComix" to "https://bestporncomix.com/",
-                        "PornComix.info" to "https://porncomix.info/",
-                        "Oglaf" to "https://oglaf.com/",
-                        "NXT Comics" to "https://nxt-comics.com/",
-                        "TheHentai" to "https://thehentai.net/",
-                        "18Kami" to "https://18kami.com/",
-                        "Toon34" to "https://toon34.com/",
-                        "PalComix" to "https://palcomix.com/",
-                        "SavitaHD" to "https://savitahd.net/",
-                        "HentaiXYuri" to "https://hentaixyuri.com/",
-                        "HentaiXComic" to "https://hentaixcomic.com/",
-                        "HentaiXDickgirl" to "https://hentaixdickgirl.com/",
-                        "AllPornComics" to "https://allporncomics.co/",
-                        "Erovers Comics" to "https://erovers-comics.com/",
-                        "OnlyComix" to "https://onlycomix.net/",
-                        "GedeComix" to "https://gedecomix.com/"
-                    )
-                    val siteGrid = LinearLayout(this).apply {
-                        orientation = LinearLayout.VERTICAL
-                    }
-                    supportedComicSites.chunked(2).forEach { pair ->
-                        val row = LinearLayout(this).apply {
-                            orientation = LinearLayout.HORIZONTAL
-                        }
-                        pair.forEachIndexed { index, site ->
-                            row.addView(actionButton(site.first, true) {
-                                startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                                    putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, site.first)
-                                    putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, site.second)
-                                })
-                            }, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
-                                if (index == 0) marginEnd = dp(8)
-                            })
-                        }
-                        if (pair.size == 1) {
-                            row.addView(View(this), LinearLayout.LayoutParams(0, dp(46), 1f))
-                        }
-                        siteGrid.addView(row, LinearLayout.LayoutParams(-1, dp(48)).apply {
-                            bottomMargin = dp(8)
+                    pageContent.addView(actionButton("📖  READ", true) {
+                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "AllPornComic")
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://allporncomic.com/")
                         })
-                    }
-                    pageContent.addView(siteGrid, LinearLayout.LayoutParams(-1, -2).apply {
-                        topMargin = dp(10)
-                    })
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
                 }
             }
             setContentView(root)
