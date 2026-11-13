@@ -90,8 +90,8 @@ class ComicWebsiteActivity : Activity() {
 
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    progress.progress = newProgress
-                    progress.visibility = if (newProgress >= 100) android.view.View.GONE else android.view.View.VISIBLE
+                    this@ComicWebsiteActivity.progress.progress = newProgress
+                    this@ComicWebsiteActivity.progress.visibility = if (newProgress >= 100) android.view.View.GONE else android.view.View.VISIBLE
                 }
 
                 override fun onReceivedTitle(view: WebView?, title: String?) {
