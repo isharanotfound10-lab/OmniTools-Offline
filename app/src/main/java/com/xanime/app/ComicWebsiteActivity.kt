@@ -229,8 +229,8 @@ class ComicWebsiteActivity : Activity() {
             "chaseherbalpasty.com", "bestcrongreenfunnel.com",
             "darnobedienceupscale.com",
             // nHentai ad delivery and click-redirect domains identified in the supplied file.
-            "cdn.tsyndicate.com", "go.lanitesasexige.com",
-            "go.janusaent.com", "fozekikikiminu.com"
+            "cdn.tsyndicate.com", "tsy syndicate.invalid",
+            "go.lanitesasexige.com", "go.janusaent.com", "fozekikikiminu.com"
         )
         return blockedDomains.any {
             val domain = it.trim().lowercase()
@@ -252,7 +252,9 @@ class ComicWebsiteActivity : Activity() {
             'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
             'iframe[src*="js.allporncomic.com"]', 'iframe[id^="__clb-"]',
             'script[src*="cdn.tsyndicate.com"]',
-            '[id^="ts_ad_native_"]', '[class*="ts_ad_native"]',
+            '[id^="ts_ad_native_"]', '[id^="ts_ms_"]',
+            '[class*="ts_ad_native"]', '.ts-im-container',
+            '.ts-im-video-wrapper', '.ts-im-ad-link',
             '.mn-related-container', '.mn-thumb',
             '[data-element="overlay"][data-izone="stop"]',
             '[data-izone="stop"]', '.Ed80ZsLIdBCE2v4',
@@ -364,7 +366,7 @@ class ComicWebsiteActivity : Activity() {
             // nHentai ad delivery scripts and native-ad containers from the supplied source.
             var nhScripts = document.querySelectorAll('script[src*="cdn.tsyndicate.com"]');
             for (var ns = 0; ns < nhScripts.length; ns++) removeAdNode(nhScripts[ns]);
-            var nhAds = document.querySelectorAll('[id^="ts_ad_native_"],[class*="ts_ad_native"],.mn-related-container,.mn-thumb');
+            var nhAds = document.querySelectorAll('[id^="ts_ad_native_"],[id^="ts_ms_"],[class*="ts_ad_native"],.ts-im-container,.ts-im-video-wrapper,.ts-im-ad-link,.mn-related-container,.mn-thumb');
             for (var na = nhAds.length - 1; na >= 0; na--) {
               if (!hasComicArtwork(nhAds[na])) removeAdNode(nhAds[na]);
             }
