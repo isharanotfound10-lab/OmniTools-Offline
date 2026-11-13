@@ -719,6 +719,7 @@ class ComicWebsiteActivity : Activity() {
         (function() {
           if (window.__xanimeBlobDownloadsInstalled) return;
           window.__xanimeBlobDownloadsInstalled = true;
+
           var blobs = Object.create(null);
           var originalCreate = URL.createObjectURL.bind(URL);
           URL.createObjectURL = function(blob) {
@@ -726,39 +727,79 @@ class ComicWebsiteActivity : Activity() {
             if (blob instanceof Blob) blobs[url] = blob;
             return url;
           };
-          function transfer(blob, filename) {
+
+          function sendBlob(blob, filename) {
             var name = (filename || 'hitomi-download.zip').split(/[\\\\/]/).pop();
             var mime = blob.type || 'application/zip';
-            try {
-              XAnimeDownloads.beginBlobDownload(name, mime);
-              var offset = 0;
-              var chunkSize = 192 * 1024;
-              (async function() {
-                while (offset < blob.size) {
-                  var buffer = await blob.slice(offset, offset + chunkSize).arrayBuffer();
-                  var bytes = new Uint8Array(buffer);
-                  var binary = '';
-                  for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-                  XAnimeDownloads.appendBlobChunk(btoa(binary));
-                  offset += bytes.length;
-                }
-                XAnimeDownloads.finishBlobDownload();
-              })().catch(function(error) {
-                XAnimeDownloads.failBlobDownload(String(error));
-              });
-            } catch (error) {
+            XAnimeDownloads.beginBlobDownload(name, mime);
+            var offset = 0;
+            var chunkSize = 192 * 1024;
+            (async function() {
+              while (offset < blob.size) {
+                var buffer = await blob.slice(offset, offset + chunkSize).arrayBuffer();
+                var bytes = new Uint8Array(buffer);
+                var binary = '';
+                for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                XAnimeDownloads.appendBlobChunk(btoa(binary));
+                offset += bytes.length;
+              }
+              XAnimeDownloads.finishBlobDownload();
+            })().catch(function(error) {
               XAnimeDownloads.failBlobDownload(String(error));
-            }
+            });
           }
-          document.addEventListener('click', function(event) {
-            var link = event.target && event.target.closest ? event.target.closest('a[download]') : null;
+
+          function transferUrl(url, filename) {
+            var known = blobs[url];
+            if (known) {
+              sendBlob(known, filename);
+              return;
+            }
+            // Also support Blob URLs created before our script was injected.
+            fetch(url).then(function(response) {
+              if (!response.ok) throw new Error('Could not read generated ZIP (' + response.status + ')');
+              return response.blob();
+            }).then(function(blob) {
+              sendBlob(blob, filename);
+            }).catch(function(error) {
+              XAnimeDownloads.failBlobDownload(String(error));
+            });
+          }
+
+          function findDownloadLink(event) {
+            var path = event.composedPath ? event.composedPath() : [];
+            for (var i = 0; i < path.length; i++) {
+              var node = path[i];
+              if (node && node.tagName === 'A') return node;
+            }
+            var target = event.target;
+            return target && target.closest ? target.closest('a') : null;
+          }
+
+          function intercept(event) {
+            var link = findDownloadLink(event);
             if (!link) return;
             var href = link.href || link.getAttribute('href') || '';
-            if (href.indexOf('blob:') !== 0 || !blobs[href]) return;
+            if (href.indexOf('blob:') !== 0) return;
+            if (!link.hasAttribute('download') && !blobs[href]) return;
             event.preventDefault();
-            event.stopImmediatePropagation();
-            transfer(blobs[href], link.download || 'hitomi-download.zip');
-          }, true);
+            event.stopPropagation();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            transferUrl(href, link.download || 'hitomi-download.zip');
+          }
+
+          // Capture both ordinary clicks and programmatic anchor.click() downloads.
+          document.addEventListener('click', intercept, true);
+          var originalAnchorClick = HTMLAnchorElement.prototype.click;
+          HTMLAnchorElement.prototype.click = function() {
+            var href = this.href || this.getAttribute('href') || '';
+            if (href.indexOf('blob:') === 0 &&
+                (this.hasAttribute('download') || blobs[href])) {
+              transferUrl(href, this.download || 'hitomi-download.zip');
+              return;
+            }
+            return originalAnchorClick.apply(this, arguments);
+          };
         })();
     """.trimIndent()
 
