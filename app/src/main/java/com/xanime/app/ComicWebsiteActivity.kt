@@ -89,7 +89,8 @@ class ComicWebsiteActivity : Activity() {
 
         val webView = createBrowser()
         // Avoid showing previously cached ad scripts/banners while testing the updated filters.
-        if (siteName.equals("AllPornComic", ignoreCase = true)) {
+        if (siteName.equals("AllPornComic", ignoreCase = true) ||
+            siteName.equals("HitomiLA", ignoreCase = true)) {
             webView.clearCache(true)
         }
         browser = webView
@@ -273,6 +274,26 @@ class ComicWebsiteActivity : Activity() {
             // HitomiLA's injected modal overlay uses stable data attributes despite randomized classes.
             var overlays = document.querySelectorAll('[data-element="overlay"][data-izone="stop"]');
             for (var o = 0; o < overlays.length; o++) hide(overlays[o]);
+            // Remove randomized full-screen ad layers carrying a Skip now label.
+            var skipLabels = document.querySelectorAll('button,a,[role="button"],div,span');
+            for (var k = 0; k < skipLabels.length; k++) {
+              var label = (skipLabels[k].innerText || skipLabels[k].textContent || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+              if (!/^(skip now|skip ad|close ad)$/.test(label)) continue;
+              var candidate = skipLabels[k];
+              for (var depth = 0; candidate && depth < 8; depth++, candidate = candidate.parentElement) {
+                var rect = candidate.getBoundingClientRect();
+                var pos = window.getComputedStyle(candidate).position;
+                if ((pos === 'fixed' || pos === 'absolute') && rect.width >= window.innerWidth * 0.45 && rect.height >= window.innerHeight * 0.35) { hide(candidate); break; }
+              }
+            }
+            // Remove oversized fixed third-party ad frames, preserving first-party reader frames.
+            var fixedFrames = document.querySelectorAll('iframe[src]');
+            for (var q = 0; q < fixedFrames.length; q++) {
+              var ff = fixedFrames[q], fr = ff.getBoundingClientRect(), fp = window.getComputedStyle(ff).position, fh = '';
+              try { fh = new URL(ff.src, location.href).hostname.toLowerCase(); } catch (_) {}
+              var firstParty = fh === location.hostname || fh.endsWith('.' + location.hostname);
+              if (!firstParty && (fp === 'fixed' || fp === 'absolute') && fr.width >= window.innerWidth * 0.45 && fr.height >= window.innerHeight * 0.35) { hide(ff); if (ff.parentElement && !containsLargeComicImage(ff.parentElement)) hide(ff.parentElement); }
+            }
 
             // Remove the ad script wrapper and its companion banner iframe by stable ID prefix.
             var adScripts = document.querySelectorAll('script[src*="chaseherbalpasty.com"]');
