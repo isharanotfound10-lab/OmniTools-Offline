@@ -9,10 +9,8 @@ import android.provider.MediaStore
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.URLUtil
-import android.widget.Toast
 import java.io.File
 import java.io.FileOutputStream
-import java.util.Locale
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Message
@@ -26,7 +24,6 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import java.io.ByteArrayInputStream
 
 /** Generic in-app browser for the comic source tabs. */
@@ -588,7 +585,7 @@ class ComicWebsiteActivity : Activity() {
         val url = rawUrl?.takeIf { it.startsWith("https://") || it.startsWith("http://") } ?: return
         runCatching {
             val filename = URLUtil.guessFileName(url, contentDisposition, mimeType)
-                .replace(Regex("[\\\\/:*?\\"<>|]"), "_")
+                .replace(Regex("""[\\/:*?"<>|]"""), "_")
                 .ifBlank { "hitomi-download" }
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setTitle(filename)
@@ -705,8 +702,8 @@ class ComicWebsiteActivity : Activity() {
     }
 
     private fun safeDownloadName(value: String): String {
-        val cleaned = value.substringAfterLast('/').substringAfterLast('\\\\')
-            .replace(Regex("[\\\\/:*?\\"<>|]"), "_").trim()
+        val cleaned = value.substringAfterLast('/')
+            .replace(Regex("""[\\/:*?"<>|]"""), "_").trim()
         return cleaned.take(140).ifBlank { "hitomi-download.zip" }
     }
 
