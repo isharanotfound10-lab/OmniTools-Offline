@@ -214,7 +214,11 @@ class ComicWebsiteActivity : Activity() {
                     val page = view ?: return
                     page.evaluateJavascript(adCleanupScript) {
                         page.evaluateJavascript(blobDownloadScript, null)
-                        if (siteName.equals("nHentai", ignoreCase = true)) {
+                        if (siteName.equals("HitomiLA", ignoreCase = true)) {
+                            page.evaluateJavascript(hitomiAdCleanupScript) {
+                                page.visibility = android.view.View.VISIBLE
+                            }
+                        } else if (siteName.equals("nHentai", ignoreCase = true)) {
                             page.evaluateJavascript(nhentaiAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
                             }
@@ -278,7 +282,8 @@ class ComicWebsiteActivity : Activity() {
             "outbrain.com", "hilltopads.net", "ad-maven.com", "monetag.com",
             // Ad/tracking hosts identified in HitomiLA's injected overlay and banner.
             "chaseherbalpasty.com", "bestcrongreenfunnel.com",
-            "darnobedienceupscale.com",
+            "darnobedienceupscale.com", "ahmybid.net",
+            "1b09d1e745.com",
             // nHentai ad delivery and click-redirect domains identified in the supplied file.
             "cdn.tsyndicate.com", "tsyndicate.com",
             "go.lanitesasexige.com", "go.janusaent.com", "fozekikikiminu.com",
@@ -535,6 +540,90 @@ class ComicWebsiteActivity : Activity() {
           new MutationObserver(scheduleClean).observe(document.documentElement, {
             childList: true, subtree: true, attributes: true,
             attributeFilter: ['src','class','id','style','data-izone']
+          });
+        })();
+    """.trimIndent()
+
+    /** Remove the two confirmed mobile-only HitomiLA ad overlays by their unique content. */
+    private val hitomiAdCleanupScript = """
+        (function() {
+          if (window.__xanimeHitomiMobileAdsRemoved) return;
+          window.__xanimeHitomiMobileAdsRemoved = true;
+
+          function removeAdShell(node) {
+            if (!node || !node.parentElement) return;
+            var target = node;
+            // The mobile creatives are mounted inside a fixed-position wrapper.
+            // Remove that wrapper when present so its invisible click layer disappears too.
+            for (var i = 0; i < 4 && target.parentElement &&
+                 target.parentElement !== document.body; i++) {
+              var parent = target.parentElement;
+              var style = window.getComputedStyle(parent);
+              target = parent;
+              if (style.position === 'fixed' || style.position === 'absolute') break;
+            }
+            if (target && target !== document.body &&
+                target !== document.documentElement && target.parentElement) {
+              target.remove();
+            }
+          }
+
+          function cleanHitomiMobileAds() {
+            if (!document.documentElement) return;
+
+            // Fake dating/chat creative: "Ayesha (Online)" and its LIKE/REPLY buttons.
+            var zones = document.querySelectorAll('[data-izone="uc-area"]');
+            for (var i = zones.length - 1; i >= 0; i--) {
+              var zone = zones[i];
+              var text = (zone.textContent || '').toLowerCase();
+              var images = zone.querySelectorAll('img');
+              var adAsset = false;
+              for (var j = 0; j < images.length; j++) {
+                var src = (images[j].src || '').toLowerCase();
+                if (src.indexOf('ahmybid.net/') >= 0 ||
+                    src.indexOf('bestcrongreenfunnel.com/') >= 0) {
+                  adAsset = true;
+                  break;
+                }
+              }
+              if (text.indexOf('ayesha (online)') >= 0 ||
+                  (text.indexOf('do you like my boobs') >= 0 &&
+                   text.indexOf('reply') >= 0) || adAsset) {
+                removeAdShell(zone);
+              }
+            }
+
+            // Fake antivirus/scanning creative with fabricated Windows file paths.
+            var scans = document.querySelectorAll('[data-element="scan"]');
+            for (var k = scans.length - 1; k >= 0; k--) {
+              var scan = scans[k];
+              var scanText = (scan.textContent || '').toLowerCase();
+              if (scanText.indexOf('total scanned:') >= 0 &&
+                  (scanText.indexOf('commonly infected areas') >= 0 ||
+                   scanText.indexOf('windows\\system32') >= 0 ||
+                   scanText.indexOf('windowsystem32') >= 0)) {
+                var zone = scan.closest('[data-izone="uc-area"]') || scan;
+                removeAdShell(zone);
+              }
+            }
+
+            // Also remove any leftover exact ad assets if their creative is rebuilt.
+            document.querySelectorAll(
+              'img[src*="assets.ahmybid.net/"],' +
+              'img[src*="bestcrongreenfunnel.com/v1/track/"],' +
+              'img[src*="d3599d79b7.1b09d1e745.com/"]'
+            ).forEach(function(img) {
+              var zone = img.closest('[data-izone="uc-area"]');
+              if (zone) removeAdShell(zone);
+            });
+          }
+
+          cleanHitomiMobileAds();
+          new MutationObserver(function() {
+            cleanHitomiMobileAds();
+          }).observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['src', 'class', 'style', 'data-izone']
           });
         })();
     """.trimIndent()
