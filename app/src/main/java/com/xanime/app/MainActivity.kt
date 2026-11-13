@@ -402,7 +402,7 @@ class MainActivity : Activity() {
                     pageContent.addView(actionButton("📖  READ", true) {
                         startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
                             putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "AllPornComic")
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://allporncomic.com/")
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://allporncomic.com/home-3/")
                         })
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
                 }
