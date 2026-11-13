@@ -103,7 +103,8 @@ class ComicWebsiteActivity : Activity() {
         // Avoid showing previously cached ad scripts/banners while testing the updated filters.
         if (siteName.equals("AllPornComic", ignoreCase = true) ||
             siteName.equals("HitomiLA", ignoreCase = true) ||
-            siteName.equals("nHentai", ignoreCase = true)) {
+            siteName.equals("nHentai", ignoreCase = true) ||
+            siteName.equals("NovelCrow", ignoreCase = true)) {
             webView.clearCache(true)
         }
         browser = webView
@@ -228,6 +229,10 @@ class ComicWebsiteActivity : Activity() {
                             page.evaluateJavascript(allPornComicAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
                             }
+                        } else if (siteName.equals("NovelCrow", ignoreCase = true)) {
+                            page.evaluateJavascript(novelCrowAdCleanupScript) {
+                                page.visibility = android.view.View.VISIBLE
+                            }
                         } else {
                             page.visibility = android.view.View.VISIBLE
                         }
@@ -266,6 +271,64 @@ class ComicWebsiteActivity : Activity() {
         return (scheme == "https" || scheme == "http") &&
             (host == allowedHost || host.endsWith(".$allowedHost"))
     }
+
+    /** Remove only the confirmed NovelCrow ad blocks, including their reserved blank space. */
+    private val novelCrowAdCleanupScript = """
+        (function() {
+          if (window.__xanimeNovelCrowAdsInstalled) return;
+          window.__xanimeNovelCrowAdsInstalled = true;
+
+          var selectors = [
+            '[id^="__clb-spot_2089393_"]',
+            'iframe[id^="__clb-spot_2089393_"]',
+            '[id^="__clb-spot_1876095_"]',
+            'iframe[id^="__clb-spot_1876095_"]',
+            '.ai-viewport-2[data-code*="MTg4MjE2OA=="]',
+            '.ai-viewport-1[data-code*="MjA4OTM5Mw=="]',
+            '.ai-viewport-1[data-code*="MTg3NjA5NQ=="]'
+          ].join(',');
+
+          function removeNovelCrowAds() {
+            if (!document.documentElement) return;
+            document.querySelectorAll(selectors).forEach(function(node) {
+              if (!node.isConnected) return;
+              var target = node;
+
+              // The sidebar uses WordPress code-block wrappers which reserve
+              // 75px/240px even when the iframe itself is empty.
+              var codeBlock = node.closest('.code-block');
+              if (codeBlock) {
+                target = codeBlock;
+              } else {
+                var viewport = node.closest('.ai-viewport-1, .ai-viewport-2, .ai-viewport-3');
+                if (viewport) target = viewport;
+                else if (node.id && node.id.indexOf('__clb-spot_') === 0) {
+                  target = node.parentElement || node;
+                  for (var i = 0; i < 3 && target.parentElement &&
+                       target.parentElement !== document.body; i++) {
+                    var parent = target.parentElement;
+                    var height = (parent.style && parent.style.height) || '';
+                    if (height === '75px' || height === '240px' ||
+                        parent.classList.contains('code-block')) {
+                      target = parent;
+                      break;
+                    }
+                    if (parent.classList.contains('c-sidebar')) break;
+                    target = parent;
+                  }
+                }
+              }
+              target.remove();
+            });
+          }
+
+          removeNovelCrowAds();
+          new MutationObserver(removeNovelCrowAds).observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['id', 'data-code', 'src', 'class', 'style']
+          });
+        })();
+    """.trimIndent()
 
     /** Remove the exact AllPornComic 300x250 body-top ad slots, including their reserved space. */
     private val allPornComicAdCleanupScript = """
