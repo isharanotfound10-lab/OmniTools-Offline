@@ -390,8 +390,24 @@ class ComicWebsiteActivity : Activity() {
               (document.head || document.documentElement).appendChild(style);
             }
 
-            // Explicit HitomiLA ad zones, including the modal and its empty placeholder.
-            var zones = document.querySelectorAll('[data-izone="stop"],[data-element="overlay"][data-izone="stop"]');
+            // HitomiLA interstitial/contact overlays: the wording and generated CSS
+            // classes vary, so identify this ad by its overlay markers and tracking host.
+            // Remove the complete overlay directly; generic artwork detection must not
+            // mistake its large tracking image for comic artwork and preserve the shell.
+            var contactOverlays = document.querySelectorAll(
+              '[data-element="overlay"][data-izone="stop"]'
+            );
+            for (var co = contactOverlays.length - 1; co >= 0; co--) {
+              var overlay = contactOverlays[co];
+              var trackingImage = overlay.querySelector(
+                'img[src*="bestcrongreenfunnel.com"],img[src*="chaseherbalpasty.com"],' +
+                'img[src*="darnobedienceupscale.com"]'
+              );
+              if (trackingImage) overlay.remove();
+            }
+
+            // Remove remaining explicitly marked ad zones and their empty wrappers.
+            var zones = document.querySelectorAll('[data-izone="stop"]');
             for (var z = zones.length - 1; z >= 0; z--) removeAdNode(zones[z]);
 
             // Advertisement labels may be rendered separately from the creative.
