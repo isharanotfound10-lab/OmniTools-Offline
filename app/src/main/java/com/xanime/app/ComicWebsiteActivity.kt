@@ -177,7 +177,8 @@ class ComicWebsiteActivity : Activity() {
                     val path = uri.path?.lowercase().orEmpty()
                     val nhentaiAdRequest = siteName.equals("nHentai", ignoreCase = true) &&
                         (host == "spendstornese.rest" || host.endsWith(".spendstornese.rest") ||
-                         path == "/out/spicy-box" || path.startsWith("/out/spicy-box/"))
+                         path == "/out/spicy-box" || path.startsWith("/out/spicy-box/") ||
+                         path.startsWith("/ads/spicybox-300x250"))
                     return if (nhentaiAdRequest || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
                         WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(),
                             ByteArrayInputStream(ByteArray(0)))
@@ -463,7 +464,10 @@ class ComicWebsiteActivity : Activity() {
           var css = [
             '.hdr-slot-m',
             '#sbx-hdr',
-            'a#sbx-hdr[href="/out/spicy-box"]',
+            'a#sbx-hdr[href*="/out/spicy-box"]',
+            'a[href*="/out/spicy-box"]',
+            'video[src*="spicybox-300x250"]',
+            'video[poster*="spicybox-300x250"]',
             'img[src*="spendstornese.rest/tsk/"]',
             'img[src*="spendstornese.rest"]'
           ].join(',') + '{display:none!important;visibility:hidden!important;' +
@@ -480,8 +484,12 @@ class ComicWebsiteActivity : Activity() {
             }
 
             // Remove the sponsored video slot and its reserved layout space.
-            document.querySelectorAll('.hdr-slot-m, #sbx-hdr').forEach(function(node) {
-              var parent = node.closest('.hdr-slot-m') || node;
+            document.querySelectorAll(
+              '.hdr-slot-m, #sbx-hdr, a[href*="/out/spicy-box"], ' +
+              'video[src*="spicybox-300x250"], video[poster*="spicybox-300x250"]'
+            ).forEach(function(node) {
+              var parent = node.closest('.hdr-slot-m') ||
+                           node.closest('a[href*="/out/spicy-box"]') || node;
               if (parent && parent.parentNode) parent.parentNode.removeChild(parent);
             });
 
