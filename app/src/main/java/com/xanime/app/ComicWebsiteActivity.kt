@@ -282,7 +282,15 @@ class ComicWebsiteActivity : Activity() {
             var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
             var textNode;
             while ((textNode = walker.nextNode())) {
-              if ((textNode.nodeValue || '').trim()) return true;
+              if (!(textNode.nodeValue || '').trim()) continue;
+              var textParent = textNode.parentElement;
+              if (!textParent) continue;
+              if (textParent.closest &&
+                  textParent.closest('[data-izone="stop"],[data-element="static-title"],.Ed80ZsLIdBCE2v4,iframe[id^="__clb-"],div[id^="__clb-"],[class*="advert" i],[id*="ad" i]')) continue;
+              var textStyle = window.getComputedStyle(textParent);
+              if (textStyle.display === 'none' || textStyle.visibility === 'hidden' ||
+                  parseFloat(textStyle.opacity || '1') === 0) continue;
+              return true;
             }
             var descendants = el.querySelectorAll('img,video,canvas,iframe,button,a,input,svg');
             for (var i = 0; i < descendants.length; i++) {
@@ -344,11 +352,11 @@ class ComicWebsiteActivity : Activity() {
             var labels = document.querySelectorAll('[data-element="static-title"],[data-element="title"],[aria-label*="advertisement" i]');
             for (var l = 0; l < labels.length; l++) {
               var label = (labels[l].textContent || '').trim().toLowerCase();
-              if (label === 'advertisement' || label === 'sponsored') removeAdPlaceholder(labels[l]);
+              if (label === 'advertisement' || label === 'sponsored') removeAdNode(labels[l]);
             }
 
             // Known third-party script tags, injected banner iframes and their now-empty wrappers.
-            var scripts = document.querySelectorAll('script[src*="chaseherbalpasty.com"],script[src*="bestcrongreenfunnel.com"],script[src*="darnobedienceupscale.com"]');
+            var scripts = document.querySelectorAll('script[src*="js.allporncomic.com"],script[src*="chaseherbalpasty.com"],script[src*="bestcrongreenfunnel.com"],script[src*="darnobedienceupscale.com"]');
             for (var s = 0; s < scripts.length; s++) {
               removeAdNode(scripts[s]);
             }
@@ -379,7 +387,7 @@ class ComicWebsiteActivity : Activity() {
               if (slot === document.body || slot === document.documentElement || hasComicArtwork(slot)) continue;
               var text = (slot.textContent || '').trim();
               var hasFrame = !!slot.querySelector('iframe');
-              if (!text && !hasFrame && slot.children.length <= 2) hide(slot);
+              if (!text && !hasFrame && slot.children.length <= 2) removeAdNode(slot);
             }
           }
 
