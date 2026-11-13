@@ -222,6 +222,10 @@ class ComicWebsiteActivity : Activity() {
                             page.evaluateJavascript(nhentaiAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
                             }
+                        } else if (siteName.equals("AllPornComic", ignoreCase = true)) {
+                            page.evaluateJavascript(allPornComicAdCleanupScript) {
+                                page.visibility = android.view.View.VISIBLE
+                            }
                         } else {
                             page.visibility = android.view.View.VISIBLE
                         }
@@ -261,6 +265,43 @@ class ComicWebsiteActivity : Activity() {
             (host == allowedHost || host.endsWith(".$allowedHost"))
     }
 
+    /** Remove the exact AllPornComic 300x250 body-top ad slots, including their reserved space. */
+    private val allPornComicAdCleanupScript = """
+        (function() {
+          if (window.__xanimeAllPornComicSlotsRemoved) return;
+          window.__xanimeAllPornComicSlotsRemoved = true;
+
+          function removeAllPornComicSlots() {
+            if (!document.documentElement) return;
+            var slots = document.querySelectorAll(
+              '.ad.c-ads.custom-code.body-top-ads'
+            );
+            for (var i = slots.length - 1; i >= 0; i--) {
+              var slot = slots[i];
+              if (slot.querySelector(
+                'iframe[src*="/api/spots/230130"],script[src*="/VkOK3.js"]'
+              )) {
+                slot.remove();
+              }
+            }
+            // Fallback for the exact spot iframe if the publisher changes its wrapper classes.
+            document.querySelectorAll('iframe[src*="/api/spots/230130"]').forEach(function(frame) {
+              var region = frame.closest('[role="region"][aria-label="Advertisements"]');
+              var container = region && region.closest('.ad.c-ads.custom-code.body-top-ads');
+              if (container) container.remove();
+              else if (region) region.remove();
+              else frame.remove();
+            });
+          }
+
+          removeAllPornComicSlots();
+          new MutationObserver(removeAllPornComicSlots).observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['src', 'class']
+          });
+        })();
+    """.trimIndent()
+
     /** Exact ad assets and banner endpoints identified in AllPornComic page source. */
     private fun isAllPornComicAdRequest(uri: Uri): Boolean {
         // Block only the two confirmed AllPornComic ad loaders and their spot iframes.
@@ -269,6 +310,8 @@ class ComicWebsiteActivity : Activity() {
         val path = uri.path?.lowercase().orEmpty()
         return path == "/l7pw5.js" ||
             path == "/aum05.js" ||
+            path == "/vkok3.js" ||
+            path.startsWith("/api/spots/230130") ||
             path.startsWith("/api/spots/229371") ||
             path.startsWith("/api/spots/229326")
     }
