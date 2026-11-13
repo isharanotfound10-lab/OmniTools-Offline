@@ -1,8 +1,19 @@
 package com.xanime.app
 
 import android.app.Activity
-import android.graphics.Color
+import android.app.DownloadManager
+import android.content.ContentValues
 import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
+import android.webkit.URLUtil
+import android.widget.Toast
+import java.io.File
+import java.io.FileOutputStream
+import java.util.Locale
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Message
 import android.view.Gravity
@@ -31,6 +42,7 @@ class ComicWebsiteActivity : Activity() {
     private lateinit var pageTitle: TextView
     private var siteName: String = "COMICS"
     private var allowedHost: String = ""
+    private val downloadBridge = BlobDownloadBridge()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,6 +123,11 @@ class ComicWebsiteActivity : Activity() {
             settings.loadWithOverviewMode = true
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setSupportMultipleWindows(true)
+            // HitomiLA creates ZIP downloads as Blob URLs; bridge those to Downloads.
+            addJavascriptInterface(downloadBridge, "XAnimeDownloads")
+            setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+                startRegularDownload(url, userAgent, contentDisposition, mimeType)
+            }
 
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -197,6 +214,7 @@ class ComicWebsiteActivity : Activity() {
                     super.onPageFinished(view, url)
                     val page = view ?: return
                     page.evaluateJavascript(adCleanupScript) {
+                        page.evaluateJavascript(blobDownloadScript, null)
                         if (siteName.equals("nHentai", ignoreCase = true)) {
                             page.evaluateJavascript(nhentaiAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
@@ -558,6 +576,191 @@ class ComicWebsiteActivity : Activity() {
             childList: true, subtree: true, attributes: true,
             attributeFilter: ['src','class','id','style']
           });
+        })();
+    """.trimIndent()
+
+    private fun startRegularDownload(
+        rawUrl: String?,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?
+    ) {
+        val url = rawUrl?.takeIf { it.startsWith("https://") || it.startsWith("http://") } ?: return
+        runCatching {
+            val filename = URLUtil.guessFileName(url, contentDisposition, mimeType)
+                .replace(Regex("[\\\\/:*?\\"<>|]"), "_")
+                .ifBlank { "hitomi-download" }
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                setTitle(filename)
+                setDescription("Downloading from Hitomi.la")
+                setMimeType(mimeType ?: "application/octet-stream")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+                userAgent?.takeIf { it.isNotBlank() }?.let { addRequestHeader("User-Agent", it) }
+                CookieManager.getInstance().getCookie(url)?.let { addRequestHeader("Cookie", it) }
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
+            }
+            val manager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            manager.enqueue(request)
+            Toast.makeText(this, "Download started: $filename", Toast.LENGTH_SHORT).show()
+        }.onFailure {
+            Toast.makeText(this, "Could not start download: ${it.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /**
+     * Receives HitomiLA's generated ZIP Blob in small chunks so large galleries
+     * do not need to cross the Javascript bridge as one enormous Base64 string.
+     */
+    private inner class BlobDownloadBridge {
+        private var output: FileOutputStream? = null
+        private var tempFile: File? = null
+        private var pendingName = "hitomi-download.zip"
+        private var pendingMime = "application/zip"
+
+        @Synchronized
+        @JavascriptInterface
+        fun beginBlobDownload(filename: String?, mime: String?) {
+            runCatching {
+                output?.close()
+                tempFile?.delete()
+                pendingName = safeDownloadName(filename ?: "hitomi-download.zip")
+                pendingMime = mime?.takeIf { it.contains("/") } ?: "application/zip"
+                tempFile = File(cacheDir, "xanime-${System.nanoTime()}.download")
+                output = FileOutputStream(tempFile!!)
+            }.onFailure { reportBlobFailure(it) }
+        }
+
+        @Synchronized
+        @JavascriptInterface
+        fun appendBlobChunk(base64Chunk: String?) {
+            val stream = output ?: return
+            runCatching {
+                val chunk = android.util.Base64.decode(base64Chunk ?: return, android.util.Base64.DEFAULT)
+                stream.write(chunk)
+            }.onFailure { reportBlobFailure(it) }
+        }
+
+        @Synchronized
+        @JavascriptInterface
+        fun finishBlobDownload() {
+            val stream = output ?: return
+            val file = tempFile
+            output = null
+            tempFile = null
+            runCatching {
+                stream.flush()
+                stream.close()
+                if (file == null || !file.exists() || file.length() == 0L) {
+                    throw IllegalStateException("The downloaded file was empty")
+                }
+                saveBlobToDownloads(file, pendingName, pendingMime)
+                runOnUiThread {
+                    Toast.makeText(this@ComicWebsiteActivity, "Saved to Downloads/XAnime: $pendingName", Toast.LENGTH_LONG).show()
+                }
+            }.onFailure {
+                runCatching { stream.close() }
+                runOnUiThread { reportBlobFailure(it) }
+            }.also { file?.delete() }
+        }
+
+        @Synchronized
+        @JavascriptInterface
+        fun failBlobDownload(message: String?) {
+            runCatching { output?.close() }
+            output = null
+            tempFile?.delete()
+            tempFile = null
+            reportBlobFailure(IllegalStateException(message ?: "Download failed"))
+        }
+    }
+
+    private fun saveBlobToDownloads(file: File, filename: String, mime: String) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, filename)
+                put(MediaStore.Downloads.MIME_TYPE, mime)
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/XAnime")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("Could not create the download file")
+            try {
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    file.inputStream().use { input -> input.copyTo(out, 64 * 1024) }
+                } ?: throw IllegalStateException("Could not write the download file")
+                val complete = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+                contentResolver.update(uri, complete, null, null)
+            } catch (error: Throwable) {
+                contentResolver.delete(uri, null, null)
+                throw error
+            }
+        } else {
+            val directory = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                ?: throw IllegalStateException("Downloads folder is unavailable")
+            directory.mkdirs()
+            file.copyTo(File(directory, filename), overwrite = true)
+        }
+    }
+
+    private fun safeDownloadName(value: String): String {
+        val cleaned = value.substringAfterLast('/').substringAfterLast('\\\\')
+            .replace(Regex("[\\\\/:*?\\"<>|]"), "_").trim()
+        return cleaned.take(140).ifBlank { "hitomi-download.zip" }
+    }
+
+    private fun reportBlobFailure(error: Throwable) {
+        runOnUiThread {
+            Toast.makeText(this, "Download failed: ${error.message ?: "unknown error"}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    /** Intercepts the Blob URL used by HitomiLA's gallery ZIP downloader. */
+    private val blobDownloadScript = """
+        (function() {
+          if (window.__xanimeBlobDownloadsInstalled) return;
+          window.__xanimeBlobDownloadsInstalled = true;
+          var blobs = Object.create(null);
+          var originalCreate = URL.createObjectURL.bind(URL);
+          URL.createObjectURL = function(blob) {
+            var url = originalCreate(blob);
+            if (blob instanceof Blob) blobs[url] = blob;
+            return url;
+          };
+          function transfer(blob, filename) {
+            var name = (filename || 'hitomi-download.zip').split(/[\\\\/]/).pop();
+            var mime = blob.type || 'application/zip';
+            try {
+              XAnimeDownloads.beginBlobDownload(name, mime);
+              var offset = 0;
+              var chunkSize = 192 * 1024;
+              (async function() {
+                while (offset < blob.size) {
+                  var buffer = await blob.slice(offset, offset + chunkSize).arrayBuffer();
+                  var bytes = new Uint8Array(buffer);
+                  var binary = '';
+                  for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+                  XAnimeDownloads.appendBlobChunk(btoa(binary));
+                  offset += bytes.length;
+                }
+                XAnimeDownloads.finishBlobDownload();
+              })().catch(function(error) {
+                XAnimeDownloads.failBlobDownload(String(error));
+              });
+            } catch (error) {
+              XAnimeDownloads.failBlobDownload(String(error));
+            }
+          }
+          document.addEventListener('click', function(event) {
+            var link = event.target && event.target.closest ? event.target.closest('a[download]') : null;
+            if (!link) return;
+            var href = link.href || link.getAttribute('href') || '';
+            if (href.indexOf('blob:') !== 0 || !blobs[href]) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            transfer(blobs[href], link.download || 'hitomi-download.zip');
+          }, true);
         })();
     """.trimIndent()
 
