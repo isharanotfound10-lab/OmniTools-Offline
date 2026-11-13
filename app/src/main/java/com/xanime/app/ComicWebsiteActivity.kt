@@ -197,7 +197,9 @@ class ComicWebsiteActivity : Activity() {
                         (host == "spendstornese.rest" || host.endsWith(".spendstornese.rest") ||
                          path == "/out/spicy-box" || path.startsWith("/out/spicy-box/") ||
                          path.startsWith("/ads/spicybox-300x250"))
-                    return if (nhentaiAdRequest || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
+                    val hitomiBannerScript = siteName.equals("HitomiLA", ignoreCase = true) &&
+                        host == "js.wpadmngr.com" && path == "/static/admanager.js"
+                    return if (nhentaiAdRequest || hitomiBannerScript || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
                         WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(),
                             ByteArrayInputStream(ByteArray(0)))
                     } else super.shouldInterceptRequest(view, request)
@@ -613,6 +615,18 @@ class ComicWebsiteActivity : Activity() {
 
           function cleanHitomiMobileAds() {
             if (!document.documentElement) return;
+
+            // Remove HitomiLA's occasional 900x250 reserved banner slot.
+            var bannerSlots = document.querySelectorAll(
+              '[data-banner-id="63391"],script[src*="js.wpadmngr.com/static/adManager.js"]'
+            );
+            for (var b = bannerSlots.length - 1; b >= 0; b--) {
+              var banner = bannerSlots[b];
+              var shell = banner.closest('.PH8qZXFPTQY7lAgiP');
+              if (shell) shell.remove();
+              else if (banner.matches('[data-banner-id="63391"]')) banner.remove();
+              else removeAdShell(banner);
+            }
 
             // Fake dating/chat creative: "Ayesha (Online)" and its LIKE/REPLY buttons.
             var zones = document.querySelectorAll('[data-izone="uc-area"]');
