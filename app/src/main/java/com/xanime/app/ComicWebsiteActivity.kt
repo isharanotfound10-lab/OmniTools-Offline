@@ -334,6 +334,8 @@ class ComicWebsiteActivity : Activity() {
             var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
             var textNode;
             while ((textNode = walker.nextNode())) {
+              var textParent = textNode.parentElement;
+              if (textParent && textParent.closest('script,style,noscript,template')) continue;
               if ((textNode.nodeValue || '').trim()) return true;
             }
             var descendants = el.querySelectorAll('img,video,canvas,iframe,button,a,input,svg');
@@ -412,8 +414,18 @@ class ComicWebsiteActivity : Activity() {
             for (var s = 0; s < scripts.length; s++) {
               removeAdNode(scripts[s]);
             }
-            // Remove the exact AllPornComic banner loaders and spots, including their
-            // enclosing <center> element so the reserved banner gap disappears too.
+            // AllPornComic's ad slots are wrapped in <center> and use class="na".
+            // Remove the whole wrapper, not just the blocked iframe, to collapse its gap.
+            var allPornComicFrames = document.querySelectorAll(
+              'iframe.na[src*="/api/spots/229371"],iframe.na[src*="/api/spots/229326"],' +
+              'iframe[src*="js.allporncomic.com/api/spots/229371"],' +
+              'iframe[src*="js.allporncomic.com/api/spots/229326"]'
+            );
+            for (var apf = allPornComicFrames.length - 1; apf >= 0; apf--) {
+              var adCenter = allPornComicFrames[apf].closest('center');
+              if (adCenter) adCenter.remove();
+              else removeAdNode(allPornComicFrames[apf]);
+            }
             var allPornComicScripts = document.querySelectorAll(
               'script[src*="js.allporncomic.com/L7pW5.js"],script[src*="js.allporncomic.com/Aum05.js"]'
             );
@@ -421,7 +433,9 @@ class ComicWebsiteActivity : Activity() {
               removeAdNode(allPornComicScripts[aps]);
             }
             var frames = document.querySelectorAll('iframe[id^="__clb-"],iframe[id*="_container"],iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="chaseherbalpasty.com"],iframe[src*="bestcrongreenfunnel.com"],iframe[src*="darnobedienceupscale.com"],iframe[src*="js.allporncomic.com/api/spots/229371"],iframe[src*="js.allporncomic.com/api/spots/229326"]');
-            for (var f = 0; f < frames.length; f++) {
+            for (var f = frames.length - 1; f >= 0; f--) {
+              // HitomiLA's banner is nested in layout wrappers; remove the empty
+              // ancestors after deleting its exact third-party iframe.
               removeAdNode(frames[f]);
             }
 
