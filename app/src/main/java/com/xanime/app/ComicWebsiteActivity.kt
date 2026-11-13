@@ -239,7 +239,6 @@ class ComicWebsiteActivity : Activity() {
             'center:has(iframe[src*="js.allporncomic.com"])',
             '[data-element="overlay"][data-izone="stop"]',
             'iframe[id^="__clb-"]',
-            'iframe[id*="_container"]'
           ].join(',') + '{display:none!important;visibility:hidden!important;' +
             'max-height:0!important;min-height:0!important;height:0!important;' +
             'margin:0!important;padding:0!important;border:0!important;}';
@@ -292,7 +291,7 @@ class ComicWebsiteActivity : Activity() {
             for (var i = 0; i < frames.length; i++) {
               var frame = frames[i];
               var details = [frame.src, frame.id, frame.name, frame.title].join(' ').toLowerCase();
-              if (details.indexOf('js.allporncomic.com') !== -1 || /(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|ad-maven|hilltop)/.test(details)) {
+              if (details.indexOf('js.allporncomic.com') !== -1 || details.indexOf('chaseherbalpasty.com') !== -1 || details.indexOf('bestcrongreenfunnel.com') !== -1 || details.indexOf('darnobedienceupscale.com') !== -1 || /(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|ad-maven|hilltop)/.test(details)) {
                 hide(frame);
                 if (frame.parentElement && !containsLargeComicImage(frame.parentElement)) hide(frame.parentElement);
               }
