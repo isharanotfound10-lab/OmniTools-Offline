@@ -378,13 +378,13 @@ class MainActivity : Activity() {
                 selectedComicSource = "HitomiLA"
                 showHome()
             }
-            addWebsiteTab(comicTabs, "AllPornComic", emptyList(), 5,
-                selectedComicSource == "AllPornComic") {
+            addWebsiteTab(comicTabs, "AllPornComic", emptyList(),
+                selectedComicSource == "AllPornComic", 5) {
                 selectedComicSource = "AllPornComic"
                 showHome()
             }
-            addWebsiteTab(comicTabs, "NovelCrow", emptyList(), 5,
-                selectedComicSource == "NovelCrow") {
+            addWebsiteTab(comicTabs, "NovelCrow", emptyList(),
+                selectedComicSource == "NovelCrow", 5) {
                 selectedComicSource = "NovelCrow"
                 showHome()
             }
