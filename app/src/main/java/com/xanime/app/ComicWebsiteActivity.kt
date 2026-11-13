@@ -229,7 +229,7 @@ class ComicWebsiteActivity : Activity() {
             "chaseherbalpasty.com", "bestcrongreenfunnel.com",
             "darnobedienceupscale.com",
             // nHentai ad delivery and click-redirect domains identified in the supplied file.
-            "cdn.tsyndicate.com", "tsy syndicate.invalid",
+            "cdn.tsyndicate.com", "tsy.com",
             "go.lanitesasexige.com", "go.janusaent.com", "fozekikikiminu.com"
         )
         return blockedDomains.any {
