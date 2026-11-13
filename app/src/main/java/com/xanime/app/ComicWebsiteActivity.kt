@@ -150,7 +150,8 @@ class ComicWebsiteActivity : Activity() {
                     // nHentai should never open separate popup windows; these are commonly
                     // used by ad/click-redirect scripts. Keep normal in-page navigation intact.
                     if (siteName.equals("nHentai", ignoreCase = true) ||
-                        siteName.equals("HitomiLA", ignoreCase = true)) return false
+                        siteName.equals("HitomiLA", ignoreCase = true) ||
+                        siteName.equals("NovelCrow", ignoreCase = true)) return false
                     if (!isUserGesture || resultMsg == null || popupWebView != null) return false
                     val popup = WebView(this@ComicWebsiteActivity)
                     popupWebView = popup
@@ -272,60 +273,69 @@ class ComicWebsiteActivity : Activity() {
             (host == allowedHost || host.endsWith(".$allowedHost"))
     }
 
-    /** Remove only the confirmed NovelCrow ad blocks, including their reserved blank space. */
+    /** Remove NovelCrow's confirmed ad slots and their full reserved-space wrappers. */
     private val novelCrowAdCleanupScript = """
         (function() {
           if (window.__xanimeNovelCrowAdsInstalled) return;
           window.__xanimeNovelCrowAdsInstalled = true;
 
-          var selectors = [
-            '[id^="__clb-spot_2089393_"]',
-            'iframe[id^="__clb-spot_2089393_"]',
-            '[id^="__clb-spot_1876095_"]',
-            'iframe[id^="__clb-spot_1876095_"]',
-            '.ai-viewport-2[data-code*="MTg4MjE2OA=="]',
-            '.ai-viewport-1[data-code*="MjA4OTM5Mw=="]',
-            '.ai-viewport-1[data-code*="MTg3NjA5NQ=="]'
-          ].join(',');
-
           function removeNovelCrowAds() {
             if (!document.documentElement) return;
+
+            // Spot 1882168 is the 240px sidebar block; spot 2089393 is
+            // the 75px/728x90 banner; spot 1876095 is the 300x250 reader ad.
+            var selectors = [
+              '[data-cl-spot="1882168"]',
+              '[data-cl-spot="2089393"]',
+              '[id^="__clb-spot_2089393_"]',
+              '[id^="__clb-spot_1876095_"]',
+              'iframe[id^="__clb-spot_2089393_"]',
+              'iframe[id^="__clb-spot_1876095_"]'
+            ].join(',');
+
             document.querySelectorAll(selectors).forEach(function(node) {
               if (!node.isConnected) return;
               var target = node;
 
-              // The sidebar uses WordPress code-block wrappers which reserve
-              // 75px/240px even when the iframe itself is empty.
+              // Remove the publisher's full fixed-height code block / viewport,
+              // not merely its iframe, so no blank 75px/240px/300px gap remains.
               var codeBlock = node.closest('.code-block');
-              if (codeBlock) {
-                target = codeBlock;
-              } else {
-                var viewport = node.closest('.ai-viewport-1, .ai-viewport-2, .ai-viewport-3');
-                if (viewport) target = viewport;
-                else if (node.id && node.id.indexOf('__clb-spot_') === 0) {
-                  target = node.parentElement || node;
-                  for (var i = 0; i < 3 && target.parentElement &&
-                       target.parentElement !== document.body; i++) {
-                    var parent = target.parentElement;
-                    var height = (parent.style && parent.style.height) || '';
-                    if (height === '75px' || height === '240px' ||
-                        parent.classList.contains('code-block')) {
-                      target = parent;
-                      break;
-                    }
-                    if (parent.classList.contains('c-sidebar')) break;
+              var viewport = node.closest('.ai-viewport-1, .ai-viewport-2, .ai-viewport-3');
+              if (codeBlock) target = codeBlock;
+              else if (viewport) target = viewport;
+              else {
+                var parent = node.parentElement;
+                while (parent && parent !== document.body && parent !== document.documentElement) {
+                  var h = (parent.style && parent.style.height || '').replace(/\s/g, '');
+                  if (parent.classList.contains('code-block') ||
+                      h === '75px' || h === '90px' || h === '240px' || h === '250px') {
                     target = parent;
+                    break;
                   }
+                  if (parent.classList.contains('c-sidebar') ||
+                      parent.classList.contains('c-container')) break;
+                  target = parent;
+                  parent = parent.parentElement;
                 }
               }
               target.remove();
+            });
+
+            // Remove only empty NovelCrow sidebar/widget shells left behind
+            // after those exact ad blocks are removed.
+            document.querySelectorAll('.c-sidebar.c-top-second-sidebar').forEach(function(sidebar) {
+              var meaningful = sidebar.querySelector(
+                'img,video,canvas,iframe:not([id^="__clb-"]),a,button,input,select,textarea'
+              );
+              var text = (sidebar.innerText || '').replace(/\s+/g, '').trim();
+              if (!meaningful && !text) sidebar.remove();
             });
           }
 
           removeNovelCrowAds();
           new MutationObserver(removeNovelCrowAds).observe(document.documentElement, {
             childList: true, subtree: true, attributes: true,
-            attributeFilter: ['id', 'data-code', 'src', 'class', 'style']
+            attributeFilter: ['id', 'data-cl-spot', 'data-code', 'src', 'class', 'style']
           });
         })();
     """.trimIndent()
