@@ -373,7 +373,7 @@ class MainActivity : Activity() {
                 selectedComicSource = "HentaiRead"
                 showHome()
             }
-            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ", "DOWNLOAD"),
+            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ"),
                 selectedComicSource == "HitomiLA", 5) {
                 selectedComicSource = "HitomiLA"
                 showHome()
@@ -2947,61 +2947,16 @@ class MainActivity : Activity() {
         val url: String
     )
 
-    // Native HitomiLA search screen. Search is restricted to gallery titles.
+    // HitomiLA uses the same simple in-app reader entry as HentaiRead.
     private fun showHitomiLaHome() {
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        panel.addView(label("HITOMI.LA", 18, white, true).apply {
-            setPadding(0, dp(16), 0, dp(5))
-        })
-        panel.addView(label("SEARCH GALLERIES BY TITLE", 9, muted, true).apply {
-            letterSpacing = .1f
-            setPadding(0, 0, 0, dp(9))
-        })
-
-        val input = EditText(this).apply {
-            hint = "Enter a gallery title..."
-            setHintTextColor(muted)
-            setTextColor(white)
-            textSize = 14f
-            isSingleLine = true
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
-            setPadding(dp(13), 0, dp(10), 0)
-            background = ripple(glassDrawable(14))
-        }
-        val statusText = TextView(this).apply {
-            text = "Search HitomiLA galleries by name."
-            textSize = 12f
-            setTextColor(muted)
-            setPadding(dp(2), dp(12), dp(2), dp(8))
-        }
-        val results = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        val searchButton = actionButton("SEARCH ↗", true) {
-            runHitomiTitleSearch(input.text.toString(), results, statusText)
-        }
-        val searchRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        searchRow.addView(input, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
-            marginEnd = dp(7)
-        })
-        searchRow.addView(searchButton, LinearLayout.LayoutParams(dp(96), dp(46)))
-        panel.addView(searchRow, LinearLayout.LayoutParams(-1, -2))
-        input.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                runHitomiTitleSearch(input.text.toString(), results, statusText)
-                true
-            } else false
-        }
-        panel.addView(statusText, LinearLayout.LayoutParams(-1, -2))
-        panel.addView(results, LinearLayout.LayoutParams(-1, -2))
-        pageContent.addView(panel, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = dp(10)
-        })
+        pageContent.addView(infoCard("Click Read to Browse And Read HitomiLA."),
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        pageContent.addView(actionButton("📖  READ", true) {
+            startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "HitomiLA")
+                putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://hitomi.la/")
+            })
+        }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
     }
 
     private fun runHitomiTitleSearch(
