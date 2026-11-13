@@ -88,6 +88,8 @@ class ComicWebsiteActivity : Activity() {
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(3)))
 
         val webView = createBrowser()
+        // Do not display any page content until its ad-cleanup scripts have run.
+        webView.visibility = android.view.View.INVISIBLE
         // Avoid showing previously cached ad scripts/banners while testing the updated filters.
         if (siteName.equals("AllPornComic", ignoreCase = true) ||
             siteName.equals("HitomiLA", ignoreCase = true) ||
@@ -185,11 +187,23 @@ class ComicWebsiteActivity : Activity() {
                     } else super.shouldInterceptRequest(view, request)
                 }
 
+                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                    super.onPageStarted(view, url, favicon)
+                    // Keep the page hidden while its ad filters are installed so ads never flash.
+                    view?.visibility = android.view.View.INVISIBLE
+                }
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    view?.evaluateJavascript(adCleanupScript, null)
-                    if (siteName.equals("nHentai", ignoreCase = true)) {
-                        view?.evaluateJavascript(nhentaiAdCleanupScript, null)
+                    val page = view ?: return
+                    page.evaluateJavascript(adCleanupScript) {
+                        if (siteName.equals("nHentai", ignoreCase = true)) {
+                            page.evaluateJavascript(nhentaiAdCleanupScript) {
+                                page.visibility = android.view.View.VISIBLE
+                            }
+                        } else {
+                            page.visibility = android.view.View.VISIBLE
+                        }
                     }
                 }
 
