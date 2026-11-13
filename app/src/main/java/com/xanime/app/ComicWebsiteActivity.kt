@@ -269,7 +269,7 @@ class ComicWebsiteActivity : Activity() {
             for (var i = 0; i < frames.length; i++) {
               var frame = frames[i];
               var details = [frame.src, frame.id, frame.name, frame.title].join(' ').toLowerCase();
-              if (/(js\\.allporncomic\\.com\\/api\\/spots\\/(229371|229326)|adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|ad-maven|hilltop)/.test(details)) {
+              if (details.indexOf('js.allporncomic.com') !== -1 || /(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|ad-maven|hilltop)/.test(details)) {
                 hide(frame);
                 if (frame.parentElement && !containsLargeComicImage(frame.parentElement)) hide(frame.parentElement);
               }
