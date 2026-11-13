@@ -139,7 +139,7 @@ class ComicWebsiteActivity : Activity() {
                             if (!routed) {
                                 routed = true
                                 if (isAllowedPage(url)) browser?.loadUrl(url)
-                                else Toast.makeText(this@ComicWebsiteActivity, "Blocked an external pop-up", Toast.LENGTH_SHORT).show()
+                                else { /* silently discard ad pop-ups and external redirect targets */ }
                                 closePopup(popup)
                             }
                             return true
@@ -251,7 +251,7 @@ class ComicWebsiteActivity : Activity() {
             var imgs = node.querySelectorAll('img');
             for (var i = 0; i < imgs.length; i++) {
               var img = imgs[i], src = (img.currentSrc || img.src || '').toLowerCase();
-              if (img.naturalWidth > 250 || /\\/(galleries|images|comics)\\//.test(src)) return true;
+              if (img.naturalWidth > 250 || src.indexOf('/galleries/') >= 0 || src.indexOf('/images/') >= 0 || src.indexOf('/comics/') >= 0) return true;
             }
             return false;
           }
