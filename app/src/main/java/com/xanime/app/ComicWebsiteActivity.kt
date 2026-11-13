@@ -128,6 +128,9 @@ class ComicWebsiteActivity : Activity() {
                     isUserGesture: Boolean,
                     resultMsg: Message?
                 ): Boolean {
+                    // nHentai should never open separate popup windows; these are commonly
+                    // used by ad/click-redirect scripts. Keep normal in-page navigation intact.
+                    if (siteName.equals("nHentai", ignoreCase = true)) return false
                     if (!isUserGesture || resultMsg == null || popupWebView != null) return false
                     val popup = WebView(this@ComicWebsiteActivity)
                     popupWebView = popup
