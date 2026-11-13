@@ -378,9 +378,14 @@ class MainActivity : Activity() {
                 selectedComicSource = "HitomiLA"
                 showHome()
             }
-            addWebsiteTab(comicTabs, "AllPornComic", emptyList(),
+            addWebsiteTab(comicTabs, "AllPornComic", emptyList(), 5,
                 selectedComicSource == "AllPornComic") {
                 selectedComicSource = "AllPornComic"
+                showHome()
+            }
+            addWebsiteTab(comicTabs, "NovelCrow", emptyList(), 5,
+                selectedComicSource == "NovelCrow") {
+                selectedComicSource = "NovelCrow"
                 showHome()
             }
             addWebsiteTab(comicTabs, "nHentai", listOf("NHENTAI.NET", "NHENTAI.TO"),
@@ -408,6 +413,16 @@ class MainActivity : Activity() {
                         startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
                             putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "AllPornComic")
                             putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://allporncomic.com/home-3/")
+                        })
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+                }
+                "NovelCrow" -> {
+                    pageContent.addView(infoCard("Click Read to Browse And Read NovelCrow."), 
+                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+                    pageContent.addView(actionButton("📖  READ", true) {
+                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "NovelCrow")
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://novelcrow.com")
                         })
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
                 }
