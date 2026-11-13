@@ -88,6 +88,10 @@ class ComicWebsiteActivity : Activity() {
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(3)))
 
         val webView = createBrowser()
+        // Avoid showing previously cached ad scripts/banners while testing the updated filters.
+        if (siteName.equals("AllPornComic", ignoreCase = true)) {
+            webView.clearCache(true)
+        }
         browser = webView
         root.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
@@ -200,12 +204,9 @@ class ComicWebsiteActivity : Activity() {
 
     /** Exact ad assets and banner endpoints identified in AllPornComic page source. */
     private fun isAllPornComicAdRequest(uri: Uri): Boolean {
-        if (uri.host?.lowercase() != "js.allporncomic.com") return false
-        val path = uri.path?.lowercase().orEmpty()
-        return path == "/l7pw5.js" ||
-            path == "/aum05.js" ||
-            path == "/api/spots/229371" ||
-            path == "/api/spots/229326"
+        // This host is dedicated to AllPornComic advertising; block every path on it,
+        // including future script/spot IDs and tracking endpoints not yet observed.
+        return uri.host?.lowercase() == "js.allporncomic.com"
     }
 
     private fun isKnownAdHost(host: String): Boolean {
@@ -231,8 +232,8 @@ class ComicWebsiteActivity : Activity() {
             '.ads-wrapper', '.advertisement', '.advertising', '[data-ad]',
             '[data-ad-slot]', '[id^="google_ads"]',
             'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
-            'iframe[src*="js.allporncomic.com/api/spots/229371"]',
-            'iframe[src*="js.allporncomic.com/api/spots/229326"]'
+            'iframe[src*="js.allporncomic.com"]',
+            'center:has(iframe[src*="js.allporncomic.com"])'
           ].join(',') + '{display:none!important;visibility:hidden!important;' +
             'max-height:0!important;min-height:0!important;height:0!important;' +
             'margin:0!important;padding:0!important;border:0!important;}';
