@@ -383,6 +383,11 @@ class MainActivity : Activity() {
                 selectedComicSource = "AllPornComic"
                 showHome()
             }
+            addWebsiteTab(comicTabs, "nHentai", listOf("NHENTAI.NET", "NHENTAI.TO"),
+                selectedComicSource == "nHentai") {
+                selectedComicSource = "nHentai"
+                showHome()
+            }
             pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(12)
             })
@@ -405,6 +410,19 @@ class MainActivity : Activity() {
                             putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://allporncomic.com/home-3/")
                         })
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+                }
+                "nHentai" -> {
+                    pageContent.addView(infoCard("Choose a website to browse."), 
+                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+                    pageContent.addView(actionButton("Go To nHentai.net", true) {
+                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "nHentai")
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://nhentai.net/")
+                        })
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+                    pageContent.addView(actionButton("Go To nHentai.to", false) {
+                        Toast.makeText(this, "nHentai.to is not available yet", Toast.LENGTH_SHORT).show()
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
                 }
             }
             setContentView(root)
