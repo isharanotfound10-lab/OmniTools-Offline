@@ -287,6 +287,8 @@ class ComicWebsiteActivity : Activity() {
             var selectors = [
               '[data-cl-spot="1882168"]',
               '[data-cl-spot="2089393"]',
+              '.ai-viewport-2[data-code^="PGRpdiBjbGFzcz0nY29kZS1ibG9jay"]',
+              '.ai-viewport-1[data-code^="PGRpdiBjbGFzcz0nY29kZS1ibG9jay"]',
               '[id^="__clb-spot_2089393_"]',
               '[id^="__clb-spot_1876095_"]',
               'iframe[id^="__clb-spot_2089393_"]',
