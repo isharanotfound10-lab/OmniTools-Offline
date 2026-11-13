@@ -224,7 +224,10 @@ class ComicWebsiteActivity : Activity() {
             "outbrain.com", "hilltopads.net", "ad-maven.com", "monetag.com",
             // Ad/tracking hosts identified in HitomiLA's injected overlay and banner.
             "chaseherbalpasty.com", "bestcrongreenfunnel.com",
-            "darnobedienceupscale.com"
+            "darnobedienceupscale.com",
+            // nHentai ad delivery and click-redirect domains identified in the supplied file.
+            "cdn.tsyndicate.com", "go.lanitesasexige.com",
+            "go.janusaent.com", "fozekikikiminu.com"
         )
         return blockedDomains.any {
             val domain = it.trim().lowercase()
@@ -245,6 +248,9 @@ class ComicWebsiteActivity : Activity() {
             '[data-ad-slot]', '[id^="google_ads"]',
             'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
             'iframe[src*="js.allporncomic.com"]', 'iframe[id^="__clb-"]',
+            'script[src*="cdn.tsyndicate.com"]',
+            '[id^="ts_ad_native_"]', '[class*="ts_ad_native"]',
+            '.mn-related-container', '.mn-thumb',
             '[data-element="overlay"][data-izone="stop"]',
             '[data-izone="stop"]', '.Ed80ZsLIdBCE2v4',
             'div[id^="__clb-"]'
@@ -350,6 +356,14 @@ class ComicWebsiteActivity : Activity() {
             for (var l = 0; l < labels.length; l++) {
               var label = (labels[l].textContent || '').trim().toLowerCase();
               if (label === 'advertisement' || label === 'sponsored') removeAdPlaceholder(labels[l]);
+            }
+
+            // nHentai ad delivery scripts and native-ad containers from the supplied source.
+            var nhScripts = document.querySelectorAll('script[src*="cdn.tsyndicate.com"]');
+            for (var ns = 0; ns < nhScripts.length; ns++) removeAdNode(nhScripts[ns]);
+            var nhAds = document.querySelectorAll('[id^="ts_ad_native_"],[class*="ts_ad_native"],.mn-related-container,.mn-thumb');
+            for (var na = nhAds.length - 1; na >= 0; na--) {
+              if (!hasComicArtwork(nhAds[na])) removeAdNode(nhAds[na]);
             }
 
             // Known third-party script tags, injected banner iframes and their now-empty wrappers.
