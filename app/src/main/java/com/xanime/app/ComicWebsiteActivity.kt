@@ -729,6 +729,10 @@ class ComicWebsiteActivity : Activity() {
           };
 
           function sendBlob(blob, filename) {
+            if (!(blob instanceof Blob)) {
+              XAnimeDownloads.failBlobDownload('The ZIP generator did not return a Blob');
+              return;
+            }
             var name = (filename || 'hitomi-download.zip').split(/[\\\\/]/).pop();
             var mime = blob.type || 'application/zip';
             XAnimeDownloads.beginBlobDownload(name, mime);
@@ -749,13 +753,32 @@ class ComicWebsiteActivity : Activity() {
             });
           }
 
+          // HitomiLA's downloader finishes with saveAs(zipBlob, filename).
+          // Intercept that final save operation directly rather than waiting
+          // for FileSaver.js to create and click a temporary anchor.
+          function hookSaveAs() {
+            if (typeof window.saveAs === 'function' &&
+                !window.saveAs.__xanimeWrapped) {
+              var originalSaveAs = window.saveAs;
+              var wrappedSaveAs = function(blob, filename) {
+                if (blob instanceof Blob) {
+                  sendBlob(blob, filename || 'hitomi-download.zip');
+                  return;
+                }
+                return originalSaveAs.apply(this, arguments);
+              };
+              wrappedSaveAs.__xanimeWrapped = true;
+              wrappedSaveAs.__xanimeOriginal = originalSaveAs;
+              window.saveAs = wrappedSaveAs;
+            }
+          }
+
           function transferUrl(url, filename) {
             var known = blobs[url];
             if (known) {
               sendBlob(known, filename);
               return;
             }
-            // Also support Blob URLs created before our script was injected.
             fetch(url).then(function(response) {
               if (!response.ok) throw new Error('Could not read generated ZIP (' + response.status + ')');
               return response.blob();
@@ -788,7 +811,6 @@ class ComicWebsiteActivity : Activity() {
             transferUrl(href, link.download || 'hitomi-download.zip');
           }
 
-          // Capture both ordinary clicks and programmatic anchor.click() downloads.
           document.addEventListener('click', intercept, true);
           var originalAnchorClick = HTMLAnchorElement.prototype.click;
           HTMLAnchorElement.prototype.click = function() {
@@ -800,6 +822,15 @@ class ComicWebsiteActivity : Activity() {
             }
             return originalAnchorClick.apply(this, arguments);
           };
+
+          hookSaveAs();
+          // Some pages load FileSaver after DOM ready; re-check briefly as scripts appear.
+          var observer = new MutationObserver(hookSaveAs);
+          observer.observe(document.documentElement, {childList:true, subtree:true});
+          setTimeout(function() {
+            hookSaveAs();
+            observer.disconnect();
+          }, 10000);
         })();
     """.trimIndent()
 
