@@ -163,8 +163,9 @@ class ComicWebsiteActivity : Activity() {
 
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
-                    val host = request?.url?.host?.lowercase() ?: return null
-                    return if (isKnownAdHost(host)) {
+                    val uri = request?.url ?: return null
+                    val host = uri.host?.lowercase().orEmpty()
+                    return if (isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
                         WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(),
                             ByteArrayInputStream(ByteArray(0)))
                     } else super.shouldInterceptRequest(view, request)
@@ -197,6 +198,16 @@ class ComicWebsiteActivity : Activity() {
             (host == allowedHost || host.endsWith(".$allowedHost"))
     }
 
+    /** Exact ad assets and banner endpoints identified in AllPornComic page source. */
+    private fun isAllPornComicAdRequest(uri: Uri): Boolean {
+        if (uri.host?.lowercase() != "js.allporncomic.com") return false
+        val path = uri.path?.lowercase().orEmpty()
+        return path == "/l7pw5.js" ||
+            path == "/aum05.js" ||
+            path == "/api/spots/229371" ||
+            path == "/api/spots/229326"
+    }
+
     private fun isKnownAdHost(host: String): Boolean {
         val blockedDomains = listOf(
             "doubleclick.net", "googlesyndication.com", "googleadservices.com",
@@ -219,7 +230,9 @@ class ComicWebsiteActivity : Activity() {
             '.adsbygoogle', '.ad-container', '.ad-wrapper', '.ads-container',
             '.ads-wrapper', '.advertisement', '.advertising', '[data-ad]',
             '[data-ad-slot]', '[id^="google_ads"]',
-            'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]'
+            'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
+            'iframe[src*="js.allporncomic.com/api/spots/229371"]',
+            'iframe[src*="js.allporncomic.com/api/spots/229326"]'
           ].join(',') + '{display:none!important;visibility:hidden!important;' +
             'max-height:0!important;min-height:0!important;height:0!important;' +
             'margin:0!important;padding:0!important;border:0!important;}';
@@ -255,7 +268,7 @@ class ComicWebsiteActivity : Activity() {
             for (var i = 0; i < frames.length; i++) {
               var frame = frames[i];
               var details = [frame.src, frame.id, frame.name, frame.title].join(' ').toLowerCase();
-              if (/(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|ad-maven|hilltop)/.test(details)) {
+              if (/(js\\.allporncomic\\.com\\/api\\/spots\\/(229371|229326)|adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|ad-maven|hilltop)/.test(details)) {
                 hide(frame);
                 if (frame.parentElement && !containsLargeComicImage(frame.parentElement)) hide(frame.parentElement);
               }
