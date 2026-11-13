@@ -205,9 +205,14 @@ class ComicWebsiteActivity : Activity() {
 
     /** Exact ad assets and banner endpoints identified in AllPornComic page source. */
     private fun isAllPornComicAdRequest(uri: Uri): Boolean {
-        // This host is dedicated to AllPornComic advertising; block every path on it,
-        // including future script/spot IDs and tracking endpoints not yet observed.
-        return uri.host?.lowercase() == "js.allporncomic.com"
+        // Block only the two confirmed AllPornComic ad loaders and their spot iframes.
+        // Other resources on this host must remain available to the page.
+        if (uri.host?.lowercase() != "js.allporncomic.com") return false
+        val path = uri.path?.lowercase().orEmpty()
+        return path == "/l7pw5.js" ||
+            path == "/aum05.js" ||
+            path.startsWith("/api/spots/229371") ||
+            path.startsWith("/api/spots/229326")
     }
 
     private fun isKnownAdHost(host: String): Boolean {
@@ -352,7 +357,15 @@ class ComicWebsiteActivity : Activity() {
             for (var s = 0; s < scripts.length; s++) {
               removeAdNode(scripts[s]);
             }
-            var frames = document.querySelectorAll('iframe[id^="__clb-"],iframe[id*="_container"],iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="chaseherbalpasty.com"],iframe[src*="bestcrongreenfunnel.com"],iframe[src*="darnobedienceupscale.com"],iframe[src*="js.allporncomic.com"]');
+            // Remove the exact AllPornComic banner loaders and spots, including their
+            // enclosing <center> element so the reserved banner gap disappears too.
+            var allPornComicScripts = document.querySelectorAll(
+              'script[src*="js.allporncomic.com/L7pW5.js"],script[src*="js.allporncomic.com/Aum05.js"]'
+            );
+            for (var aps = 0; aps < allPornComicScripts.length; aps++) {
+              removeAdNode(allPornComicScripts[aps]);
+            }
+            var frames = document.querySelectorAll('iframe[id^="__clb-"],iframe[id*="_container"],iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="chaseherbalpasty.com"],iframe[src*="bestcrongreenfunnel.com"],iframe[src*="darnobedienceupscale.com"],iframe[src*="js.allporncomic.com/api/spots/229371"],iframe[src*="js.allporncomic.com/api/spots/229326"]');
             for (var f = 0; f < frames.length; f++) {
               removeAdNode(frames[f]);
             }
