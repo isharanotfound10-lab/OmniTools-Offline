@@ -90,7 +90,8 @@ class ComicWebsiteActivity : Activity() {
         val webView = createBrowser()
         // Avoid showing previously cached ad scripts/banners while testing the updated filters.
         if (siteName.equals("AllPornComic", ignoreCase = true) ||
-            siteName.equals("HitomiLA", ignoreCase = true)) {
+            siteName.equals("HitomiLA", ignoreCase = true) ||
+            siteName.equals("nHentai", ignoreCase = true)) {
             webView.clearCache(true)
         }
         browser = webView
@@ -173,7 +174,11 @@ class ComicWebsiteActivity : Activity() {
                 override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                     val uri = request?.url ?: return null
                     val host = uri.host?.lowercase().orEmpty()
-                    return if (isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
+                    val path = uri.path?.lowercase().orEmpty()
+                    val nhentaiAdRequest = siteName.equals("nHentai", ignoreCase = true) &&
+                        (host == "spendstornese.rest" || host.endsWith(".spendstornese.rest") ||
+                         path == "/out/spicy-box" || path.startsWith("/out/spicy-box/"))
+                    return if (nhentaiAdRequest || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
                         WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(),
                             ByteArrayInputStream(ByteArray(0)))
                     } else super.shouldInterceptRequest(view, request)
@@ -182,20 +187,34 @@ class ComicWebsiteActivity : Activity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     view?.evaluateJavascript(adCleanupScript, null)
+                    if (siteName.equals("nHentai", ignoreCase = true)) {
+                        view?.evaluateJavascript(nhentaiAdCleanupScript, null)
+                    }
                 }
 
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     if (request == null || !request.isForMainFrame) return false
+                    if (siteName.equals("nHentai", ignoreCase = true) &&
+                        isNHaentaiAdRedirect(request.url)) return true
                     return !isAllowedPage(request.url.toString())
                 }
 
                 @Suppress("DEPRECATION")
                 override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                     if (url.isNullOrBlank()) return true
+                    if (siteName.equals("nHentai", ignoreCase = true) &&
+                        isNHaentaiAdRedirect(Uri.parse(url))) return true
                     return !isAllowedPage(url)
                 }
             }
         }
+    }
+
+    private fun isNHaentaiAdRedirect(uri: Uri): Boolean {
+        val host = uri.host?.lowercase().orEmpty()
+        val path = uri.path?.lowercase().orEmpty()
+        return (host == allowedHost && (path == "/out/spicy-box" || path.startsWith("/out/spicy-box/"))) ||
+            host == "spendstornese.rest" || host.endsWith(".spendstornese.rest")
     }
 
     private fun isAllowedPage(rawUrl: String): Boolean {
@@ -230,7 +249,9 @@ class ComicWebsiteActivity : Activity() {
             "darnobedienceupscale.com",
             // nHentai ad delivery and click-redirect domains identified in the supplied file.
             "cdn.tsyndicate.com", "tsyndicate.com",
-            "go.lanitesasexige.com", "go.janusaent.com", "fozekikikiminu.com"
+            "go.lanitesasexige.com", "go.janusaent.com", "fozekikikiminu.com",
+            // nHentai sponsored card/image delivery host from the corrected source.
+            "spendstornese.rest"
         )
         return blockedDomains.any {
             val domain = it.trim().lowercase()
@@ -428,6 +449,62 @@ class ComicWebsiteActivity : Activity() {
           new MutationObserver(scheduleClean).observe(document.documentElement, {
             childList: true, subtree: true, attributes: true,
             attributeFilter: ['src','class','id','style','data-izone']
+          });
+        })();
+    """.trimIndent()
+
+    /** Exact nHentai ad elements from the corrected page source. */
+    private val nhentaiAdCleanupScript = """
+        (function() {
+          if (window.__xanimeNhentaiAdsRemoved) return;
+          window.__xanimeNhentaiAdsRemoved = true;
+
+          var styleId = 'xanime-nhentai-ad-cleanup';
+          var css = [
+            '.hdr-slot-m',
+            '#sbx-hdr',
+            'a#sbx-hdr[href="/out/spicy-box"]',
+            'img[src*="spendstornese.rest/tsk/"]',
+            'img[src*="spendstornese.rest"]'
+          ].join(',') + '{display:none!important;visibility:hidden!important;' +
+            'width:0!important;height:0!important;max-height:0!important;min-height:0!important;' +
+            'margin:0!important;padding:0!important;border:0!important;pointer-events:none!important;}';
+
+          function removeAdElements() {
+            if (!document.documentElement) return;
+            if (!document.getElementById(styleId)) {
+              var style = document.createElement('style');
+              style.id = styleId;
+              style.textContent = css;
+              (document.head || document.documentElement).appendChild(style);
+            }
+
+            // Remove the sponsored video slot and its reserved layout space.
+            document.querySelectorAll('.hdr-slot-m, #sbx-hdr').forEach(function(node) {
+              var parent = node.closest('.hdr-slot-m') || node;
+              if (parent && parent.parentNode) parent.parentNode.removeChild(parent);
+            });
+
+            // Remove only the three-card creative grid when its images come from
+            // the exact ad host; do not touch the guest reading-history section.
+            document.querySelectorAll('body > .I8Y5R, body .I8Y5R').forEach(function(grid) {
+              var adImages = grid.querySelectorAll('img[src*="spendstornese.rest/tsk/"]');
+              if (adImages.length > 0 && grid.parentNode) {
+                grid.parentNode.removeChild(grid);
+              }
+            });
+
+            // Remove any remaining exact ad creatives and their nearest ad-card shells.
+            document.querySelectorAll('img[src*="spendstornese.rest/tsk/"]').forEach(function(img) {
+              var card = img.closest('.Imkm5') || img;
+              if (card.parentNode) card.parentNode.removeChild(card);
+            });
+          }
+
+          removeAdElements();
+          new MutationObserver(removeAdElements).observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['src','class','id','style']
           });
         })();
     """.trimIndent()
