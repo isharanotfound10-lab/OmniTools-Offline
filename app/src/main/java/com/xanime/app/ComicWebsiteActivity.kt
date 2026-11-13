@@ -203,11 +203,14 @@ class ComicWebsiteActivity : Activity() {
             (host == allowedHost || host.endsWith(".$allowedHost"))
     }
 
-    /** Exact ad assets and banner endpoints identified in AllPornComic page source. */
+    /** Block only the exact AllPornComic ad assets/slots confirmed in page source. */
     private fun isAllPornComicAdRequest(uri: Uri): Boolean {
-        // This host is dedicated to AllPornComic advertising; block every path on it,
-        // including future script/spot IDs and tracking endpoints not yet observed.
-        return uri.host?.lowercase() == "js.allporncomic.com"
+        if (!uri.host.equals("js.allporncomic.com", ignoreCase = true)) return false
+        val path = uri.path.orEmpty()
+        return path.equals("/L7pW5.js", ignoreCase = true) ||
+            path.equals("/Aum05.js", ignoreCase = true) ||
+            path.equals("/api/spots/229371", ignoreCase = true) ||
+            path.equals("/api/spots/229326", ignoreCase = true)
     }
 
     private fun isKnownAdHost(host: String): Boolean {
@@ -348,11 +351,38 @@ class ComicWebsiteActivity : Activity() {
             }
 
             // Known third-party script tags, injected banner iframes and their now-empty wrappers.
-            var scripts = document.querySelectorAll('script[src*="chaseherbalpasty.com"],script[src*="bestcrongreenfunnel.com"],script[src*="darnobedienceupscale.com"]');
+            var scripts = document.querySelectorAll(
+              'script[src*="chaseherbalpasty.com"],script[src*="bestcrongreenfunnel.com"],' +
+              'script[src*="darnobedienceupscale.com"],' +
+              'script[src*="js.allporncomic.com/L7pW5.js"],' +
+              'script[src*="js.allporncomic.com/Aum05.js"]'
+            );
             for (var s = 0; s < scripts.length; s++) {
               removeAdNode(scripts[s]);
             }
-            var frames = document.querySelectorAll('iframe[id^="__clb-"],iframe[id*="_container"],iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="chaseherbalpasty.com"],iframe[src*="bestcrongreenfunnel.com"],iframe[src*="darnobedienceupscale.com"],iframe[src*="js.allporncomic.com"]');
+            // AllPornComic uses two confirmed ad slots inside otherwise-empty <center> wrappers.
+            // Remove the complete wrapper (not merely hide the iframe) so no blank banner gap remains.
+            var allPornFrames = document.querySelectorAll(
+              'iframe[src*="js.allporncomic.com/api/spots/229371"],' +
+              'iframe[src*="js.allporncomic.com/api/spots/229326"]'
+            );
+            for (var ap = allPornFrames.length - 1; ap >= 0; ap--) {
+              var adFrame = allPornFrames[ap];
+              var center = adFrame.closest ? adFrame.closest('center') : null;
+              if (center && center !== document.body && center !== document.documentElement) {
+                var hasOtherContent = !!center.querySelector(
+                  'img,video,canvas,button,a,input,svg,' +
+                  'iframe:not([src*="js.allporncomic.com/api/spots/229371"]):not([src*="js.allporncomic.com/api/spots/229326"])'
+                );
+                if (!hasOtherContent && !(center.textContent || '').trim()) {
+                  center.remove();
+                  continue;
+                }
+              }
+              removeAdNode(adFrame);
+            }
+
+            var frames = document.querySelectorAll('iframe[id^="__clb-"],iframe[id*="_container"],iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="chaseherbalpasty.com"],iframe[src*="bestcrongreenfunnel.com"],iframe[src*="darnobedienceupscale.com"]');
             for (var f = 0; f < frames.length; f++) {
               removeAdNode(frames[f]);
             }
