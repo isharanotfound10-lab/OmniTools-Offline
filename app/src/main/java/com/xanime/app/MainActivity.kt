@@ -421,7 +421,10 @@ class MainActivity : Activity() {
                         })
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
                     pageContent.addView(actionButton("Go To nHentai.to", false) {
-                        Toast.makeText(this, "nHentai.to is not available yet", Toast.LENGTH_SHORT).show()
+                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "nHentai")
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://nhentai.to/")
+                        })
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
                 }
             }
