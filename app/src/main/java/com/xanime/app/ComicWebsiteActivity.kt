@@ -215,7 +215,10 @@ class ComicWebsiteActivity : Activity() {
             "googletagservices.com", "adservice.google.com", "popads.net",
             "popcash.net", "exoclick.com", "juicyads.com", "trafficjunky.com",
             "onclickads.net", "propellerads.com", "adsterra.com", "taboola.com",
-            "outbrain.com", "hilltopads.net", " ad-maven.com", " Monetag.com"
+            "outbrain.com", "hilltopads.net", "ad-maven.com", "monetag.com",
+            // Ad/tracking hosts identified in HitomiLA's injected overlay and banner.
+            "chaseherbalpasty.com", "bestcrongreenfunnel.com",
+            "darnobedienceupscale.com"
         )
         return blockedDomains.any {
             val domain = it.trim().lowercase()
@@ -233,7 +236,10 @@ class ComicWebsiteActivity : Activity() {
             '[data-ad-slot]', '[id^="google_ads"]',
             'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
             'iframe[src*="js.allporncomic.com"]',
-            'center:has(iframe[src*="js.allporncomic.com"])'
+            'center:has(iframe[src*="js.allporncomic.com"])',
+            '[data-element="overlay"][data-izone="stop"]',
+            'iframe[id^="__clb-"]',
+            'iframe[id*="_container"]'
           ].join(',') + '{display:none!important;visibility:hidden!important;' +
             'max-height:0!important;min-height:0!important;height:0!important;' +
             'margin:0!important;padding:0!important;border:0!important;}';
@@ -265,6 +271,23 @@ class ComicWebsiteActivity : Activity() {
               style.textContent = css;
               (document.head || document.documentElement).appendChild(style);
             }
+            // HitomiLA's injected modal overlay uses stable data attributes despite randomized classes.
+            var overlays = document.querySelectorAll('[data-element="overlay"][data-izone="stop"]');
+            for (var o = 0; o < overlays.length; o++) hide(overlays[o]);
+
+            // Remove the ad script wrapper and its companion banner iframe by stable ID prefix.
+            var adScripts = document.querySelectorAll('script[src*="chaseherbalpasty.com"]');
+            for (var s = 0; s < adScripts.length; s++) {
+              var wrapper = adScripts[s].parentElement;
+              if (wrapper && !containsLargeComicImage(wrapper)) hide(wrapper);
+            }
+            var adFrames = document.querySelectorAll('iframe[id^="__clb-"],iframe[id*="_container"]');
+            for (var a = 0; a < adFrames.length; a++) {
+              var frameParent = adFrames[a].parentElement;
+              hide(adFrames[a]);
+              if (frameParent && !containsLargeComicImage(frameParent)) hide(frameParent);
+            }
+
             var frames = document.querySelectorAll('iframe[src],iframe[id],iframe[name]');
             for (var i = 0; i < frames.length; i++) {
               var frame = frames[i];
