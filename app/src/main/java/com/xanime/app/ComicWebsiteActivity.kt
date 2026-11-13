@@ -593,6 +593,13 @@ class ComicWebsiteActivity : Activity() {
               }
             }
 
+            // The remaining mobile offer ad is rendered inside a cross-origin iframe.
+            // Its stable title is "offer"; remove its fixed-position wrapper, not page iframes.
+            var offerFrames = document.querySelectorAll('iframe[title="offer"]');
+            for (var o = offerFrames.length - 1; o >= 0; o--) {
+              removeAdShell(offerFrames[o]);
+            }
+
             // Fake antivirus/scanning creative with fabricated Windows file paths.
             var scans = document.querySelectorAll('[data-element="scan"]');
             for (var k = scans.length - 1; k >= 0; k--) {
