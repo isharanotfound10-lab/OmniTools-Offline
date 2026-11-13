@@ -4,17 +4,21 @@ import android.app.Activity
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.Message
 import android.view.Gravity
-import android.view.ViewGroup
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.Toast
+import java.io.ByteArrayInputStream
 
-/** Opens a selected COMIX ZIP Downloader website inside XAnime. */
+/** Generic in-app browser for the comic source tabs. */
 class ComicWebsiteActivity : Activity() {
     companion object {
         const val EXTRA_SITE_NAME = "comic_site_name"
@@ -22,16 +26,20 @@ class ComicWebsiteActivity : Activity() {
     }
 
     private var browser: WebView? = null
+    private var popupWebView: WebView? = null
     private lateinit var progress: ProgressBar
     private lateinit var pageTitle: TextView
+    private var siteName: String = "COMICS"
+    private var allowedHost: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val siteName = intent.getStringExtra(EXTRA_SITE_NAME)?.take(40).orEmpty()
+        siteName = intent.getStringExtra(EXTRA_SITE_NAME)?.take(40).orEmpty()
         val siteUrl = intent.getStringExtra(EXTRA_SITE_URL).orEmpty()
         val parsed = Uri.parse(siteUrl)
-        if (siteName.isBlank() || parsed.scheme != "https" || parsed.host.isNullOrBlank()) {
+        allowedHost = parsed.host?.lowercase().orEmpty()
+        if (siteName.isBlank() || parsed.scheme != "https" || allowedHost.isBlank()) {
             finish()
             return
         }
@@ -57,7 +65,7 @@ class ComicWebsiteActivity : Activity() {
         }, LinearLayout.LayoutParams(dp(44), dp(42)))
 
         pageTitle = TextView(this).apply {
-            text = siteName
+            text = siteName.uppercase()
             textSize = 14f
             setTextColor(Color.WHITE)
             setPadding(dp(10), 0, dp(6), 0)
@@ -79,31 +87,203 @@ class ComicWebsiteActivity : Activity() {
         }
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(3)))
 
-        val webView = WebView(this).apply {
+        val webView = createBrowser()
+        browser = webView
+        root.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(root)
+        webView.loadUrl(siteUrl)
+    }
+
+    private fun createBrowser(): WebView {
+        return WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.loadsImagesAutomatically = true
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
             settings.javaScriptCanOpenWindowsAutomatically = false
-            settings.setSupportMultipleWindows(false)
+            settings.setSupportMultipleWindows(true)
 
             webChromeClient = object : WebChromeClient() {
                 override fun onProgressChanged(view: WebView?, newProgress: Int) {
                     this@ComicWebsiteActivity.progress.progress = newProgress
-                    this@ComicWebsiteActivity.progress.visibility = if (newProgress >= 100) android.view.View.GONE else android.view.View.VISIBLE
+                    this@ComicWebsiteActivity.progress.visibility =
+                        if (newProgress >= 100) android.view.View.GONE else android.view.View.VISIBLE
                 }
 
                 override fun onReceivedTitle(view: WebView?, title: String?) {
-                    pageTitle.text = title?.take(40)?.ifBlank { siteName } ?: siteName
+                    this@ComicWebsiteActivity.pageTitle.text =
+                        title?.take(40)?.ifBlank { siteName } ?: siteName
+                }
+
+                // Keep user-clicked target=_blank links inside this same browser.
+                override fun onCreateWindow(
+                    view: WebView?,
+                    isDialog: Boolean,
+                    isUserGesture: Boolean,
+                    resultMsg: Message?
+                ): Boolean {
+                    if (!isUserGesture || resultMsg == null || popupWebView != null) return false
+                    val popup = WebView(this@ComicWebsiteActivity)
+                    popupWebView = popup
+                    popup.webViewClient = object : WebViewClient() {
+                        private var routed = false
+                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                            val url = request?.url?.toString() ?: return true
+                            if (url == "about:blank") return false
+                            if (!routed) {
+                                routed = true
+                                if (isAllowedPage(url)) browser?.loadUrl(url)
+                                else Toast.makeText(this@ComicWebsiteActivity, "Blocked an external pop-up", Toast.LENGTH_SHORT).show()
+                                closePopup(popup)
+                            }
+                            return true
+                        }
+                        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                            if (routed || url.isNullOrBlank() || url == "about:blank") return
+                            routed = true
+                            if (isAllowedPage(url)) browser?.loadUrl(url)
+                            else Toast.makeText(this@ComicWebsiteActivity, "Blocked an external pop-up", Toast.LENGTH_SHORT).show()
+                            closePopup(popup)
+                        }
+                    }
+                    val transport = resultMsg.obj as? WebView.WebViewTransport ?: run {
+                        closePopup(popup)
+                        return false
+                    }
+                    transport.webView = popup
+                    resultMsg.sendToTarget()
+                    return true
+                }
+
+                override fun onCloseWindow(window: WebView?) {
+                    if (window === popupWebView) closePopup(window)
                 }
             }
-            webViewClient = WebViewClient()
+
+            webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                    val host = request?.url?.host?.lowercase() ?: return null
+                    return if (isKnownAdHost(host)) {
+                        WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(),
+                            ByteArrayInputStream(ByteArray(0)))
+                    } else super.shouldInterceptRequest(view, request)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    view?.evaluateJavascript(adCleanupScript, null)
+                }
+
+                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                    if (request == null || !request.isForMainFrame) return false
+                    return !isAllowedPage(request.url.toString())
+                }
+
+                @Suppress("DEPRECATION")
+                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                    if (url.isNullOrBlank()) return true
+                    return !isAllowedPage(url)
+                }
+            }
         }
-        browser = webView
-        root.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(root)
-        webView.loadUrl(siteUrl)
+    }
+
+    private fun isAllowedPage(rawUrl: String): Boolean {
+        val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return false
+        val scheme = uri.scheme?.lowercase()
+        val host = uri.host?.lowercase() ?: return false
+        return (scheme == "https" || scheme == "http") &&
+            (host == allowedHost || host.endsWith(".$allowedHost"))
+    }
+
+    private fun isKnownAdHost(host: String): Boolean {
+        val blockedDomains = listOf(
+            "doubleclick.net", "googlesyndication.com", "googleadservices.com",
+            "googletagservices.com", "adservice.google.com", "popads.net",
+            "popcash.net", "exoclick.com", "juicyads.com", "trafficjunky.com",
+            "onclickads.net", "propellerads.com", "adsterra.com", "taboola.com",
+            "outbrain.com", "hilltopads.net", " ad-maven.com", " Monetag.com"
+        )
+        return blockedDomains.any {
+            val domain = it.trim().lowercase()
+            host == domain || host.endsWith(".$domain")
+        }
+    }
+
+    /** Hide clearly labelled ad slots/iframes while preserving comic artwork and reader controls. */
+    private val adCleanupScript = """
+        (function() {
+          var styleId = 'xanime-comic-ad-cleanup';
+          var css = [
+            '.adsbygoogle', '.ad-container', '.ad-wrapper', '.ads-container',
+            '.ads-wrapper', '.advertisement', '.advertising', '[data-ad]',
+            '[data-ad-slot]', '[id^="google_ads"]',
+            'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]'
+          ].join(',') + '{display:none!important;visibility:hidden!important;' +
+            'max-height:0!important;min-height:0!important;height:0!important;' +
+            'margin:0!important;padding:0!important;border:0!important;}';
+
+          function containsLargeComicImage(node) {
+            if (!node || !node.querySelectorAll) return false;
+            var imgs = node.querySelectorAll('img');
+            for (var i = 0; i < imgs.length; i++) {
+              var img = imgs[i];
+              var src = (img.currentSrc || img.src || '').toLowerCase();
+              if (img.naturalWidth > 250 || /\/galleries\/|\/images\/|\/comics\//.test(src)) return true;
+            }
+            return false;
+          }
+          function hide(node) {
+            if (!node || node.nodeType !== 1 || containsLargeComicImage(node)) return;
+            node.style.setProperty('display', 'none', 'important');
+            node.style.setProperty('max-height', '0', 'important');
+            node.style.setProperty('min-height', '0', 'important');
+            node.style.setProperty('height', '0', 'important');
+            node.style.setProperty('margin', '0', 'important');
+            node.style.setProperty('padding', '0', 'important');
+          }
+          function clean() {
+            if (!document.documentElement) return;
+            if (!document.getElementById(styleId)) {
+              var style = document.createElement('style');
+              style.id = styleId;
+              style.textContent = css;
+              (document.head || document.documentElement).appendChild(style);
+            }
+            var frames = document.querySelectorAll('iframe[src],iframe[id],iframe[name]');
+            for (var i = 0; i < frames.length; i++) {
+              var frame = frames[i];
+              var details = [frame.src, frame.id, frame.name, frame.title].join(' ').toLowerCase();
+              if (/(adserv|doubleclick|googlesyndication|googleadservices|popads|popcash|exoclick|juicyads|trafficjunky|onclickads|propellerads|adsterra|taboola|outbrain|ad-maven|hilltop)/.test(details)) {
+                hide(frame);
+                if (frame.parentElement && !containsLargeComicImage(frame.parentElement)) hide(frame.parentElement);
+              }
+            }
+            var nodes = document.querySelectorAll('[id],[class],[data-ad],[aria-label]');
+            for (var j = 0; j < nodes.length; j++) {
+              var el = nodes[j];
+              if (el.id === styleId || containsLargeComicImage(el)) continue;
+              var name = [el.id, typeof el.className === 'string' ? el.className : '',
+                el.getAttribute('data-ad'), el.getAttribute('aria-label')].join(' ').toLowerCase();
+              if (/(^|[\W_])(ad|ads|advert|advertisement|banner-ad)([\W_]|$)/.test(name)) hide(el);
+            }
+          }
+          clean();
+          new MutationObserver(clean).observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['src','class','id']
+          });
+        })();
+    """.trimIndent()
+
+    private fun closePopup(popup: WebView?) {
+        if (popup == null) return
+        if (popupWebView === popup) popupWebView = null
+        popup.stopLoading()
+        popup.webChromeClient = null
+        popup.webViewClient = WebViewClient()
+        popup.destroy()
     }
 
     override fun onBackPressed() {
@@ -112,6 +292,7 @@ class ComicWebsiteActivity : Activity() {
     }
 
     override fun onDestroy() {
+        closePopup(popupWebView)
         browser?.apply {
             stopLoading()
             webChromeClient = null
