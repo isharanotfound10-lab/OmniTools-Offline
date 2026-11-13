@@ -148,7 +148,8 @@ class ComicWebsiteActivity : Activity() {
                 ): Boolean {
                     // nHentai should never open separate popup windows; these are commonly
                     // used by ad/click-redirect scripts. Keep normal in-page navigation intact.
-                    if (siteName.equals("nHentai", ignoreCase = true)) return false
+                    if (siteName.equals("nHentai", ignoreCase = true) ||
+                        siteName.equals("HitomiLA", ignoreCase = true)) return false
                     if (!isUserGesture || resultMsg == null || popupWebView != null) return false
                     val popup = WebView(this@ComicWebsiteActivity)
                     popupWebView = popup
@@ -420,6 +421,30 @@ class ComicWebsiteActivity : Activity() {
                 'img[src*="darnobedienceupscale.com"]'
               );
               if (trackingImage) overlay.remove();
+            }
+
+            // Mobile-only HitomiLA interstitials sometimes render as a full-screen
+            // "Skip now" / "Scanning" layer with a fake progress indicator and no
+            // stable class or ID. Remove only a viewport-sized fixed overlay matching
+            // all of those signals; never remove comic artwork or ordinary page content.
+            if (window.innerWidth <= 900 || window.matchMedia('(pointer: coarse)').matches) {
+              var mobileLayers = document.querySelectorAll('body *');
+              for (var ml = mobileLayers.length - 1; ml >= 0; ml--) {
+                var layer = mobileLayers[ml];
+                if (!layer || layer.id === styleId || hasComicArtwork(layer)) continue;
+                var layerStyle = window.getComputedStyle(layer);
+                if (layerStyle.position !== 'fixed' && layerStyle.position !== 'absolute') continue;
+                var layerText = (layer.innerText || layer.textContent || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+                if (layerText.indexOf('skip now') < 0 || layerText.indexOf('scann') < 0) continue;
+                var hasProgress = !!layer.querySelector(
+                  '[role="progressbar"],progress,[class*="progress" i],[id*="progress" i]'
+                );
+                if (!hasProgress) continue;
+                var layerRect = layer.getBoundingClientRect();
+                if (layerRect.width < window.innerWidth * 0.55 ||
+                    layerRect.height < window.innerHeight * 0.35) continue;
+                layer.remove();
+              }
             }
 
             // Remove remaining explicitly marked ad zones and their empty wrappers.
