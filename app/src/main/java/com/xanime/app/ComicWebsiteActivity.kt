@@ -241,7 +241,8 @@ class ComicWebsiteActivity : Activity() {
             'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
             'iframe[src*="js.allporncomic.com"]', 'iframe[id^="__clb-"]',
             '[data-element="overlay"][data-izone="stop"]',
-            '[data-izone="stop"]'
+            '[data-izone="stop"]', '.Ed80ZsLIdBCE2v4',
+            'div[id^="__clb-"]'
           ].join(',') + '{display:none!important;visibility:hidden!important;' +
             'max-height:0!important;min-height:0!important;height:0!important;' +
             'margin:0!important;padding:0!important;border:0!important;pointer-events:none!important;}';
@@ -266,6 +267,55 @@ class ComicWebsiteActivity : Activity() {
             node.style.setProperty('padding', '0', 'important');
             node.style.setProperty('pointer-events', 'none', 'important');
           }
+          function isAdOrHidden(el) {
+            if (!el || el.nodeType !== 1) return true;
+            if (el.matches && el.matches(
+              '.Ed80ZsLIdBCE2v4,iframe[id^="__clb-"],div[id^="__clb-"],' +
+              '[data-izone="stop"],[data-element="static-title"]'
+            )) return true;
+            var cs = window.getComputedStyle(el);
+            return cs.display === 'none' || cs.visibility === 'hidden' ||
+              parseFloat(cs.opacity || '1') === 0;
+          }
+          function hasMeaningfulContent(el) {
+            if (!el || el.nodeType !== 1) return false;
+            var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+            var textNode;
+            while ((textNode = walker.nextNode())) {
+              if ((textNode.nodeValue || '').trim()) return true;
+            }
+            var descendants = el.querySelectorAll('img,video,canvas,iframe,button,a,input,svg');
+            for (var i = 0; i < descendants.length; i++) {
+              var item = descendants[i];
+              if (isAdOrHidden(item)) continue;
+              if (item.tagName === 'IMG') {
+                var src = (item.currentSrc || item.src || '').toLowerCase();
+                if (src.indexOf('bestcrongreenfunnel.com') >= 0 ||
+                    src.indexOf('chaseherbalpasty.com') >= 0) continue;
+                if (item.naturalWidth > 0) return true;
+              } else if (item.tagName === 'IFRAME') {
+                return true;
+              } else if (item.getBoundingClientRect().width > 0 &&
+                         item.getBoundingClientRect().height > 0) return true;
+            }
+            return false;
+          }
+          function collapseEmptyAdAncestors(start) {
+            var current = start;
+            for (var depth = 0; current && depth < 8; depth++) {
+              if (current === document.body || current === document.documentElement) break;
+              if (hasComicArtwork(current) || hasMeaningfulContent(current)) break;
+              var parent = current.parentElement;
+              current.remove();
+              current = parent;
+            }
+          }
+          function removeAdNode(node) {
+            if (!node || !node.parentElement) return;
+            var parent = node.parentElement;
+            node.remove();
+            collapseEmptyAdAncestors(parent);
+          }
           function removeAdPlaceholder(node) {
             if (!node || node.nodeType !== 1 || hasComicArtwork(node)) return;
             var target = node;
@@ -288,7 +338,7 @@ class ComicWebsiteActivity : Activity() {
 
             // Explicit HitomiLA ad zones, including the modal and its empty placeholder.
             var zones = document.querySelectorAll('[data-izone="stop"],[data-element="overlay"][data-izone="stop"]');
-            for (var z = 0; z < zones.length; z++) hide(zones[z]);
+            for (var z = zones.length - 1; z >= 0; z--) removeAdNode(zones[z]);
 
             // Advertisement labels may be rendered separately from the creative.
             var labels = document.querySelectorAll('[data-element="static-title"],[data-element="title"],[aria-label*="advertisement" i]');
@@ -300,15 +350,11 @@ class ComicWebsiteActivity : Activity() {
             // Known third-party script tags, injected banner iframes and their now-empty wrappers.
             var scripts = document.querySelectorAll('script[src*="chaseherbalpasty.com"],script[src*="bestcrongreenfunnel.com"],script[src*="darnobedienceupscale.com"]');
             for (var s = 0; s < scripts.length; s++) {
-              var p = scripts[s].parentElement;
-              if (p && !hasComicArtwork(p)) hide(p);
-              scripts[s].remove();
+              removeAdNode(scripts[s]);
             }
             var frames = document.querySelectorAll('iframe[id^="__clb-"],iframe[id*="_container"],iframe[src*="doubleclick"],iframe[src*="googlesyndication"],iframe[src*="chaseherbalpasty.com"],iframe[src*="bestcrongreenfunnel.com"],iframe[src*="darnobedienceupscale.com"],iframe[src*="js.allporncomic.com"]');
             for (var f = 0; f < frames.length; f++) {
-              var parent = frames[f].parentElement;
-              hide(frames[f]);
-              if (parent && !hasComicArtwork(parent)) hide(parent);
+              removeAdNode(frames[f]);
             }
 
             // Remove invisible full-screen click shields used to force ad clicks.
