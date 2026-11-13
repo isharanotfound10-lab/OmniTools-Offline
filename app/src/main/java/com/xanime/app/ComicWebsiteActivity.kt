@@ -148,7 +148,7 @@ class ComicWebsiteActivity : Activity() {
                             if (routed || url.isNullOrBlank() || url == "about:blank") return
                             routed = true
                             if (isAllowedPage(url)) browser?.loadUrl(url)
-                            else Toast.makeText(this@ComicWebsiteActivity, "Blocked an external pop-up", Toast.LENGTH_SHORT).show()
+                            else { /* silently discard ad pop-ups and external redirect targets */ }
                             closePopup(popup)
                         }
                     }
