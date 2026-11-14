@@ -310,6 +310,11 @@ class ComicWebsiteActivity : Activity() {
           function removeKingComixAds() {
             if (!document.documentElement) return;
 
+            // Remove the KingComix Patreon membership promotion panel as requested.
+            document.querySelectorAll('aside.kc-patreon-panel').forEach(function(panel) {
+              if (panel.isConnected) panel.remove();
+            });
+
             // These publisher-owned slots contain the supplied JuicyAds zones
             // 1129302, 1129305 and 1129591. Remove the entire reserved-height slot.
             document.querySelectorAll(
