@@ -372,7 +372,7 @@ class MainActivity : Activity() {
                 isHorizontalScrollBarEnabled = false
                 isFillViewport = false
                 clipToPadding = false
-                addView(comicTabs, HorizontalScrollView.LayoutParams(
+                addView(comicTabs, ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
                 ))
             }
