@@ -364,46 +364,54 @@ class MainActivity : Activity() {
                 letterSpacing = .12f
                 setPadding(0, dp(3), 0, dp(9))
             })
-            // Keep all comic sources in the same normal tab row.
+            // Keep comic sources in one compact, horizontally scrollable tab strip.
             val comicTabs = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
+            val comicTabsScroll = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                isFillViewport = false
+                clipToPadding = false
+                addView(comicTabs, HorizontalScrollView.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+                ))
+            }
             addWebsiteTab(comicTabs, "HentaiRead", listOf("READ"),
-                selectedComicSource == "HentaiRead", 5) {
+                selectedComicSource == "HentaiRead", 5, scrollableTab = true) {
                 selectedComicSource = "HentaiRead"
                 showHome()
             }
             addWebsiteTab(comicTabs, "HitomiLA", listOf("READ"),
-                selectedComicSource == "HitomiLA", 5) {
+                selectedComicSource == "HitomiLA", 5, scrollableTab = true) {
                 selectedComicSource = "HitomiLA"
                 showHome()
             }
             addWebsiteTab(comicTabs, "AllPornComic", emptyList(),
-                selectedComicSource == "AllPornComic", 5) {
+                selectedComicSource == "AllPornComic", 5, scrollableTab = true) {
                 selectedComicSource = "AllPornComic"
                 showHome()
             }
             addWebsiteTab(comicTabs, "NovelCrow", emptyList(),
-                selectedComicSource == "NovelCrow", 5) {
+                selectedComicSource == "NovelCrow", 5, scrollableTab = true) {
                 selectedComicSource = "NovelCrow"
                 showHome()
             }
             addWebsiteTab(comicTabs, "MultiPorn", emptyList(),
-                selectedComicSource == "MultiPorn", 5) {
+                selectedComicSource == "MultiPorn", 5, scrollableTab = true) {
                 selectedComicSource = "MultiPorn"
                 showHome()
             }
             addWebsiteTab(comicTabs, "KingComix", emptyList(),
-                selectedComicSource == "KingComix", 5) {
+                selectedComicSource == "KingComix", 5, scrollableTab = true) {
                 selectedComicSource = "KingComix"
                 showHome()
             }
             addWebsiteTab(comicTabs, "nHentai", listOf("NHENTAI.NET", "NHENTAI.TO"),
-                selectedComicSource == "nHentai") {
+                selectedComicSource == "nHentai", scrollableTab = true) {
                 selectedComicSource = "nHentai"
                 showHome()
             }
-            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, -2).apply {
+            pageContent.addView(comicTabsScroll, LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(12)
             })
 
@@ -3128,14 +3136,17 @@ class MainActivity : Activity() {
         endMargin: Int = 0,
         footerActionLabel: String? = null,
         footerAction: (() -> Unit)? = null,
+        scrollableTab: Boolean = false,
         action: () -> Unit
     ) {
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
-        column.addView(actionButton(title, selected, action),
-            LinearLayout.LayoutParams(-1, dp(43)))
+        val tabButton = actionButton(title, selected, action).apply {
+            if (scrollableTab) maxLines = 1
+        }
+        column.addView(tabButton, LinearLayout.LayoutParams(-1, dp(43)))
         if (tags.isNotEmpty()) {
             column.addView(TextView(this).apply {
                 text = tags.joinToString("  ·  ")
@@ -3152,8 +3163,13 @@ class MainActivity : Activity() {
             column.addView(actionButton(footerActionLabel, true, footerAction),
                 LinearLayout.LayoutParams(-1, dp(40)).apply { topMargin = dp(8) })
         }
-        container.addView(column, LinearLayout.LayoutParams(0, -2, 1f).apply {
+        container.addView(column, LinearLayout.LayoutParams(
+            if (scrollableTab) dp(112) else 0,
+            -2,
+            if (scrollableTab) 0f else 1f
+        ).apply {
             if (endMargin > 0) marginEnd = dp(endMargin)
+            if (scrollableTab && endMargin == 0) marginEnd = dp(8)
         })
     }
 
