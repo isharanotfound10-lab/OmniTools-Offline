@@ -216,7 +216,7 @@ class ComicWebsiteActivity : Activity() {
                         host == "t.nettrck.store" ||
                         ((host == "cloudpiko.com" || host.endsWith(".cloudpiko.com")) && (
                             path.startsWith("/sb/notifications/gambling/default/custom-banner/") ||
-                            path.startsWith("/sb/notifications/dating/default/global/android_system/3/")
+                            path.startsWith("/sb/notifications/dating/")
                         ))
                     )
                     return if (nhentaiAdRequest || hitomiBannerScript || multiPornRobotAd || kingComixAdRequest || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
@@ -356,8 +356,8 @@ class ComicWebsiteActivity : Activity() {
             document.querySelectorAll('iframe').forEach(function(frame) {
               if (!frame.isConnected) return;
               var src = (frame.getAttribute('src') || '').toLowerCase();
-              if (src.indexOf('cdn.cloudpiko.com/sb/notifications/gambling/default/custom-banner/') >= 0 ||
-                  src.indexOf('cdn.cloudpiko.com/sb/notifications/dating/default/global/android_system/3/') >= 0) {
+              if (src.indexOf('cloudpiko.com/sb/notifications/gambling/default/custom-banner/') >= 0 ||
+                  src.indexOf('cloudpiko.com/sb/notifications/dating/') >= 0) {
                 var parent = frame.parentElement;
                 if (parent && parent.tagName === 'DIV' &&
                     (parent.children.length === 1 || !parent.textContent.trim())) parent.remove();
