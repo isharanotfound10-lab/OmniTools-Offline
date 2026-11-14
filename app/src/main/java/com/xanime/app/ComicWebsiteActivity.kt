@@ -104,7 +104,8 @@ class ComicWebsiteActivity : Activity() {
         if (siteName.equals("AllPornComic", ignoreCase = true) ||
             siteName.equals("HitomiLA", ignoreCase = true) ||
             siteName.equals("nHentai", ignoreCase = true) ||
-            siteName.equals("NovelCrow", ignoreCase = true)) {
+            siteName.equals("NovelCrow", ignoreCase = true) ||
+            siteName.equals("MultiPorn", ignoreCase = true)) {
             webView.clearCache(true)
         }
         browser = webView
@@ -151,7 +152,8 @@ class ComicWebsiteActivity : Activity() {
                     // used by ad/click-redirect scripts. Keep normal in-page navigation intact.
                     if (siteName.equals("nHentai", ignoreCase = true) ||
                         siteName.equals("HitomiLA", ignoreCase = true) ||
-                        siteName.equals("NovelCrow", ignoreCase = true)) return false
+                        siteName.equals("NovelCrow", ignoreCase = true) ||
+                        siteName.equals("MultiPorn", ignoreCase = true)) return false
                     if (!isUserGesture || resultMsg == null || popupWebView != null) return false
                     val popup = WebView(this@ComicWebsiteActivity)
                     popupWebView = popup
@@ -201,7 +203,11 @@ class ComicWebsiteActivity : Activity() {
                          path.startsWith("/ads/spicybox-300x250"))
                     val hitomiBannerScript = siteName.equals("HitomiLA", ignoreCase = true) &&
                         host == "js.wpadmngr.com" && path == "/static/admanager.js"
-                    return if (nhentaiAdRequest || hitomiBannerScript || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
+                    // MultiPorn's supplied fake robot/notification ad is served from CloudPiko.
+                    val multiPornRobotAd = siteName.equals("MultiPorn", ignoreCase = true) &&
+                        (host == "cloudpiko.com" || host.endsWith(".cloudpiko.com")) &&
+                        path.startsWith("/sb/notifications/utility/default/robot/")
+                    return if (nhentaiAdRequest || hitomiBannerScript || multiPornRobotAd || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
                         WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(),
                             ByteArrayInputStream(ByteArray(0)))
                     } else super.shouldInterceptRequest(view, request)
@@ -232,6 +238,10 @@ class ComicWebsiteActivity : Activity() {
                             }
                         } else if (siteName.equals("NovelCrow", ignoreCase = true)) {
                             page.evaluateJavascript(novelCrowAdCleanupScript) {
+                                page.visibility = android.view.View.VISIBLE
+                            }
+                        } else if (siteName.equals("MultiPorn", ignoreCase = true)) {
+                            page.evaluateJavascript(multiPornAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
                             }
                         } else {
@@ -272,6 +282,77 @@ class ComicWebsiteActivity : Activity() {
         return (scheme == "https" || scheme == "http") &&
             (host == allowedHost || host.endsWith(".$allowedHost"))
     }
+
+    /** Remove MultiPorn's supplied fake robot notification overlay and its iframe wrapper. */
+    private val multiPornAdCleanupScript = """
+        (function() {
+          if (window.__xanimeMultiPornAdsInstalled) return;
+          window.__xanimeMultiPornAdsInstalled = true;
+
+          var signature = 'pl-d437c404dd76f50eb9045a23aa761c74';
+          function removeMultiPornAds() {
+            if (!document.documentElement) return;
+            var nodes = document.querySelectorAll(
+              '[class*="' + signature + '__wrap"],' +
+              '[class*="' + signature + '__content"],' +
+              '[class*="' + signature + '__closelink"]'
+            );
+            nodes.forEach(function(node) {
+              if (!node.isConnected) return;
+              var target = node.closest('[class*="' + signature + '__wrap"]') || node;
+              // If this ad is inside an iframe, remove the iframe and its reserved slot.
+              var frame = target.closest('iframe');
+              if (frame) target = frame;
+              var parent = target.parentElement;
+              if (parent && parent.tagName === 'DIV' &&
+                  (parent.children.length === 1 || parent.textContent.trim() === '')) {
+                target = parent;
+              }
+              target.remove();
+            });
+
+            // Some copies are delivered as a standalone cross-origin robot-check iframe.
+            // Its URL is filtered natively; this catches same-origin copies too.
+            document.querySelectorAll('iframe').forEach(function(frame) {
+              if (!frame.isConnected) return;
+              var src = (frame.getAttribute('src') || '').toLowerCase();
+              var isCloudPikoRobot = src.indexOf('cloudpiko.com/sb/notifications/utility/default/robot/') >= 0;
+              var hasRobotOverlay = false;
+              if (!isCloudPikoRobot) {
+                try {
+                  var body = frame.contentDocument && frame.contentDocument.body;
+                  hasRobotOverlay = !!body && (
+                    body.textContent.indexOf('CONFIRM YOU ARE NOT A ROBOT') >= 0 ||
+                    !!body.querySelector('[class*="' + signature + '__wrap"]')
+                  );
+                } catch (e) {}
+              }
+              if (isCloudPikoRobot || hasRobotOverlay) {
+                var wrapper = frame.parentElement;
+                if (wrapper && wrapper.tagName === 'DIV' &&
+                    (wrapper.children.length === 1 || wrapper.textContent.trim() === '')) {
+                  wrapper.remove();
+                } else frame.remove();
+              }
+            });
+
+            // Remove only now-empty wrappers left by the identified overlay.
+            document.querySelectorAll('div').forEach(function(node) {
+              if (!node.isConnected || node.children.length !== 0) return;
+              var cls = typeof node.className === 'string' ? node.className : '';
+              if (cls.indexOf(signature) >= 0) node.remove();
+            });
+          }
+
+          removeMultiPornAds();
+          var observer = new MutationObserver(removeMultiPornAds);
+          observer.observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['class', 'src', 'style']
+          });
+          setInterval(removeMultiPornAds, 1200);
+        })();
+    """.trimIndent()
 
     /** Remove NovelCrow's confirmed ad slots and their full reserved-space wrappers. */
     private val novelCrowAdCleanupScript = """
