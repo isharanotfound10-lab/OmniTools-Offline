@@ -216,7 +216,8 @@ class ComicWebsiteActivity : Activity() {
                         host == "t.nettrck.store" ||
                         ((host == "cloudpiko.com" || host.endsWith(".cloudpiko.com")) && (
                             path.startsWith("/sb/notifications/gambling/default/custom-banner/") ||
-                            path.startsWith("/sb/notifications/dating/")
+                            path.startsWith("/sb/notifications/dating/") ||
+                            path.startsWith("/sb/ssp/utility/social-media/whatsapp/")
                         ))
                     )
                     return if (nhentaiAdRequest || hitomiBannerScript || multiPornRobotAd || kingComixAdRequest || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
@@ -357,7 +358,8 @@ class ComicWebsiteActivity : Activity() {
               if (!frame.isConnected) return;
               var src = (frame.getAttribute('src') || '').toLowerCase();
               if (src.indexOf('cloudpiko.com/sb/notifications/gambling/default/custom-banner/') >= 0 ||
-                  src.indexOf('cloudpiko.com/sb/notifications/dating/') >= 0) {
+                  src.indexOf('cloudpiko.com/sb/notifications/dating/') >= 0 ||
+                  src.indexOf('cloudpiko.com/sb/ssp/utility/social-media/whatsapp/') >= 0) {
                 var parent = frame.parentElement;
                 if (parent && parent.tagName === 'DIV' &&
                     (parent.children.length === 1 || !parent.textContent.trim())) parent.remove();
