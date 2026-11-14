@@ -393,6 +393,11 @@ class MainActivity : Activity() {
                 selectedComicSource = "MultiPorn"
                 showHome()
             }
+            addWebsiteTab(comicTabs, "KingComix", emptyList(),
+                selectedComicSource == "KingComix", 5) {
+                selectedComicSource = "KingComix"
+                showHome()
+            }
             addWebsiteTab(comicTabs, "nHentai", listOf("NHENTAI.NET", "NHENTAI.TO"),
                 selectedComicSource == "nHentai") {
                 selectedComicSource = "nHentai"
@@ -438,6 +443,16 @@ class MainActivity : Activity() {
                         startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
                             putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "MultiPorn")
                             putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://multporn.com/")
+                        })
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+                }
+                "KingComix" -> {
+                    pageContent.addView(infoCard("Click Read to Browse KingComix."),
+                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+                    pageContent.addView(actionButton("📖  READ", true) {
+                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "KingComix")
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://kingcomix.com/")
                         })
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
                 }
