@@ -105,7 +105,8 @@ class ComicWebsiteActivity : Activity() {
             siteName.equals("HitomiLA", ignoreCase = true) ||
             siteName.equals("nHentai", ignoreCase = true) ||
             siteName.equals("NovelCrow", ignoreCase = true) ||
-            siteName.equals("MultiPorn", ignoreCase = true)) {
+            siteName.equals("MultiPorn", ignoreCase = true) ||
+            siteName.equals("KingComix", ignoreCase = true)) {
             webView.clearCache(true)
         }
         browser = webView
@@ -153,7 +154,8 @@ class ComicWebsiteActivity : Activity() {
                     if (siteName.equals("nHentai", ignoreCase = true) ||
                         siteName.equals("HitomiLA", ignoreCase = true) ||
                         siteName.equals("NovelCrow", ignoreCase = true) ||
-                        siteName.equals("MultiPorn", ignoreCase = true)) return false
+                        siteName.equals("MultiPorn", ignoreCase = true) ||
+                        siteName.equals("KingComix", ignoreCase = true)) return false
                     if (!isUserGesture || resultMsg == null || popupWebView != null) return false
                     val popup = WebView(this@ComicWebsiteActivity)
                     popupWebView = popup
@@ -207,7 +209,15 @@ class ComicWebsiteActivity : Activity() {
                     val multiPornRobotAd = siteName.equals("MultiPorn", ignoreCase = true) &&
                         (host == "cloudpiko.com" || host.endsWith(".cloudpiko.com")) &&
                         path.startsWith("/sb/notifications/utility/default/robot/")
-                    return if (nhentaiAdRequest || hitomiBannerScript || multiPornRobotAd || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
+                    // KingComix's supplied page contains JuicyAds iframes, a tracking
+                    // iframe and a CloudPiko gambling notification overlay.
+                    val kingComixAdRequest = siteName.equals("KingComix", ignoreCase = true) && (
+                        host == "poweredby.jads.co" ||
+                        host == "t.nettrck.store" ||
+                        ((host == "cloudpiko.com" || host.endsWith(".cloudpiko.com")) &&
+                            path.startsWith("/sb/notifications/gambling/default/custom-banner/"))
+                    )
+                    return if (nhentaiAdRequest || hitomiBannerScript || multiPornRobotAd || kingComixAdRequest || isAllPornComicAdRequest(uri) || isKnownAdHost(host)) {
                         WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(),
                             ByteArrayInputStream(ByteArray(0)))
                     } else super.shouldInterceptRequest(view, request)
@@ -242,6 +252,10 @@ class ComicWebsiteActivity : Activity() {
                             }
                         } else if (siteName.equals("MultiPorn", ignoreCase = true)) {
                             page.evaluateJavascript(multiPornAdCleanupScript) {
+                                page.visibility = android.view.View.VISIBLE
+                            }
+                        } else if (siteName.equals("KingComix", ignoreCase = true)) {
+                            page.evaluateJavascript(kingComixAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
                             }
                         } else {
@@ -282,6 +296,81 @@ class ComicWebsiteActivity : Activity() {
         return (scheme == "https" || scheme == "http") &&
             (host == allowedHost || host.endsWith(".$allowedHost"))
     }
+
+    /** Remove only the KingComix ad slots and notification overlay identified in the supplied page. */
+    private val kingComixAdCleanupScript = """
+        (function() {
+          if (window.__xanimeKingComixAdsInstalled) return;
+          window.__xanimeKingComixAdsInstalled = true;
+
+          var cloudPikoSignature = 'pl-1a07bf653e9b175030ac66b6a1052465';
+          function removeKingComixAds() {
+            if (!document.documentElement) return;
+
+            // These publisher-owned slots contain the supplied JuicyAds zones
+            // 1129302, 1129305 and 1129591. Remove the entire reserved-height slot.
+            document.querySelectorAll(
+              'aside.kc-ad-slot, .kc-ad-slot-post_bottom, .kc-ad-slot-sidebar'
+            ).forEach(function(slot) {
+              if (slot.isConnected) slot.remove();
+            });
+
+            // Catch the same JuicyAds creative if it is injected outside the
+            // known slot markup, without touching ordinary comic images/iframes.
+            document.querySelectorAll('iframe.kc-ad-frame, iframe[srcdoc]').forEach(function(frame) {
+              if (!frame.isConnected) return;
+              var srcdoc = (frame.getAttribute('srcdoc') || '').toLowerCase();
+              if (frame.classList.contains('kc-ad-frame') ||
+                  srcdoc.indexOf('adsbyjuicy') >= 0 ||
+                  srcdoc.indexOf('poweredby.jads.co/js/jads.js') >= 0) {
+                var banner = frame.closest('.kc-ad-banner');
+                var slot = frame.closest('.kc-ad-slot');
+                if (slot) slot.remove();
+                else if (banner) banner.remove();
+                else frame.remove();
+              }
+            });
+
+            // Remove the exact CloudPiko gambling notification markup from
+            // the supplied file, including its full-screen overlay wrapper.
+            document.querySelectorAll(
+              '[class*="' + cloudPikoSignature + '__wrap"],' +
+              '[class*="' + cloudPikoSignature + '__content"],' +
+              '[class*="' + cloudPikoSignature + '__closelink"]'
+            ).forEach(function(node) {
+              if (!node.isConnected) return;
+              var wrap = node.closest('[class*="' + cloudPikoSignature + '__wrap"]') || node;
+              var frame = wrap.closest('iframe');
+              if (frame) wrap = frame;
+              var parent = wrap.parentElement;
+              if (parent && parent.tagName === 'DIV' &&
+                  (parent.children.length === 1 || !parent.textContent.trim())) {
+                wrap = parent;
+              }
+              wrap.remove();
+            });
+
+            // A CloudPiko copy may be embedded as a separate frame.
+            document.querySelectorAll('iframe').forEach(function(frame) {
+              if (!frame.isConnected) return;
+              var src = (frame.getAttribute('src') || '').toLowerCase();
+              if (src.indexOf('cdn.cloudpiko.com/sb/notifications/gambling/default/custom-banner/') >= 0) {
+                var parent = frame.parentElement;
+                if (parent && parent.tagName === 'DIV' &&
+                    (parent.children.length === 1 || !parent.textContent.trim())) parent.remove();
+                else frame.remove();
+              }
+            });
+          }
+
+          removeKingComixAds();
+          new MutationObserver(removeKingComixAds).observe(document.documentElement, {
+            childList: true, subtree: true, attributes: true,
+            attributeFilter: ['class', 'src', 'srcdoc', 'style']
+          });
+          setInterval(removeKingComixAds, 1200);
+        })();
+    """.trimIndent()
 
     /** Remove MultiPorn's supplied fake robot notification overlay and its iframe wrapper. */
     private val multiPornAdCleanupScript = """
