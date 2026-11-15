@@ -756,7 +756,7 @@ class MainActivity : Activity() {
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.loadsImagesAutomatically = true
+            settings.loadsImagesAutomatically = false
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setSupportMultipleWindows(false)
             settings.cacheMode = WebSettings.LOAD_DEFAULT
@@ -938,7 +938,7 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.WHITE)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.loadsImagesAutomatically = true
+            settings.loadsImagesAutomatically = false
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setSupportMultipleWindows(false)
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -1030,7 +1030,7 @@ class MainActivity : Activity() {
         updateJavSearchUi()
 
         val query = URLEncoder.encode(javCodeQuery.trim() + " site:" + site.host, "UTF-8")
-        val searchUrl = "https://www.mojeek.com/search?q=" + query + "&num=10&hl=en"
+        val searchUrl = "https://www.mojeek.com/search?q=" + query + "&s=0&safe=0"
         val token = ++javSearchPageToken
         javSearchHandledToken = -1
         javSearchTimeout?.let { main.removeCallbacks(it) }
