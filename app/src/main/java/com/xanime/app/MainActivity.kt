@@ -1052,24 +1052,40 @@ class MainActivity : Activity() {
 
         val script = """
             (function() {
-              const cards = Array.from(document.querySelectorAll(
-                'ul.results-standard > li, .results-standard > li'
-              ));
               const rows = [];
               const seen = new Set();
-              for (const card of cards) {
-                const heading = card.querySelector('h2 a, h2');
-                const link = card.querySelector('h2 a[href], a.ob[href]');
-                const title = heading ? (heading.innerText || heading.textContent || '').trim() : '';
-                const href = link ? (link.href || link.getAttribute('href') || '') : '';
+              const selectors = [
+                'ul.results-standard li h2 a[href]',
+                '.results-standard li h2 a[href]',
+                '.results li h2 a[href]',
+                'li.result h2 a[href]',
+                'article h2 a[href]',
+                'h2 a[href]',
+                'a.ob[href]'
+              ];
+              let links = [];
+              for (const selector of selectors) {
+                const found = Array.from(document.querySelectorAll(selector));
+                if (found.length) { links = found; break; }
+              }
+              for (const link of links) {
+                const title = (link.innerText || link.textContent || '')
+                  .replace(/\\s+/g, ' ').trim();
+                const href = link.href || link.getAttribute('href') || '';
                 if (!title || !href || seen.has(href)) continue;
-                seen.add(href);
-                rows.push({ title: title, url: href });
-                if (rows.length >= 10) break;
+                let parsed;
+                try { parsed = new URL(href, location.href); } catch (_) { continue; }
+                if (!/^https?:$/.test(parsed.protocol)) continue;
+                if (parsed.hostname === location.hostname) continue;
+                seen.add(parsed.href);
+                rows.push({ title: title, url: parsed.href });
+                if (rows.length >= 20) break;
               }
               return {
                 pageTitle: document.title || '',
-                bodyText: (document.body ? document.body.innerText : '').slice(0, 2500),
+                pageUrl: location.href,
+                bodyText: (document.body ? document.body.innerText : '').slice(0, 3500),
+                resultHeadingCount: document.querySelectorAll('h2 a[href]').length,
                 results: rows
               };
             })();
