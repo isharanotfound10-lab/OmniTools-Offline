@@ -108,6 +108,21 @@ object JavSiteCatalog {
 }
 
 object JavSearchRules {
-    fun titleMatches(title: String, code: String): Boolean =
-        code.isNotBlank() && title.contains(code.trim(), ignoreCase = true)
+    private fun normalizeCodeText(value: String): String {
+        return value.trim().uppercase(java.util.Locale.ROOT)
+            .replace('_', '-')
+            // Ignore zero-padding in numeric code segments after a separator:
+            // MOON-059 and moon-59 are treated as the same code.
+            .replace(Regex("([A-Z][A-Z0-9]*-)0+(\\d+)")) { match ->
+                match.groupValues[1] + match.groupValues[2]
+            }
+    }
+
+    fun titleMatches(title: String, code: String): Boolean {
+        if (code.isBlank()) return false
+        val normalizedCode = normalizeCodeText(code)
+        val normalizedTitle = normalizeCodeText(title)
+        val exactCode = Regex("(?<![A-Z0-9])" + Regex.escape(normalizedCode) + "(?![A-Z0-9])")
+        return exactCode.containsMatchIn(normalizedTitle)
+    }
 }
