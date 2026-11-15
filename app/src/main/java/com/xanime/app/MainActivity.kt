@@ -661,7 +661,7 @@ class MainActivity : Activity() {
         pageContent.addView(label("JAV", 22, white, true).apply {
             setPadding(0, dp(20), 0, dp(4))
         })
-        pageContent.addView(label("62 WEBSITES • SEARCH BY CODE", 10, muted, true).apply {
+        pageContent.addView(label("48 WEBSITES • SEARCH BY CODE", 10, muted, true).apply {
             letterSpacing = .1f
             setPadding(0, 0, 0, dp(12))
         })
@@ -878,7 +878,7 @@ class MainActivity : Activity() {
             }
         } else {
             val message = when {
-                javSearching -> "Searching all 62 websites with Mojeek. Matching titles appear here as each search finishes."
+                javSearching -> "Searching all 48 websites with Mojeek. Matching titles appear here as each search finishes."
                 javSitesChecked >= javSitesTotal && javSitesTotal > 0 ->
                     "Search finished. No matching results were found in the first ten Mojeek results of the checked websites."
                 javCodeQuery.isBlank() -> "Matching results will appear here after you search for a code."
@@ -1059,7 +1059,7 @@ class MainActivity : Activity() {
         javCurrentSite = JavSiteCatalog.sites.firstOrNull()?.name.orEmpty()
         javSitesTotal = JavSiteCatalog.sites.size
         javVisibleResultUrls.clear()
-        setJavPlaceholder("Starting Mojeek search. Checking all 62 websites one at a time.")
+        setJavPlaceholder("Starting Mojeek search. Checking all 48 websites one at a time.")
         updateJavSearchUi()
 
         val requestId = ++javSearchGeneration
@@ -1245,7 +1245,7 @@ class MainActivity : Activity() {
                     "No matching results were found in the Mojeek results we could read. " +
                         javSitesFailed + " websites could not be checked because Mojeek did not return a readable result page."
                 else ->
-                    "No matching results were found in the first ten Mojeek results from the 62 websites."
+                    "No matching results were found in the first ten Mojeek results from the 48 websites."
             }
             setJavPlaceholder(summary)
         } else if (javSitesFailed > 0) {
