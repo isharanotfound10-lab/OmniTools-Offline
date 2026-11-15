@@ -53,10 +53,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.Executors
-import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
-import java.util.concurrent.Callable
 import java.util.concurrent.Future
 import org.jsoup.Jsoup
 
@@ -79,8 +77,8 @@ class MainActivity : Activity() {
     private val worker = Executors.newFixedThreadPool(2)
     private val detailWorker = Executors.newFixedThreadPool(4)
     private val imageWorker = Executors.newFixedThreadPool(3)
-    // Five independent Google requests may run at once; completed sites stream to the UI.
-    private val javSearchWorker = Executors.newFixedThreadPool(5)
+    // One site at a time so the first site's results can render before the next starts.
+    private val javSearchWorker = Executors.newSingleThreadExecutor()
     private val pendingImages = ConcurrentHashMap<String, MutableList<WeakReference<ImageView>>>()
     private val detailCache = ConcurrentHashMap<String, Pair<EpisodeDetails?, List<String>>>()
     private val detailSlots = Semaphore(4)
@@ -132,6 +130,13 @@ class MainActivity : Activity() {
     private var javSitesChecked = 0
     private var javSitesTotal = JavSiteCatalog.sites.size
     @Volatile private var javSearchGeneration = 0
+    private var javStatusView: TextView? = null
+    private var javProgressView: ProgressBar? = null
+    private var javResultListView: LinearLayout? = null
+    private var javSearchButton: Button? = null
+    private var javCurrentSite = ""
+    private var javSitesFailed = 0
+    private val javVisibleResultUrls = mutableSetOf<String>()
     private var javBrowserUrl: String? = null
     private var javBrowserTitle = "JAV"
     private var javWebView: WebView? = null
@@ -583,6 +588,12 @@ class MainActivity : Activity() {
 
 
     private fun showJavHome() {
+        javStatusView = null
+        javProgressView = null
+        javResultListView = null
+        javSearchButton = null
+        javVisibleResultUrls.clear()
+
         pageContent.addView(label("JAV", 22, white, true).apply {
             setPadding(0, dp(20), 0, dp(4))
         })
@@ -673,6 +684,7 @@ class MainActivity : Activity() {
             setPadding(dp(13), 0, dp(10), 0)
             background = ripple(glassDrawable(14))
             setText(javCodeQuery)
+            isEnabled = !javSearching
         }
         val searchRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -681,86 +693,141 @@ class MainActivity : Activity() {
         searchRow.addView(codeInput, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
             marginEnd = dp(7)
         })
-        searchRow.addView(actionButton("SEARCH ↗") {
+        val searchButton = actionButton("SEARCH ↗") {
             javCodeQuery = codeInput.text.toString().trim()
             runJavBulkSearch()
-        }, LinearLayout.LayoutParams(dp(94), dp(46)))
+        }
+        javSearchButton = searchButton
+        searchRow.addView(searchButton, LinearLayout.LayoutParams(dp(94), dp(46)))
         pageContent.addView(searchRow)
         codeInput.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH && !javSearching) {
                 javCodeQuery = codeInput.text.toString().trim()
                 runJavBulkSearch()
                 true
             } else false
         }
 
-        val resultStatus = label(
-            when {
-                javSearching -> "Searching: $javSitesChecked / $javSitesTotal websites checked"
-                javCodeQuery.isBlank() -> "Enter a code to search across the directory."
-                javResults.isEmpty() -> "No matching results yet."
-                else -> "${javResults.size} matching results"
-            }, 12, muted, true
-        ).apply { setPadding(0, dp(13), 0, dp(7)) }
-        pageContent.addView(resultStatus)
-        val resultProgress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            visibility = if (javSearching) View.VISIBLE else View.GONE
-            isIndeterminate = true
+        val resultStatus = label("", 12, muted, true).apply {
+            setPadding(0, dp(13), 0, dp(7))
         }
+        javStatusView = resultStatus
+        pageContent.addView(resultStatus)
+
+        val resultProgress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = false
+            max = javSitesTotal.coerceAtLeast(1)
+            progress = javSitesChecked.coerceIn(0, max)
+            visibility = if (javSearching || javSitesChecked > 0) View.VISIBLE else View.GONE
+        }
+        javProgressView = resultProgress
         pageContent.addView(resultProgress, LinearLayout.LayoutParams(-1, dp(4)))
+
         val resultList = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(8), 0, dp(12))
         }
+        javResultListView = resultList
         pageContent.addView(resultList, LinearLayout.LayoutParams(-1, -2))
-        fun renderJavResults() {
-            resultList.removeAllViews()
-            if (javSearching) {
-                resultList.addView(infoCard("Searching up to 5 websites at once. Matching results appear immediately as each website responds."))
-            } else if (javResults.isEmpty()) {
-                if (javCodeQuery.isNotBlank()) resultList.addView(infoCard("Google returned no indexed titles containing “${javCodeQuery}”. Some sites may block automated requests or may not be indexed by Google."))
-                return
+
+        if (javResults.isNotEmpty()) {
+            appendJavResultCards(javResults)
+            if (!javSearching && javSitesFailed > 0) {
+                resultList.addView(infoCard(javSitesFailed.toString() +
+                    " websites could not be searched. Google may have blocked or failed those requests."))
             }
-            javResults.forEachIndexed { index, item ->
-                val card = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(9), dp(9), dp(9), dp(9))
-                    background = rounded(cardSurface(), cardRadius())
-                }
-                val thumbnail = ImageView(this).apply {
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    background = rounded(surface2, 9)
-                }
-                card.addView(thumbnail, LinearLayout.LayoutParams(dp(104), dp(78)).apply {
-                    marginEnd = dp(10)
-                })
-                val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                details.addView(label(item.siteName.uppercase(), 9, accent, true))
-                details.addView(label(item.title, 12, white, true).apply {
-                    maxLines = 4
-                    setPadding(0, dp(4), 0, dp(7))
-                })
-                details.addView(actionButton("OPEN RESULT ↗", false) {
-                    val site = JavSiteCatalog.sites.firstOrNull { it.name == item.siteName }
-                    if (site != null && JavSiteCatalog.isAllowed(item.url)) openJavBrowser(item.siteName, item.url)
-                    else Toast.makeText(this, "This result is outside the approved website list.", Toast.LENGTH_SHORT).show()
-                }, LinearLayout.LayoutParams(-1, dp(36)))
-                card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-                resultList.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
-                    bottomMargin = dp(9)
-                })
-                if (item.thumbnail.isNotBlank()) loadImage(item.thumbnail, thumbnail)
-                animateEntrance(card, index)
+        } else {
+            val message = when {
+                javSearching -> "Searching websites in order. Matching results appear here as each website finishes."
+                javSitesChecked >= javSitesTotal && javSitesTotal > 0 ->
+                    "Search finished. No matching results were found in the first five Google results of the checked websites."
+                javCodeQuery.isBlank() -> "Matching results will appear here after you search for a code."
+                else -> "No matching results were found."
             }
+            setJavPlaceholder(message)
         }
-        renderJavResults()
-        if (javCodeQuery.isNotBlank() && javResults.isEmpty() && !javSearching) {
-            // Search is started only by the explicit search action.
-        }
+
+        updateJavSearchUi()
         setContentView(root)
         animateScreen(root)
         scroll.post { loadVisibleImages(pageContent) }
+    }
+
+    private fun setJavPlaceholder(message: String) {
+        val list = javResultListView ?: return
+        list.removeAllViews()
+        list.addView(infoCard(message).apply { tag = "jav-placeholder" })
+    }
+
+    private fun updateJavSearchUi() {
+        javStatusView?.text = when {
+            javSearching -> {
+                val current = javCurrentSite.ifBlank { "next website" }
+                "Searching " + current + " • " + javSitesChecked + " / " + javSitesTotal +
+                    " checked • " + javResults.size + " results" +
+                    if (javSitesFailed > 0) " • " + javSitesFailed + " errors" else ""
+            }
+            javSitesChecked > 0 ->
+                javSitesChecked.toString() + " / " + javSitesTotal + " websites checked • " +
+                    javResults.size + " results" +
+                    if (javSitesFailed > 0) " • " + javSitesFailed + " errors" else ""
+            javCodeQuery.isBlank() -> "Enter a code to search across the directory."
+            else -> javResults.size.toString() + " matching results"
+        }
+        javProgressView?.apply {
+            isIndeterminate = false
+            max = javSitesTotal.coerceAtLeast(1)
+            progress = javSitesChecked.coerceIn(0, max)
+            visibility = if (javSearching || javSitesChecked > 0) View.VISIBLE else View.GONE
+        }
+        javSearchButton?.isEnabled = !javSearching
+        javSearchButton?.alpha = if (javSearching) 0.55f else 1f
+    }
+
+    private fun appendJavResultCards(items: List<JavSearchResult>) {
+        val list = javResultListView ?: return
+        if (items.isEmpty()) return
+        if (list.childCount > 0 && list.getChildAt(0).tag == "jav-placeholder") {
+            list.removeAllViews()
+        }
+
+        items.forEach { item ->
+            if (!javVisibleResultUrls.add(item.url)) return@forEach
+
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(9), dp(9), dp(9))
+                background = rounded(cardSurface(), cardRadius())
+            }
+            val thumbnail = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = rounded(surface2, 9)
+                contentDescription = "Thumbnail for " + item.title
+            }
+            card.addView(thumbnail, LinearLayout.LayoutParams(dp(104), dp(78)).apply {
+                marginEnd = dp(10)
+            })
+            val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            details.addView(label(item.siteName.uppercase(), 9, accent, true))
+            details.addView(label(item.title, 12, white, true).apply {
+                maxLines = 5
+                setPadding(0, dp(4), 0, dp(7))
+            })
+            details.addView(actionButton("OPEN RESULT ↗", false) {
+                if (JavSiteCatalog.isAllowed(item.url)) {
+                    openJavBrowser(item.siteName, item.url)
+                } else {
+                    Toast.makeText(this, "This result is outside the approved website list.", Toast.LENGTH_SHORT).show()
+                }
+            }, LinearLayout.LayoutParams(-1, dp(36)))
+            card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+            list.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(9)
+            })
+            if (item.thumbnail.isNotBlank()) loadImage(item.thumbnail, thumbnail)
+            animateEntrance(card, list.childCount - 1)
+        }
     }
 
     private fun openJavBrowser(title: String, url: String) {
@@ -841,6 +908,11 @@ class MainActivity : Activity() {
         browser.loadUrl(url)
     }
 
+    private data class JavSiteSearchOutcome(
+        val results: List<JavSearchResult>,
+        val error: String? = null
+    )
+
     private fun runJavBulkSearch() {
         val code = javCodeQuery.trim()
         if (code.isBlank()) {
@@ -848,109 +920,284 @@ class MainActivity : Activity() {
             return
         }
         if (javSearching) return
+
         javSearching = true
         javResults = emptyList()
         javSitesChecked = 0
+        javSitesFailed = 0
+        javCurrentSite = JavSiteCatalog.sites.firstOrNull()?.name.orEmpty()
         javSitesTotal = JavSiteCatalog.sites.size
+        javVisibleResultUrls.clear()
+        setJavPlaceholder("Starting the search. Each website is checked one at a time.")
+        updateJavSearchUi()
+
         val requestId = ++javSearchGeneration
-        showHome()
-
-        worker.execute {
-            val variants = JavSearchRules.searchVariants(code)
-            val completion = ExecutorCompletionService<Pair<JavSite, List<JavSearchResult>>>(javSearchWorker)
-            JavSiteCatalog.sites.forEach { site ->
-                completion.submit(Callable { site to searchSingleJavSite(site, variants, code) })
-            }
-
-            val collected = linkedMapOf<String, JavSearchResult>()
+        javSearchWorker.execute {
             var checked = 0
-            while (checked < javSitesTotal && requestId == javSearchGeneration) {
-                val completed = try {
-                    completion.take().get()
-                } catch (_: Exception) {
-                    checked++
-                    val checkedSnapshot = checked
-                    main.post {
-                        if (isFinishing || requestId != javSearchGeneration) return@post
-                        javSitesChecked = checkedSnapshot
-                        if (showingJav) showHome()
-                    }
-                    continue
+            var failed = 0
+            val publishedUrls = mutableSetOf<String>()
+            val sites = JavSiteCatalog.sites
+
+            for ((index, site) in sites.withIndex()) {
+                if (requestId != javSearchGeneration) break
+
+                main.post {
+                    if (isFinishing || requestId != javSearchGeneration) return@post
+                    javCurrentSite = site.name
+                    updateJavSearchUi()
                 }
-                checked++
+
+                val outcome = searchSingleJavSite(site, code)
+                if (requestId != javSearchGeneration) break
+
+                checked = index + 1
+                if (outcome.error != null) failed++
+                val newResults = outcome.results.filter { publishedUrls.add(it.url) }
                 val checkedSnapshot = checked
-                completed.second.forEach { result -> collected.putIfAbsent(result.url, result) }
-                val snapshot = collected.values.toList()
+                val failedSnapshot = failed
+                val nextSite = sites.getOrNull(index + 1)?.name.orEmpty()
+
                 main.post {
                     if (isFinishing || requestId != javSearchGeneration) return@post
                     javSitesChecked = checkedSnapshot
-                    // Publish each site's results immediately; do not wait for its
-                    // other four concurrent requests or for all 62 sites.
-                    javResults = snapshot
-                    if (showingJav) showHome()
+                    javSitesFailed = failedSnapshot
+                    javCurrentSite = nextSite
+                    if (newResults.isNotEmpty()) {
+                        javResults = javResults + newResults
+                        appendJavResultCards(newResults)
+                    }
+                    updateJavSearchUi()
                 }
             }
 
-            val finalResults = collected.values.toList()
+            if (requestId != javSearchGeneration) return@execute
+            val finishedCount = checked
+            val failedCount = failed
             main.post {
                 if (isFinishing || requestId != javSearchGeneration) return@post
                 javSearching = false
-                javSitesChecked = checked
-                javResults = finalResults
-                if (showingJav) showHome()
+                javSitesChecked = finishedCount
+                javSitesFailed = failedCount
+                javCurrentSite = ""
+                if (javResults.isEmpty()) {
+                    val summary = when {
+                        failedCount >= sites.size ->
+                            "Google could not be read for any website. Check the connection or try again later; this is not a confirmed zero-result search."
+                        failedCount > 0 ->
+                            "No matching results were found on the websites Google allowed us to search. " +
+                                failedCount + " websites could not be checked because of network, blocking, or page-format errors."
+                        else ->
+                            "No matching results were found in the first five Google results from the 62 websites."
+                    }
+                    setJavPlaceholder(summary)
+                } else if (failedCount > 0) {
+                    javResultListView?.addView(infoCard(
+                        failedCount.toString() +
+                            " websites could not be checked because Google or the network did not return readable results."
+                    ))
+                }
+                updateJavSearchUi()
                 Toast.makeText(
                     this,
-                    if (finalResults.isEmpty()) "No matching Google-indexed titles were found. Some sites may block automated searches or may not be indexed."
-                    else "${finalResults.size} matching results • checked $checked / $javSitesTotal websites.",
+                    if (javResults.isEmpty()) "Search finished • " + failedCount + " site errors"
+                    else javResults.size.toString() + " results • checked " + finishedCount + " / " + javSitesTotal,
                     Toast.LENGTH_LONG
                 ).show()
             }
         }
     }
 
-    private fun searchSingleJavSite(
-        site: JavSite,
-        variants: List<String>,
-        code: String
-    ): List<JavSearchResult> {
+    private fun searchSingleJavSite(site: JavSite, code: String): JavSiteSearchOutcome {
         return try {
-            val codeQuery = variants.joinToString(" OR ") { "\"$it\"" }
-            val googleQuery = "site:${site.host} ($codeQuery)"
+            val googleQuery = code.trim() + " site:" + site.host
             val query = URLEncoder.encode(googleQuery, "UTF-8")
-            val searchUrl = "https://www.google.com/search?gbv=1&q=$query&num=20&filter=0"
+            val searchUrl = "https://www.google.com/search?gbv=1&q=" + query + "&num=5&filter=0"
             val connection = (URL(searchUrl).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 9000
                 readTimeout = 11000
                 instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36")
+                setRequestProperty(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+                )
                 setRequestProperty("Accept", "text/html,application/xhtml+xml")
                 setRequestProperty("Accept-Language", "en-US,en;q=0.9")
             }
-            val html = try {
-                if (connection.responseCode !in 200..299) "" else
-                    connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(1_500_000) }
-            } finally { connection.disconnect() }
 
-            if (html.isBlank()) return emptyList()
+            val responseCode = try {
+                connection.responseCode
+            } catch (error: Exception) {
+                connection.disconnect()
+                throw error
+            }
+            if (responseCode !in 200..299) {
+                connection.disconnect()
+                return JavSiteSearchOutcome(emptyList(), "Google HTTP " + responseCode)
+            }
+            val html = try {
+                connection.inputStream.bufferedReader(Charsets.UTF_8).use {
+                    it.readText().take(1_500_000)
+                }
+            } finally {
+                connection.disconnect()
+            }
+            if (html.isBlank()) {
+                return JavSiteSearchOutcome(emptyList(), "Google returned an empty page")
+            }
+
             val doc = Jsoup.parse(html, searchUrl)
-            val results = linkedMapOf<String, JavSearchResult>()
-            for (anchor in doc.select("a:has(h3)")) {
-                val title = anchor.selectFirst("h3")?.text()?.trim().orEmpty()
+            val bodyText = doc.body()?.text().orEmpty()
+            val lowerBody = bodyText.lowercase()
+            if (lowerBody.contains("unusual traffic") ||
+                lowerBody.contains("our systems have detected") ||
+                lowerBody.contains("not a robot") ||
+                lowerBody.contains("before you continue to google") ||
+                lowerBody.contains("captcha")) {
+                return JavSiteSearchOutcome(emptyList(), "Google blocked the request")
+            }
+
+            val anchors = doc.select("div.MjjYud a:has(h3)")
+                .ifEmpty { doc.select("a:has(h3)") }
+                .take(5)
+            if (anchors.isEmpty()) {
+                val genuineEmpty = lowerBody.contains("did not match any documents") ||
+                    lowerBody.contains("no results found") ||
+                    lowerBody.contains("there are no results")
+                return if (genuineEmpty) {
+                    JavSiteSearchOutcome(emptyList())
+                } else {
+                    JavSiteSearchOutcome(emptyList(), "Google result markup could not be read")
+                }
+            }
+
+            val found = linkedMapOf<String, JavSearchResult>()
+            for (anchor in anchors) {
+                val resultContainer = anchor.parents().firstOrNull {
+                    it.classNames().contains("MjjYud")
+                } ?: anchor.parent() ?: anchor
+
+                val heading = anchor.selectFirst("h3")?.text()?.trim().orEmpty()
+                val matchingParagraph = resultContainer.select(
+                    "div.VwiC3b, div[data-sncf], span.aCOpRe, p"
+                ).firstOrNull { paragraph ->
+                    val text = paragraph.text().trim()
+                    text.length in 12..700 && JavSearchRules.titleMatches(text, code)
+                }
+                val combinedResultText = resultContainer.text().trim()
+                val hasCode = JavSearchRules.titleMatches(heading, code) ||
+                    matchingParagraph != null ||
+                    JavSearchRules.titleMatches(combinedResultText, code)
+                if (!hasCode) continue
+
+                val resultTitle = when {
+                    matchingParagraph != null -> matchingParagraph.text().trim()
+                    JavSearchRules.titleMatches(heading, code) -> heading
+                    else -> combinedResultText.take(700)
+                }.ifBlank { heading }
+
                 val rawHref = anchor.absUrl("href").ifBlank { anchor.attr("href") }
                 val target = resolveJavSearchUrl(rawHref)
-                if (title.isBlank() || !JavSearchRules.titleMatches(title, code) ||
-                    !JavSiteCatalog.hostMatchesSite(target, site) ||
+                if (!JavSiteCatalog.hostMatchesSite(target, site) ||
                     !JavSiteCatalog.isAllowed(target)) continue
 
-                var image = anchor.selectFirst("img")?.let { img ->
-                    img.absUrl("src").ifBlank { img.absUrl("data-src") }
-                }.orEmpty()
-                if (image.startsWith("data:", true)) image = ""
-                results.putIfAbsent(target, JavSearchResult(site.name, title, target, image))
+                val googleImage = firstUsableJavImage(
+                    resultContainer.selectFirst("img") ?: anchor.selectFirst("img"),
+                    searchUrl
+                )
+                // Prefer the image nearest the matching code paragraph in the page HTML.
+                // The Google thumbnail remains as a fallback when the target page blocks access.
+                val thumbnail = extractJavPageThumbnail(target, code, googleImage)
+                found.putIfAbsent(target, JavSearchResult(site.name, resultTitle, target, thumbnail))
             }
-            results.values.toList()
+            JavSiteSearchOutcome(found.values.toList())
         } catch (_: Exception) {
-            emptyList()
+            JavSiteSearchOutcome(emptyList(), "Google request or parsing failed")
+        }
+    }
+
+    private fun firstUsableJavImage(
+        image: org.jsoup.nodes.Element?,
+        baseUrl: String
+    ): String {
+        if (image == null) return ""
+        val attributes = listOf("src", "data-src", "data-lazy-src", "data-original", "data-url")
+        for (attribute in attributes) {
+            val raw = image.attr(attribute).trim()
+            if (raw.isBlank() || raw.startsWith("data:", true)) continue
+            val resolved = try {
+                if (raw.startsWith("http://", true) || raw.startsWith("https://", true)) raw
+                else URL(URL(baseUrl), raw).toString()
+            } catch (_: Exception) {
+                ""
+            }
+            if (resolved.startsWith("http://", true) || resolved.startsWith("https://", true)) {
+                return resolved
+            }
+        }
+        return ""
+    }
+
+    private fun extractJavPageThumbnail(
+        pageUrl: String,
+        code: String,
+        googleFallback: String
+    ): String {
+        return try {
+            val connection = (URL(pageUrl).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 4500
+                readTimeout = 5500
+                instanceFollowRedirects = true
+                setRequestProperty(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+                )
+                setRequestProperty("Accept", "text/html,application/xhtml+xml")
+            }
+            val html = try {
+                if (connection.responseCode !in 200..299) "" else
+                    connection.inputStream.bufferedReader(Charsets.UTF_8).use {
+                        it.readText().take(1_000_000)
+                    }
+            } finally {
+                connection.disconnect()
+            }
+            if (html.isBlank()) return googleFallback
+
+            val doc = Jsoup.parse(html, pageUrl)
+            val matchingTitle = doc.select("h1, h2, h3, p").firstOrNull { element ->
+                val text = element.text().trim()
+                text.length in 4..700 && JavSearchRules.titleMatches(text, code)
+            }
+            var current: org.jsoup.nodes.Element? = matchingTitle
+            repeat(5) {
+                if (current != null) {
+                    val image = current?.selectFirst(
+                        "img[src], img[data-src], img[data-lazy-src], img[data-original]"
+                    )
+                    val nearby = firstUsableJavImage(image, pageUrl)
+                    if (nearby.isNotBlank()) return nearby
+                    current = current?.parent()
+                }
+            }
+
+            val socialImage = doc.selectFirst(
+                "meta[property=og:image], meta[name=twitter:image]"
+            )?.attr("content").orEmpty().trim()
+            if (socialImage.isNotBlank()) {
+                val resolved = try {
+                    if (socialImage.startsWith("http://", true) ||
+                        socialImage.startsWith("https://", true)) socialImage
+                    else URL(URL(pageUrl), socialImage).toString()
+                } catch (_: Exception) {
+                    ""
+                }
+                if (resolved.startsWith("http://", true) || resolved.startsWith("https://", true)) {
+                    return resolved
+                }
+            }
+            googleFallback
+        } catch (_: Exception) {
+            googleFallback
         }
     }
 
@@ -959,7 +1206,9 @@ class MainActivity : Activity() {
             val uri = Uri.parse(raw)
             val redirect = uri.getQueryParameter("q") ?: uri.getQueryParameter("url")
             if (!redirect.isNullOrBlank()) redirect else raw
-        } catch (_: Exception) { raw }
+        } catch (_: Exception) {
+            raw
+        }
     }
 
     private fun showWatchAnimeHentaiHome() {
