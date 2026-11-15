@@ -142,6 +142,7 @@ class MainActivity : Activity() {
     private var javGoogleHandledToken = -1
     private var javGoogleActiveSite: JavSite? = null
     private var javGoogleTimeout: Runnable? = null
+    private var javLastGoogleError = ""
     private var javBrowserUrl: String? = null
     private var javBrowserTitle = "JAV"
     private var javWebView: WebView? = null
@@ -747,7 +748,9 @@ class MainActivity : Activity() {
         javGoogleWebView?.stopLoading()
         javGoogleWebView?.destroy()
         javGoogleWebView = WebView(this).apply {
-            alpha = 0f
+            // Keep a real render surface: fully transparent 1dp WebViews may
+            // be throttled or return an incomplete responsive Google page.
+            alpha = 0.01f
             isClickable = false
             isFocusable = false
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -777,7 +780,7 @@ class MainActivity : Activity() {
                         completeJavGoogleSite(
                             javGooglePageToken,
                             emptyList(),
-                            "Google page failed to load"
+                            "WebView " + error.errorCode + ": " + error.description
                         )
                     }
                 }
@@ -799,15 +802,27 @@ class MainActivity : Activity() {
                 }
             }
         }
+        val screenWidthDp = (resources.displayMetrics.widthPixels /
+            resources.displayMetrics.density).toInt().coerceAtLeast(320)
         val googleSearchViewport = android.widget.FrameLayout(this).apply {
-            clipChildren = true
-            clipToPadding = true
+            // The tiny host must not clip the full-size WebView child.
+            clipChildren = false
+            clipToPadding = false
             addView(
                 javGoogleWebView,
-                android.widget.FrameLayout.LayoutParams(dp(360), dp(640))
+                android.widget.FrameLayout.LayoutParams(screenWidthDp.let { dp(it) }, dp(640))
             )
         }
+        root.clipChildren = false
+        root.clipToPadding = false
         root.addView(googleSearchViewport, LinearLayout.LayoutParams(dp(1), dp(1)))
+        googleSearchViewport.post {
+            if (googleSearchViewport.parent != null && root.height > 0) {
+                // The 1dp host consumes no layout space; its real WebView viewport
+                // sits over the page at 1% alpha, so Google sees a phone-sized view.
+                googleSearchViewport.translationY = -root.height.toFloat() + dp(20)
+            }
+        }
 
         if (javResults.isNotEmpty()) {
             appendJavResultCards(javResults)
@@ -1005,6 +1020,7 @@ class MainActivity : Activity() {
         javResults = emptyList()
         javSitesChecked = 0
         javSitesFailed = 0
+        javLastGoogleError = ""
         javCurrentSite = JavSiteCatalog.sites.firstOrNull()?.name.orEmpty()
         javSitesTotal = JavSiteCatalog.sites.size
         javVisibleResultUrls.clear()
@@ -1166,7 +1182,10 @@ class MainActivity : Activity() {
         javGoogleTimeout = null
 
         javSitesChecked = (javSitesChecked + 1).coerceAtMost(javSitesTotal)
-        if (error != null) javSitesFailed++
+        if (error != null) {
+            javSitesFailed++
+            javLastGoogleError = error
+        }
         val newResults = results.filter { javVisibleResultUrls.add(it.url) }
         if (newResults.isNotEmpty()) {
             javResults = javResults + newResults
@@ -1191,8 +1210,9 @@ class MainActivity : Activity() {
         if (javResults.isEmpty()) {
             val summary = when {
                 javSitesFailed >= javSitesTotal ->
-                    "Google blocked or failed all " + javSitesTotal +
-                        " searches. This is not a confirmed zero-result search."
+                    "All " + javSitesTotal + " searches failed. Last error: " +
+                        javLastGoogleError.take(180) +
+                        ". This is not a confirmed zero-result search."
                 javSitesFailed > 0 ->
                     "No matching results were found in the Google results we could read. " +
                         javSitesFailed + " websites could not be checked because Google did not return a readable result page."
