@@ -10,8 +10,15 @@ class JavSearchRulesTest {
         assertTrue(JavSearchRules.titleMatches("abc-123 extra title text", "ABC-123"))
     }
 
-    @Test fun rejectsTitlesWithoutExactCodeSubstring() {
+    @Test fun matchesCodesIgnoringCaseAndNumericZeroPadding() {
+        assertTrue(JavSearchRules.titleMatches("MOON-059 full video", "moon-59"))
+        assertTrue(JavSearchRules.titleMatches("moon-59 full video", "MOON-059"))
+        assertTrue(JavSearchRules.titleMatches("[Moon-059] Full Title", "MOON-59"))
+    }
+
+    @Test fun rejectsPartialCodeMatches() {
         assertFalse(JavSearchRules.titleMatches("ABC123 Full Video", "ABC-123"))
+        assertFalse(JavSearchRules.titleMatches("MOON-590 Full Video", "MOON-59"))
         assertFalse(JavSearchRules.titleMatches("Different title", "ABC-123"))
         assertFalse(JavSearchRules.titleMatches("ABC-123", " "))
     }
