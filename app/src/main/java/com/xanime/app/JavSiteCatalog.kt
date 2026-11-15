@@ -118,6 +118,16 @@ object JavSearchRules {
             }
     }
 
+    fun searchVariants(code: String): List<String> {
+        if (code.isBlank()) return emptyList()
+        val raw = code.trim().replace('_', '-')
+        val normalized = normalizeCodeText(raw)
+        val zeroPadded = normalized.replace(Regex("-(\\d+)$")) { match ->
+            "-" + "0" + match.groupValues[1]
+        }
+        return linkedSetOf(raw, normalized, zeroPadded).toList()
+    }
+
     fun titleMatches(title: String, code: String): Boolean {
         if (code.isBlank()) return false
         val normalizedCode = normalizeCodeText(code)
