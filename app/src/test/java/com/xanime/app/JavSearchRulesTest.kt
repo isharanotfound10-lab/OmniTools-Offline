@@ -14,6 +14,8 @@ class JavSearchRulesTest {
         assertTrue(JavSearchRules.titleMatches("MOON-059 full video", "moon-59"))
         assertTrue(JavSearchRules.titleMatches("moon-59 full video", "MOON-059"))
         assertTrue(JavSearchRules.titleMatches("[Moon-059] Full Title", "MOON-59"))
+        assertTrue(JavSearchRules.searchVariants("moon-59").contains("MOON-059"))
+        assertTrue(JavSearchRules.searchVariants("MOON-059").contains("MOON-59"))
     }
 
     @Test fun rejectsPartialCodeMatches() {
