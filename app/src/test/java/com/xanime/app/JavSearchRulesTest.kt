@@ -32,8 +32,8 @@ class JavSearchRulesTest {
         assertFalse(JavSiteCatalog.isAllowed("javascript:alert(1)"))
     }
 
-    @Test fun directoryContainsOnlyThe62WebsiteEntries() {
-        assertTrue(JavSiteCatalog.sites.size == 62)
+    @Test fun directoryContainsOnlyThe48WebsiteEntries() {
+        assertTrue(JavSiteCatalog.sites.size == 48)
         assertFalse(JavSiteCatalog.sites.any { it.name.startsWith("Reddit", ignoreCase = true) })
     }
 }
