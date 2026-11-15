@@ -32,6 +32,7 @@ class ComicWebsiteActivity : Activity() {
     companion object {
         const val EXTRA_SITE_NAME = "comic_site_name"
         const val EXTRA_SITE_URL = "comic_site_url"
+        const val EXTRA_BLOCK_POPUPS = "comic_block_popups"
     }
 
     private var browser: WebView? = null
@@ -39,6 +40,7 @@ class ComicWebsiteActivity : Activity() {
     private lateinit var progress: ProgressBar
     private lateinit var pageTitle: TextView
     private var siteName: String = "COMICS"
+    private var blockPopups: Boolean = false
     private var allowedHost: String = ""
     private val downloadBridge = BlobDownloadBridge()
 
@@ -46,6 +48,7 @@ class ComicWebsiteActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         siteName = intent.getStringExtra(EXTRA_SITE_NAME)?.take(40).orEmpty()
+        blockPopups = intent.getBooleanExtra(EXTRA_BLOCK_POPUPS, false)
         val siteUrl = intent.getStringExtra(EXTRA_SITE_URL).orEmpty()
         val parsed = Uri.parse(siteUrl)
         allowedHost = parsed.host?.lowercase().orEmpty()
@@ -123,7 +126,7 @@ class ComicWebsiteActivity : Activity() {
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
             settings.javaScriptCanOpenWindowsAutomatically = false
-            settings.setSupportMultipleWindows(true)
+            settings.setSupportMultipleWindows(!blockPopups)
             // HitomiLA creates ZIP downloads as Blob URLs; bridge those to Downloads.
             addJavascriptInterface(downloadBridge, "XAnimeDownloads")
             setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
@@ -149,6 +152,7 @@ class ComicWebsiteActivity : Activity() {
                     isUserGesture: Boolean,
                     resultMsg: Message?
                 ): Boolean {
+                    if (blockPopups) return false
                     // nHentai should never open separate popup windows; these are commonly
                     // used by ad/click-redirect scripts. Keep normal in-page navigation intact.
                     if (siteName.equals("nHentai", ignoreCase = true) ||
@@ -259,6 +263,10 @@ class ComicWebsiteActivity : Activity() {
                             }
                         } else if (siteName.equals("KingComix", ignoreCase = true)) {
                             page.evaluateJavascript(kingComixAdCleanupScript) {
+                                page.visibility = android.view.View.VISIBLE
+                            }
+                        } else if (blockPopups) {
+                            page.evaluateJavascript(javAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
                             }
                         } else {
@@ -556,6 +564,52 @@ class ComicWebsiteActivity : Activity() {
             childList: true, subtree: true, attributes: true,
             attributeFilter: ['src', 'class']
           });
+        })();
+    """.trimIndent()
+
+
+    /** Extra cleanup for JAV sites: hide clearly marked ad slots and neutralize window.open. */
+    private val javAdCleanupScript = """
+        (function() {
+          if (window.__xanimeJavCleanupInstalled) return;
+          window.__xanimeJavCleanupInstalled = true;
+          try { window.open = function() { return null; }; } catch (e) {}
+          var css = [
+            '[class*="ad-container"]', '[id*="ad-container"]',
+            '[class*="advertisement"]', '[id*="advertisement"]',
+            '[class*="sponsor"]', '[id*="sponsor"]',
+            '[class*="popunder"]', '[id*="popunder"]',
+            'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
+            'iframe[src*="popads"]', 'iframe[src*="popcash"]',
+            'iframe[src*="exoclick"]', 'iframe[src*="juicyads"]',
+            'iframe[src*="trafficjunky"]', 'iframe[src*="propellerads"]',
+            'iframe[src*="adsterra"]', 'iframe[src*="monetag"]',
+            'iframe[src*="onclickads"]'
+          ].join(',') + '{display:none!important;visibility:hidden!important;' +
+            'height:0!important;max-height:0!important;min-height:0!important;' +
+            'pointer-events:none!important;}';
+          function install() {
+            if (!document.documentElement) return;
+            var style = document.getElementById('xanime-jav-ad-cleanup');
+            if (!style) {
+              style = document.createElement('style');
+              style.id = 'xanime-jav-ad-cleanup';
+              style.textContent = css;
+              (document.head || document.documentElement).appendChild(style);
+            }
+            document.querySelectorAll(
+              '[class*="ad-container"],[id*="ad-container"],' +
+              '[class*="advertisement"],[id*="advertisement"],' +
+              '[class*="sponsor"],[id*="sponsor"],' +
+              '[class*="popunder"],[id*="popunder"]'
+            ).forEach(function(el) { el.remove(); });
+          }
+          install();
+          try {
+            new MutationObserver(install).observe(document.documentElement, {
+              childList: true, subtree: true
+            });
+          } catch (e) {}
         })();
     """.trimIndent()
 

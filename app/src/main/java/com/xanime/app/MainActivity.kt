@@ -115,6 +115,8 @@ class MainActivity : Activity() {
     private var isDetailScreen = false
     private var showingFavorites = false
     private var showingComics = false
+    private var showingJav = false
+    private var javQuery = ""
     private var selectedComicSource = "HentaiRead"
     private var showingHentaini = false
     private var showingWatchAnimeHentai = false
@@ -325,7 +327,7 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!showingWatchAnimeHentai && !showingComics) {
+        if (!showingWatchAnimeHentai && !showingComics && !showingJav) {
             header.addView(actionButton(
                 if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
                 else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
@@ -342,15 +344,24 @@ class MainActivity : Activity() {
 
         // Top-level library switcher: the existing source tabs stay grouped under Hentai.
         val libraryTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        libraryTabs.addView(actionButton("Hentai", !showingComics) {
-            if (showingComics) {
+        libraryTabs.addView(actionButton("Hentai", !showingComics && !showingJav) {
+            if (showingComics || showingJav) {
                 showingComics = false
+                showingJav = false
                 showHome()
             }
         }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(7) })
         libraryTabs.addView(actionButton("Comics", showingComics) {
             if (!showingComics) {
                 showingComics = true
+                showingJav = false
+                showHome()
+            }
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(7) })
+        libraryTabs.addView(actionButton("Jav", showingJav) {
+            if (!showingJav) {
+                showingComics = false
+                showingJav = true
                 showHome()
             }
         }, LinearLayout.LayoutParams(0, dp(42), 1f))
@@ -481,6 +492,110 @@ class MainActivity : Activity() {
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
                 }
             }
+            setContentView(root)
+            animateScreen(root)
+            return
+        }
+
+        if (showingJav) {
+            pageContent.addView(label("JAV WEBSITES", 22, white, true).apply {
+                setPadding(0, dp(20), 0, dp(8))
+            })
+            val javSearch = EditText(this).apply {
+                hint = "Search 48 websites..."
+                setHintTextColor(muted)
+                setTextColor(white)
+                textSize = 14f
+                isSingleLine = true
+                imeOptions = EditorInfo.IME_ACTION_SEARCH
+                setPadding(dp(13), 0, dp(10), 0)
+                background = ripple(glassDrawable(14))
+                setText(javQuery)
+            }
+            pageContent.addView(javSearch, LinearLayout.LayoutParams(-1, dp(46)).apply {
+                topMargin = dp(6)
+                bottomMargin = dp(10)
+            })
+
+            val javWebsites = listOf(
+                "MissAV" to "https://missav.ws/",
+                "SupJav" to "https://supjav.com/",
+                "JavGuru" to "https://jav.guru/",
+                "BestJavPorn" to "https://bestjavporn.com/",
+                "Javtiful" to "https://javtiful.com/",
+                "7MMTV" to "https://7mmtv.tv/",
+                "KissJAV (ShyAV)" to "https://kissjav.com/",
+                "JAVHD.today" to "https://javhd.today/",
+                "VJAV" to "https://vjav.com/",
+                "91Porn" to "https://91porn.com/",
+                "JAVGG" to "https://javgg.net/",
+                "JavBangers" to "https://javbangers.com/",
+                "JAV GIGA" to "https://javgiga.com/",
+                "JAVSeen" to "https://javseen.tv/",
+                "JAV Tsunami" to "https://javtsunami.com/",
+                "Korean Porn Movie" to "https://koreanpornmovie.com/",
+                "nJAV" to "https://njav.com/",
+                "JAVSB" to "https://jav.sb/",
+                "xKorean" to "https://xkorean.biz/",
+                "Japan Whores" to "https://japan-whores.com/",
+                "FC2PPV" to "https://fc2ppv.tv/",
+                "SexKbj" to "https://sexkbj.com/",
+                "JAVLeak" to "https://javleak.com/",
+                "JavFun" to "https://javfun.me/",
+                "AVCrempie" to "https://avcreampie.com/",
+                "JAVhay" to "https://javhay.net/",
+                "BlackedJAV" to "https://blackedjav.com/",
+                "ABJAV" to "https://abjav.com/",
+                "PornHub Asian" to "https://www.pornhub.com/video?c=asian",
+                "Senzuri Tube" to "https://senzuri.tube/",
+                "Roshy" to "https://roshy.tv/",
+                "JAVQuick" to "https://javquick.com/",
+                "nJAV TV" to "https://njavtv.cc/",
+                "TokyoMotion" to "https://tokyomotion.com/",
+                "FunLove" to "https://funlove.info/",
+                "MaxJAV" to "https://maxjav.com/",
+                "JAV WINE" to "https://jav.wine/",
+                "JAVHDTube" to "https://javhdtube.com/",
+                "JavBest TV" to "https://javbest.tv/",
+                "VivaMaxPH" to "https://vivamaxph.com/",
+                "AV Porner" to "https://avporner.com/",
+                "ZeroJAV" to "https://zerojav.com/",
+                "Jav Mobile" to "https://javmobile.net/",
+                "VivamaxStream" to "https://vivamaxstream.com/",
+                "AsianViral" to "https://asianviral.net/",
+                "XXBUM" to "https://xxbum.com/",
+                "OMGJAV" to "https://omgjav.com/",
+                "Manko" to "https://manko.fun/"
+            )
+            val javList = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            pageContent.addView(javList, LinearLayout.LayoutParams(-1, -2))
+
+            fun renderJavWebsites(filter: String) {
+                javList.removeAllViews()
+                javWebsites.filter { it.first.contains(filter.trim(), ignoreCase = true) }
+                    .forEach { (siteName, siteUrl) ->
+                        javList.addView(actionButton(siteName, true) {
+                            startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                                putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "JAV • " + siteName)
+                                putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, siteUrl)
+                                putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
+                            })
+                        }, LinearLayout.LayoutParams(-1, dp(52)).apply {
+                            bottomMargin = dp(8)
+                        })
+                    }
+            }
+            renderJavWebsites(javQuery)
+            javSearch.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    javQuery = s?.toString().orEmpty()
+                    renderJavWebsites(javQuery)
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
             setContentView(root)
             animateScreen(root)
             return
