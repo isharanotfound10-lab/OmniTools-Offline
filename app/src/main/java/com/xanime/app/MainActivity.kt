@@ -137,12 +137,12 @@ class MainActivity : Activity() {
     private var javCurrentSite = ""
     private var javSitesFailed = 0
     private val javVisibleResultUrls = mutableSetOf<String>()
-    private var javGoogleWebView: WebView? = null
-    private var javGooglePageToken = 0
-    private var javGoogleHandledToken = -1
-    private var javGoogleActiveSite: JavSite? = null
-    private var javGoogleTimeout: Runnable? = null
-    private var javLastGoogleError = ""
+    private var javSearchWebView: WebView? = null
+    private var javSearchPageToken = 0
+    private var javSearchHandledToken = -1
+    private var javSearchActiveSite: JavSite? = null
+    private var javSearchTimeout: Runnable? = null
+    private var javLastSearchError = ""
     private var javBrowserUrl: String? = null
     private var javBrowserTitle = "JAV"
     private var javWebView: WebView? = null
@@ -291,10 +291,10 @@ class MainActivity : Activity() {
         worker.shutdownNow()
         detailWorker.shutdownNow()
         imageWorker.shutdownNow()
-        javGoogleTimeout?.let { main.removeCallbacks(it) }
-        javGoogleWebView?.stopLoading()
-        javGoogleWebView?.destroy()
-        javGoogleWebView = null
+        javSearchTimeout?.let { main.removeCallbacks(it) }
+        javSearchWebView?.stopLoading()
+        javSearchWebView?.destroy()
+        javSearchWebView = null
         ambientBackground?.stop()
         activeShimmers.forEach { it.stop() }
         activeShimmers.clear()
@@ -572,10 +572,10 @@ class MainActivity : Activity() {
             } else {
                 javSearchGeneration++
                 javSearching = false
-                javGoogleTimeout?.let { main.removeCallbacks(it) }
-                javGoogleWebView?.stopLoading()
-                javGoogleWebView?.destroy()
-                javGoogleWebView = null
+                javSearchTimeout?.let { main.removeCallbacks(it) }
+                javSearchWebView?.stopLoading()
+                javSearchWebView?.destroy()
+                javSearchWebView = null
                 showingJav = false
                 showHome()
             }
@@ -743,13 +743,13 @@ class MainActivity : Activity() {
         javResultListView = resultList
         pageContent.addView(resultList, LinearLayout.LayoutParams(-1, -2))
 
-        // A single small, non-interactive WebView loads Google's normal search page.
-        // We read only Google's result cards; destination pages are never fetched.
-        javGoogleWebView?.stopLoading()
-        javGoogleWebView?.destroy()
-        javGoogleWebView = WebView(this).apply {
+        // A single small, non-interactive WebView loads Mojeek's normal search page.
+        // We read only Mojeek's result cards; destination pages are never fetched.
+        javSearchWebView?.stopLoading()
+        javSearchWebView?.destroy()
+        javSearchWebView = WebView(this).apply {
             // Keep a real render surface: fully transparent 1dp WebViews may
-            // be throttled or return an incomplete responsive Google page.
+            // be throttled or return an incomplete responsive Mojeek page.
             alpha = 0.01f
             isClickable = false
             isFocusable = false
@@ -767,7 +767,7 @@ class MainActivity : Activity() {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String) {
                     super.onPageFinished(view, url)
-                    if (view === javGoogleWebView) readJavGoogleResults(view, javGooglePageToken)
+                    if (view === javSearchWebView) readJavSearchResults(view, javSearchPageToken)
                 }
 
                 override fun onReceivedError(
@@ -776,9 +776,9 @@ class MainActivity : Activity() {
                     error: android.webkit.WebResourceError
                 ) {
                     super.onReceivedError(view, request, error)
-                    if (view === javGoogleWebView && request.isForMainFrame) {
-                        completeJavGoogleSite(
-                            javGooglePageToken,
+                    if (view === javSearchWebView && request.isForMainFrame) {
+                        completeJavSearchSite(
+                            javSearchPageToken,
                             emptyList(),
                             "WebView " + error.errorCode + ": " + error.description
                         )
@@ -791,12 +791,12 @@ class MainActivity : Activity() {
                     errorResponse: android.webkit.WebResourceResponse
                 ) {
                     super.onReceivedHttpError(view, request, errorResponse)
-                    if (view === javGoogleWebView && request.isForMainFrame &&
+                    if (view === javSearchWebView && request.isForMainFrame &&
                         errorResponse.statusCode >= 400) {
-                        completeJavGoogleSite(
-                            javGooglePageToken,
+                        completeJavSearchSite(
+                            javSearchPageToken,
                             emptyList(),
-                            "Google HTTP " + errorResponse.statusCode
+                            "Mojeek HTTP " + errorResponse.statusCode
                         )
                     }
                 }
@@ -804,12 +804,12 @@ class MainActivity : Activity() {
         }
         val screenWidthDp = (resources.displayMetrics.widthPixels /
             resources.displayMetrics.density).toInt().coerceAtLeast(320)
-        val googleSearchViewport = android.widget.FrameLayout(this).apply {
+        val mojeekSearchViewport = android.widget.FrameLayout(this).apply {
             // The tiny host must not clip the full-size WebView child.
             clipChildren = false
             clipToPadding = false
             addView(
-                javGoogleWebView,
+                javSearchWebView,
                 android.widget.FrameLayout.LayoutParams(screenWidthDp.let { dp(it) }, dp(640))
             )
         }
@@ -817,19 +817,19 @@ class MainActivity : Activity() {
         root.clipToPadding = false
         // Insert behind the scrollable UI so the off-screen search view never
         // covers taps or changes the visible JAV layout.
-        root.addView(googleSearchViewport, 0, LinearLayout.LayoutParams(dp(1), dp(1)))
+        root.addView(mojeekSearchViewport, 0, LinearLayout.LayoutParams(dp(1), dp(1)))
 
         if (javResults.isNotEmpty()) {
             appendJavResultCards(javResults)
             if (!javSearching && javSitesFailed > 0) {
                 resultList.addView(infoCard(javSitesFailed.toString() +
-                    " websites could not be searched. Google may have blocked or failed those requests."))
+                    " websites could not be searched. Mojeek may have blocked or failed those requests."))
             }
         } else {
             val message = when {
-                javSearching -> "Searching websites in order. Matching results appear here as each website finishes."
+                javSearching -> "Searching all 62 websites with Mojeek. Matching titles appear here as each search finishes."
                 javSitesChecked >= javSitesTotal && javSitesTotal > 0 ->
-                    "Search finished. No matching results were found in the first five Google results of the checked websites."
+                    "Search finished. No matching results were found in the first ten Mojeek results of the checked websites."
                 javCodeQuery.isBlank() -> "Matching results will appear here after you search for a code."
                 else -> "No matching results were found."
             }
@@ -994,9 +994,9 @@ class MainActivity : Activity() {
         }
         if (javSearching) return
 
-        val googleView = javGoogleWebView
-        if (googleView == null) {
-            Toast.makeText(this, "Google search view is not ready. Reopen the JAV tab.", Toast.LENGTH_SHORT).show()
+        val mojeekView = javSearchWebView
+        if (mojeekView == null) {
+            Toast.makeText(this, "Mojeek search view is not ready. Reopen the JAV tab.", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -1004,67 +1004,67 @@ class MainActivity : Activity() {
         javResults = emptyList()
         javSitesChecked = 0
         javSitesFailed = 0
-        javLastGoogleError = ""
+        javLastSearchError = ""
         javCurrentSite = JavSiteCatalog.sites.firstOrNull()?.name.orEmpty()
         javSitesTotal = JavSiteCatalog.sites.size
         javVisibleResultUrls.clear()
-        setJavPlaceholder("Starting Google search. Each website is checked one at a time.")
+        setJavPlaceholder("Starting Mojeek search. Checking all 62 websites one at a time.")
         updateJavSearchUi()
 
         val requestId = ++javSearchGeneration
         javCurrentSite = ""
-        searchNextJavGoogleSite(requestId, 0)
+        searchNextJavSearchSite(requestId, 0)
     }
 
-    private fun searchNextJavGoogleSite(requestId: Int, index: Int) {
+    private fun searchNextJavSearchSite(requestId: Int, index: Int) {
         if (requestId != javSearchGeneration || !javSearching || isFinishing) return
         val sites = JavSiteCatalog.sites
         if (index >= sites.size) {
-            finishJavGoogleSearch(requestId)
+            finishJavSearch(requestId)
             return
         }
 
         val site = sites[index]
-        javGoogleActiveSite = site
+        javSearchActiveSite = site
         javCurrentSite = site.name
         updateJavSearchUi()
 
         val query = URLEncoder.encode(javCodeQuery.trim() + " site:" + site.host, "UTF-8")
-        val searchUrl = "https://www.google.com/search?q=" + query + "&num=10&hl=en"
-        val token = ++javGooglePageToken
-        javGoogleHandledToken = -1
-        javGoogleTimeout?.let { main.removeCallbacks(it) }
+        val searchUrl = "https://www.mojeek.com/search?q=" + query + "&num=10&hl=en"
+        val token = ++javSearchPageToken
+        javSearchHandledToken = -1
+        javSearchTimeout?.let { main.removeCallbacks(it) }
         val timeout = Runnable {
-            completeJavGoogleSite(token, emptyList(), "Google search timed out")
+            completeJavSearchSite(token, emptyList(), "Mojeek search timed out")
         }
-        javGoogleTimeout = timeout
+        javSearchTimeout = timeout
         main.postDelayed(timeout, 25000L)
 
         try {
-            javGoogleWebView?.loadUrl(searchUrl)
+            javSearchWebView?.loadUrl(searchUrl)
         } catch (_: Exception) {
-            completeJavGoogleSite(token, emptyList(), "Could not open Google's search page")
+            completeJavSearchSite(token, emptyList(), "Could not open Mojeek's search page")
         }
     }
 
-    private fun readJavGoogleResults(view: WebView, token: Int) {
-        if (token != javGooglePageToken || token == javGoogleHandledToken || !javSearching) return
+    private fun readJavSearchResults(view: WebView, token: Int) {
+        if (token != javSearchPageToken || token == javSearchHandledToken || !javSearching) return
 
         val script = """
             (function() {
-              const anchors = Array.from(document.querySelectorAll('a'))
-                .filter(a => a.querySelector('h3') && (a.href || a.getAttribute('href')));
+              const cards = Array.from(document.querySelectorAll(
+                'ul.results-standard > li, .results-standard > li'
+              ));
               const rows = [];
               const seen = new Set();
-              for (const anchor of anchors) {
-                const heading = anchor.querySelector('h3');
-                const href = anchor.href || anchor.getAttribute('href') || '';
-                if (!heading || !href || seen.has(href)) continue;
+              for (const card of cards) {
+                const heading = card.querySelector('h2 a, h2');
+                const link = card.querySelector('h2 a[href], a.ob[href]');
+                const title = heading ? (heading.innerText || heading.textContent || '').trim() : '';
+                const href = link ? (link.href || link.getAttribute('href') || '') : '';
+                if (!title || !href || seen.has(href)) continue;
                 seen.add(href);
-                rows.push({
-                  title: heading.innerText || heading.textContent || '',
-                  url: href
-                });
+                rows.push({ title: title, url: href });
                 if (rows.length >= 10) break;
               }
               return {
@@ -1077,10 +1077,10 @@ class MainActivity : Activity() {
 
         try {
             view.evaluateJavascript(script) { raw ->
-                if (token != javGooglePageToken || token == javGoogleHandledToken || !javSearching) return@evaluateJavascript
+                if (token != javSearchPageToken || token == javSearchHandledToken || !javSearching) return@evaluateJavascript
                 try {
                     if (raw.isNullOrBlank() || raw == "null") {
-                        completeJavGoogleSite(token, emptyList(), "Google result page could not be read")
+                        completeJavSearchSite(token, emptyList(), "Mojeek result page could not be read")
                         return@evaluateJavascript
                     }
                     val payload = org.json.JSONObject(raw)
@@ -1089,26 +1089,26 @@ class MainActivity : Activity() {
                     val lowerBody = bodyText.lowercase()
 
                     if (pageTitle.contains("sorry") || lowerBody.contains("unusual traffic") ||
-                        lowerBody.contains("our systems have detected") ||
+                        lowerBody.contains("automated requests") || lowerBody.contains("access denied") ||
                         lowerBody.contains("not a robot") || lowerBody.contains("captcha") ||
-                        lowerBody.contains("before you continue to google")) {
-                        completeJavGoogleSite(token, emptyList(), "Google blocked or challenged the request")
+                        lowerBody.contains("verify you are human")) {
+                        completeJavSearchSite(token, emptyList(), "Mojeek blocked or challenged the request")
                         return@evaluateJavascript
                     }
 
                     val rows = payload.optJSONArray("results")
                     if (rows == null || rows.length() == 0) {
-                        val genuineEmpty = lowerBody.contains("did not match any documents") ||
-                            lowerBody.contains("no results found") ||
-                            lowerBody.contains("there are no results")
-                        if (genuineEmpty) completeJavGoogleSite(token, emptyList())
-                        else completeJavGoogleSite(token, emptyList(), "Google result layout could not be read")
+                        val genuineEmpty = lowerBody.contains("no results found") ||
+                            lowerBody.contains("no results for") ||
+                            lowerBody.contains("did not match any documents")
+                        if (genuineEmpty) completeJavSearchSite(token, emptyList())
+                        else completeJavSearchSite(token, emptyList(), "Mojeek result layout could not be read")
                         return@evaluateJavascript
                     }
 
-                    val site = javGoogleActiveSite
+                    val site = javSearchActiveSite
                     if (site == null) {
-                        completeJavGoogleSite(token, emptyList(), "Website tracking failed")
+                        completeJavSearchSite(token, emptyList(), "Website tracking failed")
                         return@evaluateJavascript
                     }
 
@@ -1116,7 +1116,7 @@ class MainActivity : Activity() {
                     for (index in 0 until minOf(rows.length(), 10)) {
                         val row = rows.optJSONObject(index) ?: continue
                         val title = row.optString("title").trim()
-                        // Only the actual Google result heading is eligible.
+                        // Only the actual Mojeek result heading is eligible.
                         // Snippets, URLs and surrounding card text never qualify.
                         if (title.isBlank() || !JavSearchRules.titleMatches(title, javCodeQuery)) continue
 
@@ -1126,30 +1126,30 @@ class MainActivity : Activity() {
 
                         matching.add(JavSearchResult(site.name, title, target))
                     }
-                    completeJavGoogleSite(token, matching)
+                    completeJavSearchSite(token, matching)
                 } catch (_: Exception) {
-                    completeJavGoogleSite(token, emptyList(), "Google result data could not be parsed")
+                    completeJavSearchSite(token, emptyList(), "Mojeek result data could not be parsed")
                 }
             }
         } catch (_: Exception) {
-            completeJavGoogleSite(token, emptyList(), "Could not read Google's search results")
+            completeJavSearchSite(token, emptyList(), "Could not read Mojeek's search results")
         }
     }
 
-    private fun completeJavGoogleSite(
+    private fun completeJavSearchSite(
         token: Int,
         results: List<JavSearchResult>,
         error: String? = null
     ) {
-        if (token != javGooglePageToken || token == javGoogleHandledToken || !javSearching) return
-        javGoogleHandledToken = token
-        javGoogleTimeout?.let { main.removeCallbacks(it) }
-        javGoogleTimeout = null
+        if (token != javSearchPageToken || token == javSearchHandledToken || !javSearching) return
+        javSearchHandledToken = token
+        javSearchTimeout?.let { main.removeCallbacks(it) }
+        javSearchTimeout = null
 
         javSitesChecked = (javSitesChecked + 1).coerceAtMost(javSitesTotal)
         if (error != null) {
             javSitesFailed++
-            javLastGoogleError = error
+            javLastSearchError = error
         }
         val newResults = results.filter { javVisibleResultUrls.add(it.url) }
         if (newResults.isNotEmpty()) {
@@ -1159,36 +1159,36 @@ class MainActivity : Activity() {
         updateJavSearchUi()
 
         if (javSitesChecked >= javSitesTotal) {
-            finishJavGoogleSearch(javSearchGeneration)
+            finishJavSearch(javSearchGeneration)
         } else {
-            searchNextJavGoogleSite(javSearchGeneration, javSitesChecked)
+            searchNextJavSearchSite(javSearchGeneration, javSitesChecked)
         }
     }
 
-    private fun finishJavGoogleSearch(requestId: Int) {
+    private fun finishJavSearch(requestId: Int) {
         if (requestId != javSearchGeneration || !javSearching) return
         javSearching = false
         javCurrentSite = ""
-        javGoogleTimeout?.let { main.removeCallbacks(it) }
-        javGoogleTimeout = null
+        javSearchTimeout?.let { main.removeCallbacks(it) }
+        javSearchTimeout = null
 
         if (javResults.isEmpty()) {
             val summary = when {
                 javSitesFailed >= javSitesTotal ->
                     "All " + javSitesTotal + " searches failed. Last error: " +
-                        javLastGoogleError.take(180) +
+                        javLastSearchError.take(180) +
                         ". This is not a confirmed zero-result search."
                 javSitesFailed > 0 ->
-                    "No matching results were found in the Google results we could read. " +
-                        javSitesFailed + " websites could not be checked because Google did not return a readable result page."
+                    "No matching results were found in the Mojeek results we could read. " +
+                        javSitesFailed + " websites could not be checked because Mojeek did not return a readable result page."
                 else ->
-                    "No matching results were found in the first three Google results from the 62 websites."
+                    "No matching results were found in the first ten Mojeek results from the 62 websites."
             }
             setJavPlaceholder(summary)
         } else if (javSitesFailed > 0) {
             javResultListView?.addView(infoCard(
                 javSitesFailed.toString() +
-                    " websites could not be checked because Google did not return a readable result page."
+                    " websites could not be checked because Mojeek did not return a readable result page."
             ))
         }
         updateJavSearchUi()
