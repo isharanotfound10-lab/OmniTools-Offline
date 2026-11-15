@@ -1,6 +1,6 @@
 package com.xanime.app
 
-import android.net.Uri
+import java.net.URI
 
 data class JavSite(
     val name: String,
@@ -85,7 +85,7 @@ object JavSiteCatalog {
 
     fun isAllowed(rawUrl: String): Boolean {
         return try {
-            val uri = Uri.parse(rawUrl)
+            val uri = URI(rawUrl)
             val scheme = uri.scheme?.lowercase()
             val host = uri.host?.lowercase()?.removePrefix("www.") ?: return false
             (scheme == "http" || scheme == "https") && sites.any { site ->
@@ -98,7 +98,7 @@ object JavSiteCatalog {
 
     fun hostMatchesSite(rawUrl: String, site: JavSite): Boolean {
         return try {
-            val host = Uri.parse(rawUrl).host?.lowercase()?.removePrefix("www.") ?: return false
+            val host = URI(rawUrl).host?.lowercase()?.removePrefix("www.") ?: return false
             val expected = site.host.lowercase().removePrefix("www.")
             host == expected || host.endsWith(".$expected")
         } catch (_: Exception) {
