@@ -848,73 +848,84 @@ class MainActivity : Activity() {
         val requestId = ++javSearchGeneration
         showHome()
         worker.execute {
-            val codeVariants = JavSearchRules.searchVariants(code)
-            val codeQuery = codeVariants.joinToString(" OR ") { "\"$it\"" }
-            val siteBatches = JavSiteCatalog.sites.chunked(8)
-            val tasks = siteBatches.map { sites ->
-                detailWorker.submit(Callable {
-                    try {
-                        // Google query groups site: operators with OR. Batches
-                        // keep the query within Google's practical term limits.
-                        val siteOperators = sites.joinToString(" OR ") { "site:${it.host}" }
-                        val googleQuery = "($siteOperators) ($codeQuery)"
-                        val query = URLEncoder.encode(googleQuery, "UTF-8")
-                        val searchUrl = "https://www.google.com/search?q=$query&num=10&filter=0"
-                        val connection = (URL(searchUrl).openConnection() as HttpURLConnection).apply {
-                            connectTimeout = 9000
-                            readTimeout = 11000
-                            instanceFollowRedirects = true
-                            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
-                            setRequestProperty("Accept", "text/html,application/xhtml+xml")
-                            setRequestProperty("Accept-Language", "en-US,en;q=0.9")
-                        }
-                        val html = try {
-                            val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
-                            stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText().take(2_000_000) }.orEmpty()
-                        } finally { connection.disconnect() }
-                        if (html.isBlank()) return@Callable emptyList<JavSearchResult>()
-                        val doc = Jsoup.parse(html, searchUrl)
-                        doc.select("a:has(h3)").mapNotNull { anchor ->
-                            val title = anchor.selectFirst("h3")?.text()?.trim().orEmpty()
-                            val target = resolveJavSearchUrl(anchor.absUrl("href").ifBlank { anchor.attr("href") })
-                            val site = sites.firstOrNull { JavSiteCatalog.hostMatchesSite(target, it) }
-                            if (title.isBlank() || site == null || !JavSearchRules.titleMatches(title, code) ||
-                                !JavSiteCatalog.isAllowed(target)) null
-                            else {
-                                var image = anchor.selectFirst("img")?.let { img ->
-                                    img.absUrl("src").ifBlank { img.absUrl("data-src") }
-                                }.orEmpty()
-                                if (image.startsWith("data:", true)) image = ""
-                                if (image.isBlank()) {
-                                    try {
-                                        val metadataConnection = (URL(target).openConnection() as HttpURLConnection).apply {
-                                            connectTimeout = 3000
-                                            readTimeout = 3500
-                                            instanceFollowRedirects = true
-                                            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
-                                        }
-                                        val metadataHtml = try {
-                                            metadataConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(400_000) }
-                                        } finally { metadataConnection.disconnect() }
-                                        val metadata = Jsoup.parse(metadataHtml, target)
-                                        image = metadata.selectFirst("meta[property=og:image]")?.let { it.absUrl("content") }.orEmpty()
-                                    } catch (_: Exception) { }
-                                }
-                                JavSearchResult(site.name, title, target, image)
-                            }
-                        }.take(10)
-                    } catch (_: Exception) { emptyList<JavSearchResult>() }
-                })
-            }
+            val variants = JavSearchRules.searchVariants(code)
+            val codeQuery = variants.joinToString(" OR ") { "\"$it\"" }
+            val siteBatches = JavSiteCatalog.sites.chunked(5)
             val found = mutableListOf<JavSearchResult>()
-            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(45)
-            tasks.forEach { task ->
-                val remaining = deadline - System.nanoTime()
-                if (remaining <= 0L) task.cancel(true)
-                else try { found.addAll(task.get(remaining, java.util.concurrent.TimeUnit.NANOSECONDS)) }
-                catch (_: Exception) { task.cancel(true) }
+            var completedBatches = 0
+
+            // Process exactly five sites per Google request, then wait for that
+            // response before starting the next batch. This avoids launching
+            // requests for all 62 domains simultaneously.
+            for (sites in siteBatches) {
+                if (requestId != javSearchGeneration) break
+                try {
+                    val siteOperators = sites.joinToString(" OR ") { "site:${it.host}" }
+                    val googleQuery = "($siteOperators) ($codeQuery)"
+                    val query = URLEncoder.encode(googleQuery, "UTF-8")
+                    val searchUrl = "https://www.google.com/search?gbv=1&q=$query&num=20&filter=0"
+                    val connection = (URL(searchUrl).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 10000
+                        readTimeout = 12000
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+                        setRequestProperty("Accept", "text/html,application/xhtml+xml")
+                        setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                    }
+                    val html = try {
+                        if (connection.responseCode !in 200..299) "" else
+                            connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(2_000_000) }
+                    } finally { connection.disconnect() }
+
+                    if (html.isNotBlank()) {
+                        val doc = Jsoup.parse(html, searchUrl)
+                        val anchors = doc.select("a:has(h3)")
+                        for (anchor in anchors) {
+                            val title = anchor.selectFirst("h3")?.text()?.trim().orEmpty()
+                            val rawHref = anchor.absUrl("href").ifBlank { anchor.attr("href") }
+                            val target = resolveJavSearchUrl(rawHref)
+                            val site = sites.firstOrNull { JavSiteCatalog.hostMatchesSite(target, it) }
+                            if (title.isBlank() || site == null ||
+                                !JavSearchRules.titleMatches(title, code) ||
+                                !JavSiteCatalog.isAllowed(target)) continue
+
+                            var image = anchor.selectFirst("img")?.let { img ->
+                                img.absUrl("src").ifBlank { img.absUrl("data-src") }
+                            }.orEmpty()
+                            if (image.startsWith("data:", true)) image = ""
+                            if (image.isBlank()) {
+                                try {
+                                    val metadataConnection = (URL(target).openConnection() as HttpURLConnection).apply {
+                                        connectTimeout = 3000
+                                        readTimeout = 3500
+                                        instanceFollowRedirects = true
+                                        setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
+                                    }
+                                    val metadataHtml = try {
+                                        metadataConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(400_000) }
+                                    } finally { metadataConnection.disconnect() }
+                                    val metadata = Jsoup.parse(metadataHtml, target)
+                                    image = metadata.selectFirst("meta[property=og:image]")?.let { it.absUrl("content") }.orEmpty()
+                                } catch (_: Exception) { }
+                            }
+                            found.add(JavSearchResult(site.name, title, target, image))
+                        }
+                    }
+                } catch (_: Exception) {
+                    // A blocked/failed batch must not prevent later sites being tried.
+                }
+                completedBatches++
+                val snapshot = found.distinctBy { it.url }.toList()
+                main.post {
+                    if (isFinishing || requestId != javSearchGeneration) return@post
+                    javResults = snapshot
+                    if (showingJav) showHome()
+                }
+                // Small pause between batches to reduce Google rate limiting.
+                try { Thread.sleep(700) } catch (_: InterruptedException) { break }
             }
-            val unique = found.distinctBy { it.url }.sortedBy { it.siteName.lowercase() }.take(80)
+
+            val unique = found.distinctBy { it.url }.sortedBy { it.siteName.lowercase() }.take(100)
             main.post {
                 if (isFinishing || requestId != javSearchGeneration) return@post
                 javSearching = false
@@ -922,8 +933,8 @@ class MainActivity : Activity() {
                 if (showingJav) showHome()
                 Toast.makeText(
                     this,
-                    if (unique.isEmpty()) "Google returned no matching titles. It may have blocked the request or not indexed them."
-                    else "${unique.size} matching results found.",
+                    if (unique.isEmpty()) "Google returned no matching titles. It may have blocked the requests or not indexed them."
+                    else "${unique.size} matching results found across $completedBatches batches.",
                     Toast.LENGTH_LONG
                 ).show()
             }
