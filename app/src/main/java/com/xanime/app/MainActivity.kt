@@ -869,19 +869,21 @@ class MainActivity : Activity() {
                     completion.take().get()
                 } catch (_: Exception) {
                     checked++
+                    val checkedSnapshot = checked
                     main.post {
                         if (isFinishing || requestId != javSearchGeneration) return@post
-                        javSitesChecked = checked
+                        javSitesChecked = checkedSnapshot
                         if (showingJav) showHome()
                     }
                     continue
                 }
                 checked++
+                val checkedSnapshot = checked
                 completed.second.forEach { result -> collected.putIfAbsent(result.url, result) }
                 val snapshot = collected.values.toList()
                 main.post {
                     if (isFinishing || requestId != javSearchGeneration) return@post
-                    javSitesChecked = checked
+                    javSitesChecked = checkedSnapshot
                     // Publish each site's results immediately; do not wait for its
                     // other four concurrent requests or for all 62 sites.
                     javResults = snapshot
