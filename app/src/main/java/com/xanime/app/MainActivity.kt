@@ -798,7 +798,8 @@ class MainActivity : Activity() {
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val scheme = request.url.scheme?.lowercase()
-                    return scheme != "http" && scheme != "https"
+                    if (scheme != "http" && scheme != "https") return true
+                    return request.isForMainFrame && !JavSiteCatalog.isAllowed(request.url.toString())
                 }
                 override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
                     handler.cancel()
@@ -909,10 +910,10 @@ class MainActivity : Activity() {
             }
             val unique = found.distinctBy { it.url }.sortedBy { it.siteName.lowercase() }
             main.post {
-                if (isFinishing || requestId != javSearchGeneration || !showingJav) return@post
+                if (isFinishing || requestId != javSearchGeneration) return@post
                 javSearching = false
                 javResults = unique
-                showHome()
+                if (showingJav) showHome()
                 Toast.makeText(
                     this,
                     if (unique.isEmpty()) "No matching titles were found." else "${unique.size} matching results found.",
