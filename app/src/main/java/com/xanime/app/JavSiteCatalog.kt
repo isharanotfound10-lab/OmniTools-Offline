@@ -11,8 +11,7 @@ data class JavSite(
 data class JavSearchResult(
     val siteName: String,
     val title: String,
-    val url: String,
-    val thumbnail: String
+    val url: String
 )
 
 object JavSiteCatalog {
