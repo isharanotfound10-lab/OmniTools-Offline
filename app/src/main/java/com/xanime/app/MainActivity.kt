@@ -115,6 +115,7 @@ class MainActivity : Activity() {
     private var isDetailScreen = false
     private var showingFavorites = false
     private var showingComics = false
+    private var showingJav = false
     private var selectedComicSource = "HentaiRead"
     private var showingHentaini = false
     private var showingWatchAnimeHentai = false
@@ -325,7 +326,7 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!showingWatchAnimeHentai && !showingComics) {
+        if (!showingWatchAnimeHentai && !showingComics && !showingJav) {
             header.addView(actionButton(
                 if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
                 else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
@@ -342,15 +343,24 @@ class MainActivity : Activity() {
 
         // Top-level library switcher: the existing source tabs stay grouped under Hentai.
         val libraryTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        libraryTabs.addView(actionButton("Hentai", !showingComics) {
-            if (showingComics) {
+        libraryTabs.addView(actionButton("Hentai", !showingComics && !showingJav) {
+            if (showingComics || showingJav) {
                 showingComics = false
+                showingJav = false
                 showHome()
             }
         }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(7) })
         libraryTabs.addView(actionButton("Comics", showingComics) {
             if (!showingComics) {
                 showingComics = true
+                showingJav = false
+                showHome()
+            }
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(7) })
+        libraryTabs.addView(actionButton("Jav", showingJav) {
+            if (!showingJav) {
+                showingComics = false
+                showingJav = true
                 showHome()
             }
         }, LinearLayout.LayoutParams(0, dp(42), 1f))
@@ -481,6 +491,15 @@ class MainActivity : Activity() {
                     }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
                 }
             }
+            setContentView(root)
+            animateScreen(root)
+            return
+        }
+
+        if (showingJav) {
+            pageContent.addView(label("JAV", 22, white, true).apply {
+                setPadding(0, dp(20), 0, dp(8))
+            })
             setContentView(root)
             animateScreen(root)
             return
