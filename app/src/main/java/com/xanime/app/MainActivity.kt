@@ -1054,29 +1054,24 @@ class MainActivity : Activity() {
             (function() {
               const rows = [];
               const seen = new Set();
-              const selectors = [
-                'ul.results-standard li h2 a[href]',
-                '.results-standard li h2 a[href]',
-                '.results li h2 a[href]',
-                'li.result h2 a[href]',
-                'article h2 a[href]',
-                'h2 a[href]',
-                'a.ob[href]'
-              ];
-              let links = [];
-              for (const selector of selectors) {
-                const found = Array.from(document.querySelectorAll(selector));
-                if (found.length) { links = found; break; }
-              }
-              for (const link of links) {
-                const title = (link.innerText || link.textContent || '')
+              // Mojeek's organic result title and destination are separate:
+              // the title is in li > h2 > a, while the outbound URL is a.ob.
+              // Pair them through the containing result <li>; do not read
+              // the title from a.ob because that anchor often has no text.
+              const resultLinks = Array.from(document.querySelectorAll(
+                'ul.results-standard > li a.ob[href], ul.results-standard li a.ob[href], .results-standard li a.ob[href]'
+              ));
+              for (const resultLink of resultLinks) {
+                const card = resultLink.closest('li') || resultLink.parentElement;
+                const titleLink = card ? card.querySelector('h2 a[href], h2 a') : null;
+                const title = (titleLink ? (titleLink.innerText || titleLink.textContent || '') : '')
                   .replace(/\\s+/g, ' ').trim();
-                const href = link.href || link.getAttribute('href') || '';
-                if (!title || !href || seen.has(href)) continue;
+                const href = resultLink.href || resultLink.getAttribute('href') || '';
+                if (!title || !href) continue;
                 let parsed;
                 try { parsed = new URL(href, location.href); } catch (_) { continue; }
                 if (!/^https?:$/.test(parsed.protocol)) continue;
-                if (parsed.hostname === location.hostname) continue;
+                if (parsed.hostname === location.hostname || seen.has(parsed.href)) continue;
                 seen.add(parsed.href);
                 rows.push({ title: title, url: parsed.href });
                 if (rows.length >= 20) break;
@@ -1085,7 +1080,8 @@ class MainActivity : Activity() {
                 pageTitle: document.title || '',
                 pageUrl: location.href,
                 bodyText: (document.body ? document.body.innerText : '').slice(0, 3500),
-                resultHeadingCount: document.querySelectorAll('h2 a[href]').length,
+                resultHeadingCount: document.querySelectorAll('ul.results-standard li h2 a').length,
+                outboundResultCount: resultLinks.length,
                 results: rows
               };
             })();
