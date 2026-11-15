@@ -815,14 +815,9 @@ class MainActivity : Activity() {
         }
         root.clipChildren = false
         root.clipToPadding = false
-        root.addView(googleSearchViewport, LinearLayout.LayoutParams(dp(1), dp(1)))
-        googleSearchViewport.post {
-            if (googleSearchViewport.parent != null && root.height > 0) {
-                // The 1dp host consumes no layout space; its real WebView viewport
-                // sits over the page at 1% alpha, so Google sees a phone-sized view.
-                googleSearchViewport.translationY = -root.height.toFloat() + dp(20)
-            }
-        }
+        // Insert behind the scrollable UI so the off-screen search view never
+        // covers taps or changes the visible JAV layout.
+        root.addView(googleSearchViewport, 0, LinearLayout.LayoutParams(dp(1), dp(1)))
 
         if (javResults.isNotEmpty()) {
             appendJavResultCards(javResults)
