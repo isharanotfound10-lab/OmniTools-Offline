@@ -900,7 +900,7 @@ class MainActivity : Activity() {
                     Toast.makeText(this, "This result is outside the approved website list.", Toast.LENGTH_SHORT).show()
                 }
             }, LinearLayout.LayoutParams(-1, dp(36)))
-            card.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+            card.addView(details, LinearLayout.LayoutParams(-1, -2))
             list.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(9)
             })
