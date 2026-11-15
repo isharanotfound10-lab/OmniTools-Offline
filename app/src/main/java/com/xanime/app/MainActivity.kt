@@ -1030,7 +1030,7 @@ class MainActivity : Activity() {
         updateJavSearchUi()
 
         val query = URLEncoder.encode(javCodeQuery.trim() + " site:" + site.host, "UTF-8")
-        val searchUrl = "https://www.google.com/search?q=" + query + "&num=3&hl=en"
+        val searchUrl = "https://www.google.com/search?q=" + query + "&num=10&hl=en"
         val token = ++javGooglePageToken
         javGoogleHandledToken = -1
         javGoogleTimeout?.let { main.removeCallbacks(it) }
@@ -1065,7 +1065,7 @@ class MainActivity : Activity() {
                   title: heading.innerText || heading.textContent || '',
                   url: href
                 });
-                if (rows.length >= 3) break;
+                if (rows.length >= 10) break;
               }
               return {
                 pageTitle: document.title || '',
@@ -1113,7 +1113,7 @@ class MainActivity : Activity() {
                     }
 
                     val matching = mutableListOf<JavSearchResult>()
-                    for (index in 0 until minOf(rows.length(), 3)) {
+                    for (index in 0 until minOf(rows.length(), 10)) {
                         val row = rows.optJSONObject(index) ?: continue
                         val title = row.optString("title").trim()
                         // Only the actual Google result heading is eligible.
