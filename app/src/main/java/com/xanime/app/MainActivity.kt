@@ -140,6 +140,7 @@ class MainActivity : Activity() {
     private var javGoogleWebView: WebView? = null
     private var javGooglePageToken = 0
     private var javGoogleHandledToken = -1
+    private var javGoogleActiveSite: JavSite? = null
     private var javGoogleTimeout: Runnable? = null
     private var javBrowserUrl: String? = null
     private var javBrowserTitle = "JAV"
@@ -798,7 +799,15 @@ class MainActivity : Activity() {
                 }
             }
         }
-        root.addView(javGoogleWebView, LinearLayout.LayoutParams(dp(1), dp(1)))
+        val googleSearchViewport = android.widget.FrameLayout(this).apply {
+            clipChildren = true
+            clipToPadding = true
+            addView(
+                javGoogleWebView,
+                android.widget.FrameLayout.LayoutParams(dp(360), dp(640))
+            )
+        }
+        root.addView(googleSearchViewport, LinearLayout.LayoutParams(dp(1), dp(1)))
 
         if (javResults.isNotEmpty()) {
             appendJavResultCards(javResults)
@@ -1016,6 +1025,7 @@ class MainActivity : Activity() {
         }
 
         val site = sites[index]
+        javGoogleActiveSite = site
         javCurrentSite = site.name
         updateJavSearchUi()
 
@@ -1105,8 +1115,7 @@ class MainActivity : Activity() {
                         return@evaluateJavascript
                     }
 
-                    val site = JavSiteCatalog.sites.getOrNull(javSitesChecked)
-                        ?: JavSiteCatalog.sites.firstOrNull { it.name == javCurrentSite }
+                    val site = javGoogleActiveSite
                     if (site == null) {
                         completeJavGoogleSite(token, emptyList(), "Website tracking failed")
                         return@evaluateJavascript
