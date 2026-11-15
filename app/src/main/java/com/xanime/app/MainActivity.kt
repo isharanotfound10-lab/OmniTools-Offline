@@ -120,6 +120,7 @@ class MainActivity : Activity() {
     private var searchScrollY = 0
     private var isDetailScreen = false
     private var showingFavorites = false
+    private var showingComics = false
     private var showingHentaini = false
     private var showingWatchAnimeHentai = false
     private var showingJav = false
@@ -357,7 +358,7 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!showingWatchAnimeHentai && !showingJav) {
+        if (!showingWatchAnimeHentai && !showingJav && !showingComics) {
             header.addView(actionButton(
                 if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
                 else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
@@ -372,8 +373,65 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(dp(44), dp(44)))
         pageContent.addView(header)
 
+        // Three primary sections: Hentai, Comics, and JAV.
+        val libraryTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        libraryTabs.addView(actionButton("Hentai", !showingComics && !showingJav) {
+            if (showingComics || showingJav) {
+                showingComics = false
+                showingJav = false
+                showHome()
+            }
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        libraryTabs.addView(actionButton("Comic", showingComics) {
+            if (!showingComics) {
+                showingComics = true
+                showingJav = false
+                showHome()
+            }
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(6) })
+        libraryTabs.addView(actionButton("JAV", showingJav) {
+            if (!showingJav) {
+                showingComics = false
+                showingJav = true
+                showingFavorites = false
+                showHome()
+            }
+        }, LinearLayout.LayoutParams(0, dp(42), 1f))
+        pageContent.addView(libraryTabs, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(10) })
+
+        if (showingComics) {
+            pageContent.addView(label("COMICS", 22, white, true).apply {
+                setPadding(0, dp(20), 0, dp(8))
+            })
+            pageContent.addView(label("CHOOSE A WEBSITE", 9, muted, true).apply {
+                letterSpacing = .12f
+                setPadding(0, dp(3), 0, dp(9))
+            })
+            val comicTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            comicTabs.addView(actionButton("HentaiRead", true) {
+                startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+            }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { marginEnd = dp(5) })
+            comicTabs.addView(actionButton("HitomiLA", false) {
+                Toast.makeText(this, "HitomiLA will be added later", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(0, dp(43), 1f).apply { marginEnd = dp(5) })
+            comicTabs.addView(actionButton("AllPornComic", false) {
+                Toast.makeText(this, "AllPornComic will be added later", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(0, dp(43), 1f))
+            pageContent.addView(comicTabs, LinearLayout.LayoutParams(-1, dp(46)))
+            pageContent.addView(infoCard("HentaiRead is available now. HitomiLA and AllPornComic are placeholders for future integrations."),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+            setContentView(root)
+            animateScreen(root)
+            return
+        }
+        if (showingJav) {
+            showJavHome()
+            return
+        }
+
+        // These source tabs belong inside the Hentai section.
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        sourceTabs.addView(actionButton("XAnime", !showingHentaini && !showingWatchAnimeHentai && !showingJav) {
+        sourceTabs.addView(actionButton("XAnime", !showingHentaini && !showingWatchAnimeHentai) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = false
@@ -382,7 +440,7 @@ class MainActivity : Activity() {
             showingFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
+        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
         sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
@@ -392,7 +450,7 @@ class MainActivity : Activity() {
             showingHentainiFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
+        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
         sourceTabs.addView(actionButton("WatchAnimeHentai", showingWatchAnimeHentai) {
             if (showingWatchAnimeHentai) return@actionButton
             showingHentaini = false
@@ -400,20 +458,8 @@ class MainActivity : Activity() {
             showingJav = false
             showingFavorites = false
             showHome()
-        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
-        sourceTabs.addView(actionButton("JAV", showingJav) {
-            if (showingJav) return@actionButton
-            showingHentaini = false
-            showingWatchAnimeHentai = false
-            showingJav = true
-            showingFavorites = false
-            showHome()
-        }, LinearLayout.LayoutParams(-2, dp(40)))
-        val sourceTabsScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(sourceTabs, ViewGroup.LayoutParams(-2, -2))
-        }
-        pageContent.addView(sourceTabsScroll, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(8) })
 
         if (showingHentaini) {
             showHentainiHome()
@@ -558,6 +604,11 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
+        if (showingComics) {
+            showingComics = false
+            showHome()
+            return
+        }
         if (showingJav) {
             val browser = javWebView
             if (browser != null) {
