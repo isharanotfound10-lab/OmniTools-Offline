@@ -884,24 +884,14 @@ class MainActivity : Activity() {
             if (!javVisibleResultUrls.add(item.url)) return@forEach
 
             val card = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(9), dp(9), dp(9), dp(9))
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12))
                 background = rounded(cardSurface(), cardRadius())
             }
-            val thumbnail = ImageView(this).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                background = rounded(surface2, 9)
-                contentDescription = "Thumbnail for " + item.title
-            }
-            card.addView(thumbnail, LinearLayout.LayoutParams(dp(104), dp(78)).apply {
-                marginEnd = dp(10)
-            })
             val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             details.addView(label(item.siteName.uppercase(), 9, accent, true))
             details.addView(label(item.title, 12, white, true).apply {
-                maxLines = 5
-                setPadding(0, dp(4), 0, dp(7))
+                setPadding(0, dp(5), 0, dp(8))
             })
             details.addView(actionButton("OPEN RESULT ↗", false) {
                 if (JavSiteCatalog.isAllowed(item.url)) {
@@ -914,7 +904,6 @@ class MainActivity : Activity() {
             list.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(9)
             })
-            if (item.thumbnail.isNotBlank()) loadImage(item.thumbnail, thumbnail)
             animateEntrance(card, list.childCount - 1)
         }
     }
@@ -1069,21 +1058,12 @@ class MainActivity : Activity() {
               const seen = new Set();
               for (const anchor of anchors) {
                 const heading = anchor.querySelector('h3');
-                const card = anchor.closest('div.MjjYud') ||
-                  anchor.parentElement?.parentElement || anchor.parentElement || anchor;
                 const href = anchor.href || anchor.getAttribute('href') || '';
                 if (!heading || !href || seen.has(href)) continue;
                 seen.add(href);
-                const snippetNode = card.querySelector(
-                  'div.VwiC3b, div[data-sncf], span.aCOpRe, .IsZvec, p'
-                );
-                const image = card.querySelector('img');
                 rows.push({
                   title: heading.innerText || heading.textContent || '',
-                  snippet: snippetNode ? (snippetNode.innerText || snippetNode.textContent || '') : '',
-                  text: card.innerText || card.textContent || '',
-                  url: href,
-                  image: image ? (image.src || image.getAttribute('data-src') || '') : ''
+                  url: href
                 });
                 if (rows.length >= 3) break;
               }
@@ -1136,25 +1116,15 @@ class MainActivity : Activity() {
                     for (index in 0 until minOf(rows.length(), 3)) {
                         val row = rows.optJSONObject(index) ?: continue
                         val title = row.optString("title").trim()
-                        val snippet = row.optString("snippet").trim()
-                        val resultText = row.optString("text").trim()
-                        val allText = listOf(title, snippet, resultText).filter { it.isNotBlank() }.joinToString(" ")
-                        if (!JavSearchRules.titleMatches(allText, javCodeQuery)) continue
-
-                        val displayTitle = when {
-                            JavSearchRules.titleMatches(snippet, javCodeQuery) -> snippet
-                            JavSearchRules.titleMatches(title, javCodeQuery) -> title
-                            else -> resultText.ifBlank { title }
-                        }.take(900)
+                        // Only the actual Google result heading is eligible.
+                        // Snippets, URLs and surrounding card text never qualify.
+                        if (title.isBlank() || !JavSearchRules.titleMatches(title, javCodeQuery)) continue
 
                         val target = resolveJavSearchUrl(row.optString("url"))
                         if (!JavSiteCatalog.hostMatchesSite(target, site) ||
                             !JavSiteCatalog.isAllowed(target)) continue
 
-                        val image = row.optString("image").trim().let {
-                            if (it.startsWith("https://", true) || it.startsWith("http://", true)) it else ""
-                        }
-                        matching.add(JavSearchResult(site.name, displayTitle, target, image))
+                        matching.add(JavSearchResult(site.name, title, target))
                     }
                     completeJavGoogleSite(token, matching)
                 } catch (_: Exception) {
