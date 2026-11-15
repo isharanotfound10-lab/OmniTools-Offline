@@ -893,7 +893,7 @@ class MainActivity : Activity() {
                                 img.absUrl("src").ifBlank { img.absUrl("data-src") }
                             }.orEmpty()
                             if (image.startsWith("data:", true)) image = ""
-                            if (image.isBlank()) {
+                            if (image.isBlank() && found.size < 10) {
                                 try {
                                     val metadataConnection = (URL(target).openConnection() as HttpURLConnection).apply {
                                         connectTimeout = 3000
