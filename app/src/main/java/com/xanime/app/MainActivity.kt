@@ -711,7 +711,7 @@ class MainActivity : Activity() {
         fun renderJavResults() {
             resultList.removeAllViews()
             if (javSearching) {
-                resultList.addView(infoCard("Searching Google across all 62 approved website domains. Only titles containing your code are kept."))
+                resultList.addView(infoCard("Searching Google 5 websites at a time. Results appear as each batch finishes; only matching video titles are shown."))
             } else if (javResults.isEmpty()) {
                 if (javCodeQuery.isNotBlank()) resultList.addView(infoCard("Google returned no indexed titles containing “${javCodeQuery}”. Some sites may block automated requests or may not be indexed by Google."))
                 return
