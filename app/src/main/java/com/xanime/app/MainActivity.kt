@@ -362,7 +362,7 @@ class MainActivity : Activity() {
             showingFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
+        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
         sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
@@ -372,14 +372,15 @@ class MainActivity : Activity() {
             showingHentainiFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
+        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
         sourceTabs.addView(actionButton("WatchAnimeHentai", showingWatchAnimeHentai) {
             if (showingWatchAnimeHentai) return@actionButton
             showingHentaini = false
             showingWatchAnimeHentai = true
+            showingJav = false
             showingFavorites = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
+        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
         sourceTabs.addView(actionButton("JAV", showingJav) {
             if (showingJav) return@actionButton
             showingHentaini = false
@@ -387,8 +388,12 @@ class MainActivity : Activity() {
             showingJav = true
             showingFavorites = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+        }, LinearLayout.LayoutParams(-2, dp(40)))
+        val sourceTabsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(sourceTabs, ViewGroup.LayoutParams(-2, -2))
+        }
+        pageContent.addView(sourceTabsScroll, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
 
         if (showingHentaini) {
             showHentainiHome()
@@ -863,19 +868,44 @@ class MainActivity : Activity() {
                                 !JavSiteCatalog.isAllowed(target) ||
                                 !JavSiteCatalog.hostMatchesSite(target, site)) null
                             else {
-                                val image = anchor.parent()?.parent()?.selectFirst("img")?.let { img ->
+                                var fullTitle = title
+                                var image = anchor.parent()?.parent()?.selectFirst("img")?.let { img ->
                                     img.absUrl("src").ifBlank { img.absUrl("data-src") }
                                 }.orEmpty()
-                                JavSearchResult(site.name, title, target, image)
+                                if (image.isBlank()) {
+                                    try {
+                                        val metadataConnection = (URL(target).openConnection() as HttpURLConnection).apply {
+                                            connectTimeout = 3500
+                                            readTimeout = 4000
+                                            instanceFollowRedirects = true
+                                            setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36")
+                                        }
+                                        val metadataHtml = try {
+                                            metadataConnection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(500_000) }
+                                        } finally { metadataConnection.disconnect() }
+                                        val metadata = Jsoup.parse(metadataHtml, target)
+                                        val ogTitle = metadata.selectFirst("meta[property=og:title]")?.attr("content")?.trim().orEmpty()
+                                        if (ogTitle.isNotBlank() && JavSearchRules.titleMatches(ogTitle, code)) fullTitle = ogTitle
+                                        image = metadata.selectFirst("meta[property=og:image]")?.let { it.absUrl("content") }.orEmpty()
+                                    } catch (_: Exception) { }
+                                }
+                                if (!JavSearchRules.titleMatches(fullTitle, code)) null
+                                else JavSearchResult(site.name, fullTitle, target, image)
                             }
                         }.firstOrNull()
                     } catch (_: Exception) { null }
                 })
             }
             val found = mutableListOf<JavSearchResult>()
+            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(38)
             tasks.forEach { task ->
-                try { task.get(8, java.util.concurrent.TimeUnit.SECONDS)?.let { found.add(it) } }
-                catch (_: Exception) { task.cancel(true) }
+                val remaining = deadline - System.nanoTime()
+                if (remaining <= 0L) {
+                    task.cancel(true)
+                } else {
+                    try { task.get(remaining, java.util.concurrent.TimeUnit.NANOSECONDS)?.let { found.add(it) } }
+                    catch (_: Exception) { task.cancel(true) }
+                }
             }
             val unique = found.distinctBy { it.url }.sortedBy { it.siteName.lowercase() }
             main.post {
