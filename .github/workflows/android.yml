@@ -26,4 +26,4 @@ jobs:
           name: XAnime-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-# Rebuild JAV tab APK after Mojeek search updates.
+# Build APK for the user-confirmed 48-site JAV directory.
