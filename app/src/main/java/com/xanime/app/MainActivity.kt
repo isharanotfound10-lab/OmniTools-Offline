@@ -40,6 +40,13 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.CookieManager
+import android.webkit.WebSettings
+import android.webkit.URLUtil
 import android.animation.ValueAnimator
 import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
@@ -47,9 +54,9 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.Executors
 import java.util.concurrent.ExecutorCompletionService
+import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Semaphore
-import java.util.concurrent.Callable
 import java.util.concurrent.Future
 import org.jsoup.Jsoup
 
@@ -115,6 +122,30 @@ class MainActivity : Activity() {
     private var showingFavorites = false
     private var showingHentaini = false
     private var showingWatchAnimeHentai = false
+    private var showingJav = false
+    private var javSiteFilter = ""
+    private var javCodeQuery = ""
+    private var javResults: List<JavSearchResult> = emptyList()
+    private var javSearching = false
+    private var javSitesChecked = 0
+    private var javSitesTotal = JavSiteCatalog.sites.size
+    @Volatile private var javSearchGeneration = 0
+    private var javStatusView: TextView? = null
+    private var javProgressView: ProgressBar? = null
+    private var javResultListView: LinearLayout? = null
+    private var javSearchButton: Button? = null
+    private var javCurrentSite = ""
+    private var javSitesFailed = 0
+    private val javVisibleResultUrls = mutableSetOf<String>()
+    private var javSearchWebView: WebView? = null
+    private var javSearchPageToken = 0
+    private var javSearchHandledToken = -1
+    private var javSearchActiveSite: JavSite? = null
+    private var javSearchTimeout: Runnable? = null
+    private var javLastSearchError = ""
+    private var javBrowserUrl: String? = null
+    private var javBrowserTitle = "JAV"
+    private var javWebView: WebView? = null
     private var watchAnimeQuery = ""
     private var watchAnimeSelectedGenre: String? = null
     private val watchAnimeGenres = listOf("Action" to "action",
@@ -260,6 +291,10 @@ class MainActivity : Activity() {
         worker.shutdownNow()
         detailWorker.shutdownNow()
         imageWorker.shutdownNow()
+        javSearchTimeout?.let { main.removeCallbacks(it) }
+        javSearchWebView?.stopLoading()
+        javSearchWebView?.destroy()
+        javSearchWebView = null
         ambientBackground?.stop()
         activeShimmers.forEach { it.stop() }
         activeShimmers.clear()
@@ -322,7 +357,7 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!showingWatchAnimeHentai) {
+        if (!showingWatchAnimeHentai && !showingJav) {
             header.addView(actionButton(
                 if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
                 else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
@@ -338,32 +373,47 @@ class MainActivity : Activity() {
         pageContent.addView(header)
 
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        sourceTabs.addView(actionButton("XAnime", !showingHentaini && !showingWatchAnimeHentai) {
+        sourceTabs.addView(actionButton("XAnime", !showingHentaini && !showingWatchAnimeHentai && !showingJav) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = false
             showingWatchAnimeHentai = false
+            showingJav = false
             showingFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
+        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
         sourceTabs.addView(actionButton("Hentaini", showingHentaini) {
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
             showingHentaini = true
             showingWatchAnimeHentai = false
+            showingJav = false
             showingHentainiFavorites = keepFavorites
             watchAnimeLoading = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f).apply { marginEnd = dp(6) })
+        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
         sourceTabs.addView(actionButton("WatchAnimeHentai", showingWatchAnimeHentai) {
             if (showingWatchAnimeHentai) return@actionButton
             showingHentaini = false
             showingWatchAnimeHentai = true
+            showingJav = false
             showingFavorites = false
             showHome()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
+        }, LinearLayout.LayoutParams(-2, dp(40)).apply { marginEnd = dp(6) })
+        sourceTabs.addView(actionButton("JAV", showingJav) {
+            if (showingJav) return@actionButton
+            showingHentaini = false
+            showingWatchAnimeHentai = false
+            showingJav = true
+            showingFavorites = false
+            showHome()
+        }, LinearLayout.LayoutParams(-2, dp(40)))
+        val sourceTabsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(sourceTabs, ViewGroup.LayoutParams(-2, -2))
+        }
+        pageContent.addView(sourceTabsScroll, LinearLayout.LayoutParams(-1, dp(42)).apply { topMargin = dp(12) })
 
         if (showingHentaini) {
             showHentainiHome()
@@ -371,6 +421,10 @@ class MainActivity : Activity() {
         }
         if (showingWatchAnimeHentai) {
             showWatchAnimeHentaiHome()
+            return
+        }
+        if (showingJav) {
+            showJavHome()
             return
         }
 
@@ -504,6 +558,29 @@ class MainActivity : Activity() {
     }
 
     override fun onBackPressed() {
+        if (showingJav) {
+            val browser = javWebView
+            if (browser != null) {
+                if (browser.canGoBack()) browser.goBack()
+                else {
+                    browser.stopLoading()
+                    browser.destroy()
+                    javWebView = null
+                    javBrowserUrl = null
+                    showHome()
+                }
+            } else {
+                javSearchGeneration++
+                javSearching = false
+                javSearchTimeout?.let { main.removeCallbacks(it) }
+                javSearchWebView?.stopLoading()
+                javSearchWebView?.destroy()
+                javSearchWebView = null
+                showingJav = false
+                showHome()
+            }
+            return
+        }
         if (showingWatchAnimeHentai && watchAnimeSelectedSeries != null) {
             watchAnimeSeriesRequestId++
             watchAnimeSelectedSeries = null
@@ -521,6 +598,629 @@ class MainActivity : Activity() {
     }
 
 
+
+
+    private fun showJavHome() {
+        javStatusView = null
+        javProgressView = null
+        javResultListView = null
+        javSearchButton = null
+        javVisibleResultUrls.clear()
+
+        pageContent.addView(label("JAV", 22, white, true).apply {
+            setPadding(0, dp(20), 0, dp(4))
+        })
+        pageContent.addView(label("62 WEBSITES • SEARCH BY CODE", 10, muted, true).apply {
+            letterSpacing = .1f
+            setPadding(0, 0, 0, dp(12))
+        })
+
+        pageContent.addView(label("WEBSITE DIRECTORY", 10, accent, true).apply {
+            setPadding(0, dp(4), 0, dp(7))
+        })
+        val siteFilter = EditText(this).apply {
+            hint = "Find a website..."
+            setHintTextColor(muted)
+            setTextColor(white)
+            textSize = 14f
+            isSingleLine = true
+            setPadding(dp(13), 0, dp(10), 0)
+            background = ripple(glassDrawable(14))
+            setText(javSiteFilter)
+        }
+        pageContent.addView(siteFilter, LinearLayout.LayoutParams(-1, dp(42)))
+        val siteList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(7), dp(7), dp(7), dp(7))
+            background = rounded(surface, 14)
+        }
+        val siteScroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        }
+        siteScroll.addView(siteList, ViewGroup.LayoutParams(-1, -2))
+        pageContent.addView(siteScroll, LinearLayout.LayoutParams(-1, dp(206)).apply {
+            topMargin = dp(7)
+        })
+
+        fun renderSites(filter: String) {
+            siteList.removeAllViews()
+            val matches = JavSiteCatalog.sites.filter {
+                it.name.contains(filter, true) || it.host.contains(filter, true)
+            }
+            if (matches.isEmpty()) {
+                siteList.addView(label("No matching websites", 12, muted, false).apply {
+                    setPadding(dp(9), dp(12), dp(9), dp(12))
+                })
+                return
+            }
+            matches.forEachIndexed { index, site ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(9), dp(8), dp(8), dp(8))
+                    background = ripple(rounded(if (index % 2 == 0) surface2 else Color.TRANSPARENT, 10))
+                    isClickable = true
+                    isFocusable = true
+                    setOnClickListener { openJavBrowser(site.name, site.homeUrl) }
+                }
+                val names = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                names.addView(label(site.name, 13, white, true))
+                names.addView(label(site.host, 10, muted, false).apply { setPadding(0, dp(2), 0, 0) })
+                row.addView(names, LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(label("OPEN  ›", 10, accent, true))
+                siteList.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+                    bottomMargin = dp(4)
+                })
+            }
+        }
+        renderSites(javSiteFilter)
+        siteFilter.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                javSiteFilter = s?.toString().orEmpty()
+                renderSites(javSiteFilter)
+            }
+        })
+
+        pageContent.addView(label("BULK CODE SEARCH", 10, accent, true).apply {
+            setPadding(0, dp(17), 0, dp(7))
+        })
+        val codeInput = EditText(this).apply {
+            hint = "Enter code (e.g. ABC-123)"
+            setHintTextColor(muted)
+            setTextColor(white)
+            textSize = 15f
+            isSingleLine = true
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(13), 0, dp(10), 0)
+            background = ripple(glassDrawable(14))
+            setText(javCodeQuery)
+            isEnabled = !javSearching
+        }
+        val searchRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchRow.addView(codeInput, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+            marginEnd = dp(7)
+        })
+        val searchButton = actionButton("SEARCH ↗") {
+            javCodeQuery = codeInput.text.toString().trim()
+            runJavBulkSearch()
+        }
+        javSearchButton = searchButton
+        searchRow.addView(searchButton, LinearLayout.LayoutParams(dp(94), dp(46)))
+        pageContent.addView(searchRow)
+        codeInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_SEARCH && !javSearching) {
+                javCodeQuery = codeInput.text.toString().trim()
+                runJavBulkSearch()
+                true
+            } else false
+        }
+
+        val resultStatus = label("", 12, muted, true).apply {
+            setPadding(0, dp(13), 0, dp(7))
+        }
+        javStatusView = resultStatus
+        pageContent.addView(resultStatus)
+
+        val resultProgress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = false
+            max = javSitesTotal.coerceAtLeast(1)
+            progress = javSitesChecked.coerceIn(0, max)
+            visibility = if (javSearching || javSitesChecked > 0) View.VISIBLE else View.GONE
+        }
+        javProgressView = resultProgress
+        pageContent.addView(resultProgress, LinearLayout.LayoutParams(-1, dp(4)))
+
+        val resultList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(12))
+        }
+        javResultListView = resultList
+        pageContent.addView(resultList, LinearLayout.LayoutParams(-1, -2))
+
+        // A single small, non-interactive WebView loads Mojeek's normal search page.
+        // We read only Mojeek's result cards; destination pages are never fetched.
+        javSearchWebView?.stopLoading()
+        javSearchWebView?.destroy()
+        javSearchWebView = WebView(this).apply {
+            // Keep a real render surface: fully transparent 1dp WebViews may
+            // be throttled or return an incomplete responsive Mojeek page.
+            alpha = 0.01f
+            isClickable = false
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.loadsImagesAutomatically = false
+            settings.javaScriptCanOpenWindowsAutomatically = false
+            settings.setSupportMultipleWindows(false)
+            settings.cacheMode = WebSettings.LOAD_DEFAULT
+            settings.userAgentString =
+                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+            CookieManager.getInstance().setAcceptCookie(true)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView, url: String) {
+                    super.onPageFinished(view, url)
+                    if (view === javSearchWebView) readJavSearchResults(view, javSearchPageToken)
+                }
+
+                override fun onReceivedError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    error: android.webkit.WebResourceError
+                ) {
+                    super.onReceivedError(view, request, error)
+                    if (view === javSearchWebView && request.isForMainFrame) {
+                        completeJavSearchSite(
+                            javSearchPageToken,
+                            emptyList(),
+                            "WebView " + error.errorCode + ": " + error.description
+                        )
+                    }
+                }
+
+                override fun onReceivedHttpError(
+                    view: WebView,
+                    request: WebResourceRequest,
+                    errorResponse: android.webkit.WebResourceResponse
+                ) {
+                    super.onReceivedHttpError(view, request, errorResponse)
+                    if (view === javSearchWebView && request.isForMainFrame &&
+                        errorResponse.statusCode >= 400) {
+                        completeJavSearchSite(
+                            javSearchPageToken,
+                            emptyList(),
+                            "Mojeek HTTP " + errorResponse.statusCode
+                        )
+                    }
+                }
+            }
+        }
+        val screenWidthDp = (resources.displayMetrics.widthPixels /
+            resources.displayMetrics.density).toInt().coerceAtLeast(320)
+        val mojeekSearchViewport = android.widget.FrameLayout(this).apply {
+            // The tiny host must not clip the full-size WebView child.
+            clipChildren = false
+            clipToPadding = false
+            addView(
+                javSearchWebView,
+                android.widget.FrameLayout.LayoutParams(screenWidthDp.let { dp(it) }, dp(640))
+            )
+        }
+        root.clipChildren = false
+        root.clipToPadding = false
+        // Insert behind the scrollable UI so the off-screen search view never
+        // covers taps or changes the visible JAV layout.
+        root.addView(mojeekSearchViewport, 0, LinearLayout.LayoutParams(dp(1), dp(1)))
+
+        if (javResults.isNotEmpty()) {
+            appendJavResultCards(javResults)
+            if (!javSearching && javSitesFailed > 0) {
+                resultList.addView(infoCard(javSitesFailed.toString() +
+                    " websites could not be searched. Mojeek may have blocked or failed those requests."))
+            }
+        } else {
+            val message = when {
+                javSearching -> "Searching all 62 websites with Mojeek. Matching titles appear here as each search finishes."
+                javSitesChecked >= javSitesTotal && javSitesTotal > 0 ->
+                    "Search finished. No matching results were found in the first ten Mojeek results of the checked websites."
+                javCodeQuery.isBlank() -> "Matching results will appear here after you search for a code."
+                else -> "No matching results were found."
+            }
+            setJavPlaceholder(message)
+        }
+
+        updateJavSearchUi()
+        setContentView(root)
+        animateScreen(root)
+        scroll.post { loadVisibleImages(pageContent) }
+    }
+
+    private fun setJavPlaceholder(message: String) {
+        val list = javResultListView ?: return
+        list.removeAllViews()
+        list.addView(infoCard(message).apply { tag = "jav-placeholder" })
+    }
+
+    private fun updateJavSearchUi() {
+        javStatusView?.text = when {
+            javSearching -> {
+                val current = javCurrentSite.ifBlank { "next website" }
+                "Searching " + current + " • " + javSitesChecked + " / " + javSitesTotal +
+                    " checked • " + javResults.size + " results" +
+                    if (javSitesFailed > 0) " • " + javSitesFailed + " errors" else ""
+            }
+            javSitesChecked > 0 ->
+                javSitesChecked.toString() + " / " + javSitesTotal + " websites checked • " +
+                    javResults.size + " results" +
+                    if (javSitesFailed > 0) " • " + javSitesFailed + " errors" else ""
+            javCodeQuery.isBlank() -> "Enter a code to search across the directory."
+            else -> javResults.size.toString() + " matching results"
+        }
+        javProgressView?.apply {
+            isIndeterminate = false
+            max = javSitesTotal.coerceAtLeast(1)
+            progress = javSitesChecked.coerceIn(0, max)
+            visibility = if (javSearching || javSitesChecked > 0) View.VISIBLE else View.GONE
+        }
+        javSearchButton?.isEnabled = !javSearching
+        javSearchButton?.alpha = if (javSearching) 0.55f else 1f
+    }
+
+    private fun appendJavResultCards(items: List<JavSearchResult>) {
+        val list = javResultListView ?: return
+        if (items.isEmpty()) return
+        if (list.childCount > 0 && list.getChildAt(0).tag == "jav-placeholder") {
+            list.removeAllViews()
+        }
+
+        items.forEach { item ->
+            if (!javVisibleResultUrls.add(item.url)) return@forEach
+
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                background = rounded(cardSurface(), cardRadius())
+            }
+            val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            details.addView(label(item.siteName.uppercase(), 9, accent, true))
+            details.addView(label(item.title, 12, white, true).apply {
+                setPadding(0, dp(5), 0, dp(8))
+            })
+            details.addView(actionButton("OPEN RESULT ↗", false) {
+                if (JavSiteCatalog.isAllowed(item.url)) {
+                    openJavBrowser(item.siteName, item.url)
+                } else {
+                    Toast.makeText(this, "This result is outside the approved website list.", Toast.LENGTH_SHORT).show()
+                }
+            }, LinearLayout.LayoutParams(-1, dp(36)))
+            card.addView(details, LinearLayout.LayoutParams(-1, -2))
+            list.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(9)
+            })
+            animateEntrance(card, list.childCount - 1)
+        }
+    }
+
+    private fun openJavBrowser(title: String, url: String) {
+        if (!JavSiteCatalog.isAllowed(url)) {
+            Toast.makeText(this, "That address is not in the JAV website list.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        javBrowserTitle = title
+        javBrowserUrl = url
+        val page = baseLayout()
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        toolbar.addView(actionButton("‹ RESULTS", false) {
+            javWebView?.stopLoading()
+            javWebView?.destroy()
+            javWebView = null
+            javBrowserUrl = null
+            showHome()
+        }, LinearLayout.LayoutParams(dp(104), dp(42)).apply { marginEnd = dp(8) })
+        toolbar.addView(label(title, 14, white, true), LinearLayout.LayoutParams(0, -2, 1f))
+        toolbar.addView(actionButton("↻", false) { javWebView?.reload() },
+            LinearLayout.LayoutParams(dp(44), dp(42)))
+        page.addView(toolbar)
+        page.addView(label(Uri.parse(url).host.orEmpty(), 10, muted, false).apply {
+            setPadding(0, dp(5), 0, dp(8))
+        })
+        val browser = WebView(this).apply {
+            setBackgroundColor(Color.WHITE)
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.loadsImagesAutomatically = true
+            settings.javaScriptCanOpenWindowsAutomatically = false
+            settings.setSupportMultipleWindows(false)
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            settings.cacheMode = WebSettings.LOAD_DEFAULT
+            settings.userAgentString = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+            CookieManager.getInstance().setAcceptCookie(true)
+            CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val scheme = request.url.scheme?.lowercase()
+                    if (scheme != "http" && scheme != "https") return true
+                    return request.isForMainFrame && !JavSiteCatalog.isAllowed(request.url.toString())
+                }
+                override fun onReceivedSslError(view: WebView, handler: android.webkit.SslErrorHandler, error: android.net.http.SslError) {
+                    handler.cancel()
+                }
+            }
+            webChromeClient = WebChromeClient()
+            setDownloadListener { downloadUrl, userAgent, contentDisposition, mimeType, _ ->
+                try {
+                    val request = DownloadManager.Request(Uri.parse(downloadUrl)).apply {
+                        setTitle(contentDisposition?.substringAfter("filename=")?.trim('"') ?: title)
+                        setDescription("JAV download")
+                        setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
+                        addRequestHeader("User-Agent", userAgent ?: settings.userAgentString)
+                        addRequestHeader("Referer", url)
+                        mimeType?.let { setMimeType(it) }
+                        val guessedName = URLUtil.guessFileName(downloadUrl, contentDisposition, mimeType)
+                        val safeName = guessedName.replace(Regex("[\\u0000-\\u001F\\\\/:*?\"<>|]"), "_")
+                            .take(140).ifBlank { "XAnime_${System.currentTimeMillis()}" }
+                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, safeName)
+                    }
+                    (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+                    Toast.makeText(this@MainActivity, "Download started • check notifications", Toast.LENGTH_LONG).show()
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, "Could not start this download.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        javWebView = browser
+        page.addView(browser, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(page)
+        animateScreen(page)
+        browser.loadUrl(url)
+    }
+
+    private fun runJavBulkSearch() {
+        val code = javCodeQuery.trim()
+        if (code.isBlank()) {
+            Toast.makeText(this, "Enter a JAV code first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (javSearching) return
+
+        val mojeekView = javSearchWebView
+        if (mojeekView == null) {
+            Toast.makeText(this, "Mojeek search view is not ready. Reopen the JAV tab.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        javSearching = true
+        javResults = emptyList()
+        javSitesChecked = 0
+        javSitesFailed = 0
+        javLastSearchError = ""
+        javCurrentSite = JavSiteCatalog.sites.firstOrNull()?.name.orEmpty()
+        javSitesTotal = JavSiteCatalog.sites.size
+        javVisibleResultUrls.clear()
+        setJavPlaceholder("Starting Mojeek search. Checking all 62 websites one at a time.")
+        updateJavSearchUi()
+
+        val requestId = ++javSearchGeneration
+        javCurrentSite = ""
+        searchNextJavSearchSite(requestId, 0)
+    }
+
+    private fun searchNextJavSearchSite(requestId: Int, index: Int) {
+        if (requestId != javSearchGeneration || !javSearching || isFinishing) return
+        val sites = JavSiteCatalog.sites
+        if (index >= sites.size) {
+            finishJavSearch(requestId)
+            return
+        }
+
+        val site = sites[index]
+        javSearchActiveSite = site
+        javCurrentSite = site.name
+        updateJavSearchUi()
+
+        val query = URLEncoder.encode(javCodeQuery.trim() + " site:" + site.host, "UTF-8")
+        val searchUrl = "https://www.mojeek.com/search?q=" + query + "&s=0&safe=0"
+        val token = ++javSearchPageToken
+        javSearchHandledToken = -1
+        javSearchTimeout?.let { main.removeCallbacks(it) }
+        val timeout = Runnable {
+            completeJavSearchSite(token, emptyList(), "Mojeek search timed out")
+        }
+        javSearchTimeout = timeout
+        main.postDelayed(timeout, 25000L)
+
+        try {
+            javSearchWebView?.loadUrl(searchUrl)
+        } catch (_: Exception) {
+            completeJavSearchSite(token, emptyList(), "Could not open Mojeek's search page")
+        }
+    }
+
+    private fun readJavSearchResults(view: WebView, token: Int) {
+        if (token != javSearchPageToken || token == javSearchHandledToken || !javSearching) return
+
+        val script = """
+            (function() {
+              const rows = [];
+              const seen = new Set();
+              // Mojeek's organic result title and destination are separate:
+              // the title is in li > h2 > a, while the outbound URL is a.ob.
+              // Pair them through the containing result <li>; do not read
+              // the title from a.ob because that anchor often has no text.
+              const resultLinks = Array.from(document.querySelectorAll(
+                'ul.results-standard > li a.ob[href], ul.results-standard li a.ob[href], .results-standard li a.ob[href]'
+              ));
+              for (const resultLink of resultLinks) {
+                const card = resultLink.closest('li') || resultLink.parentElement;
+                const titleLink = card ? card.querySelector('h2 a[href], h2 a') : null;
+                const title = (titleLink ? (titleLink.innerText || titleLink.textContent || '') : '')
+                  .replace(/\\s+/g, ' ').trim();
+                const href = resultLink.href || resultLink.getAttribute('href') || '';
+                if (!title || !href) continue;
+                let parsed;
+                try { parsed = new URL(href, location.href); } catch (_) { continue; }
+                if (!/^https?:$/.test(parsed.protocol)) continue;
+                if (parsed.hostname === location.hostname || seen.has(parsed.href)) continue;
+                seen.add(parsed.href);
+                rows.push({ title: title, url: parsed.href });
+                if (rows.length >= 20) break;
+              }
+              return {
+                pageTitle: document.title || '',
+                pageUrl: location.href,
+                bodyText: (document.body ? document.body.innerText : '').slice(0, 3500),
+                resultHeadingCount: document.querySelectorAll('ul.results-standard li h2 a').length,
+                outboundResultCount: resultLinks.length,
+                results: rows
+              };
+            })();
+        """.trimIndent()
+
+        try {
+            view.evaluateJavascript(script) { raw ->
+                if (token != javSearchPageToken || token == javSearchHandledToken || !javSearching) return@evaluateJavascript
+                try {
+                    if (raw.isNullOrBlank() || raw == "null") {
+                        completeJavSearchSite(token, emptyList(), "Mojeek result page could not be read")
+                        return@evaluateJavascript
+                    }
+                    val payload = org.json.JSONObject(raw)
+                    val pageTitle = payload.optString("pageTitle").lowercase()
+                    val bodyText = payload.optString("bodyText")
+                    val lowerBody = bodyText.lowercase()
+
+                    if (pageTitle.contains("sorry") || lowerBody.contains("unusual traffic") ||
+                        lowerBody.contains("automated requests") || lowerBody.contains("access denied") ||
+                        lowerBody.contains("not a robot") || lowerBody.contains("captcha") ||
+                        lowerBody.contains("verify you are human")) {
+                        completeJavSearchSite(token, emptyList(), "Mojeek blocked or challenged the request")
+                        return@evaluateJavascript
+                    }
+
+                    val rows = payload.optJSONArray("results")
+                    if (rows == null || rows.length() == 0) {
+                        val genuineEmpty = lowerBody.contains("no results found") ||
+                            lowerBody.contains("no results for") ||
+                            lowerBody.contains("did not match any documents")
+                        if (genuineEmpty) completeJavSearchSite(token, emptyList())
+                        else completeJavSearchSite(token, emptyList(), "Mojeek result layout could not be read")
+                        return@evaluateJavascript
+                    }
+
+                    val site = javSearchActiveSite
+                    if (site == null) {
+                        completeJavSearchSite(token, emptyList(), "Website tracking failed")
+                        return@evaluateJavascript
+                    }
+
+                    val matching = mutableListOf<JavSearchResult>()
+                    for (index in 0 until minOf(rows.length(), 10)) {
+                        val row = rows.optJSONObject(index) ?: continue
+                        val title = row.optString("title").trim()
+                        // Only the actual Mojeek result heading is eligible.
+                        // Snippets, URLs and surrounding card text never qualify.
+                        if (title.isBlank() || !JavSearchRules.titleMatches(title, javCodeQuery)) continue
+
+                        val target = resolveJavSearchUrl(row.optString("url"))
+                        if (!JavSiteCatalog.hostMatchesSite(target, site) ||
+                            !JavSiteCatalog.isAllowed(target)) continue
+
+                        matching.add(JavSearchResult(site.name, title, target))
+                    }
+                    completeJavSearchSite(token, matching)
+                } catch (_: Exception) {
+                    completeJavSearchSite(token, emptyList(), "Mojeek result data could not be parsed")
+                }
+            }
+        } catch (_: Exception) {
+            completeJavSearchSite(token, emptyList(), "Could not read Mojeek's search results")
+        }
+    }
+
+    private fun completeJavSearchSite(
+        token: Int,
+        results: List<JavSearchResult>,
+        error: String? = null
+    ) {
+        if (token != javSearchPageToken || token == javSearchHandledToken || !javSearching) return
+        javSearchHandledToken = token
+        javSearchTimeout?.let { main.removeCallbacks(it) }
+        javSearchTimeout = null
+
+        javSitesChecked = (javSitesChecked + 1).coerceAtMost(javSitesTotal)
+        if (error != null) {
+            javSitesFailed++
+            javLastSearchError = error
+        }
+        val newResults = results.filter { javVisibleResultUrls.add(it.url) }
+        if (newResults.isNotEmpty()) {
+            javResults = javResults + newResults
+            appendJavResultCards(newResults)
+        }
+        updateJavSearchUi()
+
+        if (javSitesChecked >= javSitesTotal) {
+            finishJavSearch(javSearchGeneration)
+        } else {
+            searchNextJavSearchSite(javSearchGeneration, javSitesChecked)
+        }
+    }
+
+    private fun finishJavSearch(requestId: Int) {
+        if (requestId != javSearchGeneration || !javSearching) return
+        javSearching = false
+        javCurrentSite = ""
+        javSearchTimeout?.let { main.removeCallbacks(it) }
+        javSearchTimeout = null
+
+        if (javResults.isEmpty()) {
+            val summary = when {
+                javSitesFailed >= javSitesTotal ->
+                    "All " + javSitesTotal + " searches failed. Last error: " +
+                        javLastSearchError.take(180) +
+                        ". This is not a confirmed zero-result search."
+                javSitesFailed > 0 ->
+                    "No matching results were found in the Mojeek results we could read. " +
+                        javSitesFailed + " websites could not be checked because Mojeek did not return a readable result page."
+                else ->
+                    "No matching results were found in the first ten Mojeek results from the 62 websites."
+            }
+            setJavPlaceholder(summary)
+        } else if (javSitesFailed > 0) {
+            javResultListView?.addView(infoCard(
+                javSitesFailed.toString() +
+                    " websites could not be checked because Mojeek did not return a readable result page."
+            ))
+        }
+        updateJavSearchUi()
+        Toast.makeText(
+            this,
+            if (javResults.isEmpty()) "Search finished • " + javSitesFailed + " site errors"
+            else javResults.size.toString() + " results • checked " + javSitesChecked + " / " + javSitesTotal,
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    private fun resolveJavSearchUrl(raw: String): String {
+        return try {
+            val uri = Uri.parse(raw)
+            val redirect = uri.getQueryParameter("q") ?: uri.getQueryParameter("url")
+            if (!redirect.isNullOrBlank()) redirect else raw
+        } catch (_: Exception) {
+            raw
+        }
+    }
 
     private fun showWatchAnimeHentaiHome() {
         pageContent.addView(label("WATCH ANIME HENTAI", 22, white, true).apply {
