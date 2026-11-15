@@ -46,6 +46,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.CookieManager
 import android.webkit.WebSettings
+import android.webkit.URLUtil
 import android.animation.ValueAnimator
 import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
@@ -816,7 +817,10 @@ class MainActivity : Activity() {
                         addRequestHeader("User-Agent", userAgent ?: settings.userAgentString)
                         addRequestHeader("Referer", url)
                         mimeType?.let { setMimeType(it) }
-                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "XAnime_${System.currentTimeMillis()}")
+                        val guessedName = URLUtil.guessFileName(downloadUrl, contentDisposition, mimeType)
+                        val safeName = guessedName.replace(Regex("[\\u0000-\\u001F\\\\/:*?\"<>|]"), "_")
+                            .take(140).ifBlank { "XAnime_${System.currentTimeMillis()}" }
+                        setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, safeName)
                     }
                     (getSystemService(DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
                     Toast.makeText(this@MainActivity, "Download started • check notifications", Toast.LENGTH_LONG).show()
@@ -893,8 +897,8 @@ class MainActivity : Activity() {
                                 if (!JavSearchRules.titleMatches(fullTitle, code)) null
                                 else JavSearchResult(site.name, fullTitle, target, image)
                             }
-                        }.firstOrNull()
-                    } catch (_: Exception) { null }
+                        }.take(3).toList()
+                    } catch (_: Exception) { emptyList() }
                 })
             }
             val found = mutableListOf<JavSearchResult>()
@@ -904,7 +908,7 @@ class MainActivity : Activity() {
                 if (remaining <= 0L) {
                     task.cancel(true)
                 } else {
-                    try { task.get(remaining, java.util.concurrent.TimeUnit.NANOSECONDS)?.let { found.add(it) } }
+                    try { found.addAll(task.get(remaining, java.util.concurrent.TimeUnit.NANOSECONDS)) }
                     catch (_: Exception) { task.cancel(true) }
                 }
             }
