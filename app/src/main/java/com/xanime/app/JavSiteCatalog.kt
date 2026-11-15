@@ -15,7 +15,7 @@ data class JavSearchResult(
 )
 
 object JavSiteCatalog {
-    // Exactly the 62 website entries (#1–#62) on the supplied directory page.
+    // Exactly the 48 user-selected working websites, retained in original directory order.
     // The three Reddit community entries are intentionally excluded.
     val sites = listOf(
         JavSite("MissAV", "missav.ws"),
@@ -24,10 +24,8 @@ object JavSiteCatalog {
         JavSite("JavGuru", "jav.guru"),
         JavSite("JAVMost", "javmost.ws"),
         JavSite("KissJAV (ShyAV)", "kissjav.com"),
-        JavSite("7MMTV", "7mmtv.tv"),
         JavSite("BestJavPorn", "bestjavporn.com"),
         JavSite("JAV GIGA", "javgiga.com"),
-        JavSite("JavDoe", "javdoe.com"),
         JavSite("JavBangers", "javbangers.com"),
         JavSite("91Porn", "91porn.com"),
         JavSite("JAVHD.today", "javhd.today"),
@@ -38,23 +36,17 @@ object JavSiteCatalog {
         JavSite("JAV Tsunami", "javtsunami.com"),
         JavSite("Korean Porn Movie", "koreanpornmovie.com"),
         JavSite("nJAV", "njav.com"),
-        JavSite("JAVSB", "jav.sb"),
         JavSite("MythAV", "mythav.com"),
-        JavSite("xKorean", "xkorean.biz"),
         JavSite("TokyoMotion.net", "tokyomotion.net"),
         JavSite("Japan Whores", "japan-whores.com"),
-        JavSite("FC2PPV", "fc2ppv.tv"),
         JavSite("HereXXX", "herexxx.com"),
         JavSite("SexKbj", "sexkbj.com"),
         JavSite("JAVLeak", "javleak.com"),
         JavSite("JavFun", "javfun.me"),
-        JavSite("AVCrempie", "avcrempie.com"),
         JavSite("JavBraze", "javbraze.com"),
         JavSite("JAVhay", "javhay.net"),
         JavSite("BlackedJAV", "blackedjav.com"),
         JavSite("ABJAV", "abjav.com"),
-        JavSite("PornHub Asian", "pornhub.com"),
-        JavSite("XNXX Japan", "xnxx.com"),
         JavSite("123AV", "njav.tv"),
         JavSite("Senzuri Tube", "senzuri.tube"),
         JavSite("Roshy", "roshy.tv"),
@@ -62,22 +54,16 @@ object JavSiteCatalog {
         JavSite("nJAV TV", "njavtv.cc"),
         JavSite("TokyoMotion", "tokyomotion.com"),
         JavSite("FunLove", "funlove.info"),
-        JavSite("MaxJAV", "maxjav.com"),
         JavSite("Ark JAV", "arkjav.com"),
         JavSite("JAV WINE", "jav.wine"),
         JavSite("JAVHDTube", "javhdtube.com"),
-        JavSite("JavBest TV", "javbest.tv"),
-        JavSite("BestJapanesePorn.tv", "bestjapaneseporn.tv"),
         JavSite("JAV.com.co", "jav.com.co"),
-        JavSite("VivaMaxPH", "vivamaxph.com"),
         JavSite("AVHWA", "avhwa.com"),
         JavSite("AV Porner", "avporner.com"),
         JavSite("ZeroJAV", "zerojav.com"),
         JavSite("Jav Mobile", "javmobile.net"),
-        JavSite("VivamaxStream", "vivamaxstream.com"),
         JavSite("Ikisoda", "ikisoda.com"),
         JavSite("AsianViral", "asianviral.net"),
-        JavSite("XXBUM", "xxbum.com"),
         JavSite("JAVMIT", "javmit.com"),
         JavSite("OMGJAV", "omgjav.com")
     )
