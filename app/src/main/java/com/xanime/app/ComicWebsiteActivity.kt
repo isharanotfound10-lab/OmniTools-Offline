@@ -1080,6 +1080,9 @@ class ComicWebsiteActivity : Activity() {
             // Eporner mobile top ad container and its inner slot.
             '#admobiletop',
             '#admobiletopinside',
+            // Eporner mobile outstream ad container and its inner slot.
+            '#admobileoutstream',
+            '#ifadoutstream',
             '#btasd',
             '#footadframe',
             'iframe[data-ep-adzone="desktop.inplayer"]',
