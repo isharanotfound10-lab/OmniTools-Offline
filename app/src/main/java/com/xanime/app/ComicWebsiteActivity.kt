@@ -1111,22 +1111,25 @@ class ComicWebsiteActivity : Activity() {
           // The copied value is exactly: ".download " + the selected quality URL.
           function convertQualityLinks() {
             if (!document.documentElement) return;
-            document.querySelectorAll('a[href]').forEach(function(link) {
+            document.querySelectorAll('#hd-porn-dload a[href]').forEach(function(link) {
               if (!link.isConnected || link.dataset.xanimeCopyQuality === '1') return;
-              var label = (link.textContent || '').replace(/\s+/g, ' ').trim();
-              if (!/^Download\s+MP4\s*\(/i.test(label)) return;
-              var match = label.match(/\((\d+p(?:\s*HD)?)/i);
+              var label = (link.textContent || '').replace(/\\s+/g, ' ').trim();
+              // Eporner provides separate AV1 and H.264 links for each quality.
+              var match = label.match(/\\((\\d+p)(?:\\s*HD)?\\s*,\\s*(AV1|h264)\\b/i);
               if (!match) return;
-              var quality = match[1].replace(/\s+/g, ' ').trim();
+              var quality = match[1].toLowerCase();
+              var codec = match[2].toUpperCase();
+              var isHd = quality === '720p' || quality === '1080p';
+              var buttonLabel = 'Copy ' + quality + (isHd ? ' HD' : '') + ' ' + codec;
               var videoUrl;
               try { videoUrl = new URL(link.getAttribute('href'), document.baseURI).href; }
               catch (_) { return; }
-              if (!/^https?:\/\//i.test(videoUrl)) return;
+              if (!/^https?:\\/\\//i.test(videoUrl)) return;
 
               var button = document.createElement('button');
               button.type = 'button';
-              button.textContent = 'Copy ' + quality;
-              button.setAttribute('aria-label', 'Copy ' + quality + ' video link');
+              button.textContent = buttonLabel;
+              button.setAttribute('aria-label', buttonLabel + ' video link');
               button.dataset.xanimeCopyQuality = '1';
               button.style.cssText = 'background:transparent;border:0;padding:0;margin:0;color:#ffeb00;font:inherit;text-decoration:underline;cursor:pointer;';
               button.addEventListener('click', function(event) {
@@ -1134,17 +1137,10 @@ class ComicWebsiteActivity : Activity() {
                 event.stopPropagation();
                 var value = '.download ' + videoUrl;
                 function copied(ok) {
-                  if (ok) {
-                    button.textContent = 'Copied ' + quality + '!';
-                    setTimeout(function() {
-                      if (button.isConnected) button.textContent = 'Copy ' + quality;
-                    }, 1400);
-                  } else {
-                    button.textContent = 'Copy failed';
-                    setTimeout(function() {
-                      if (button.isConnected) button.textContent = 'Copy ' + quality;
-                    }, 1400);
-                  }
+                  button.textContent = ok ? 'Copied!' : 'Copy failed';
+                  setTimeout(function() {
+                    if (button.isConnected) button.textContent = buttonLabel;
+                  }, 1400);
                 }
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                   navigator.clipboard.writeText(value).then(function() {
