@@ -116,6 +116,7 @@ class MainActivity : Activity() {
     private var showingFavorites = false
     private var showingComics = false
     private var showingJav = false
+    private var showingReal = false
     private var javQuery = ""
     private var selectedComicSource = "HentaiRead"
     private var showingHentaini = false
@@ -327,7 +328,7 @@ class MainActivity : Activity() {
             setPadding(dp(2), dp(3), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
-        if (!showingWatchAnimeHentai && !showingComics && !showingJav) {
+        if (!showingWatchAnimeHentai && !showingComics && !showingJav && !showingReal) {
             header.addView(actionButton(
                 if (showingHentaini) { if (showingHentainiFavorites) "‹ Search" else "♥ Favorites" }
                 else { if (showingFavorites) "‹ Home" else "♥ Favorites" }, false
@@ -342,30 +343,59 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(dp(44), dp(44)))
         pageContent.addView(header)
 
-        // Top-level library switcher: the existing source tabs stay grouped under Hentai.
+        // Top-level library switcher: source tabs stay grouped under Hentai.
         val libraryTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        libraryTabs.addView(actionButton("Hentai", !showingComics && !showingJav) {
-            if (showingComics || showingJav) {
+        libraryTabs.addView(actionButton("Hentai", !showingComics && !showingJav && !showingReal) {
+            if (showingComics || showingJav || showingReal) {
                 showingComics = false
                 showingJav = false
+                showingReal = false
                 showHome()
             }
-        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(7) })
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
         libraryTabs.addView(actionButton("Comics", showingComics) {
             if (!showingComics) {
                 showingComics = true
                 showingJav = false
+                showingReal = false
                 showHome()
             }
-        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(7) })
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
         libraryTabs.addView(actionButton("Jav", showingJav) {
             if (!showingJav) {
                 showingComics = false
                 showingJav = true
+                showingReal = false
+                showHome()
+            }
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
+        libraryTabs.addView(actionButton("Real", showingReal) {
+            if (!showingReal) {
+                showingComics = false
+                showingJav = false
+                showingReal = true
                 showHome()
             }
         }, LinearLayout.LayoutParams(0, dp(42), 1f))
         pageContent.addView(libraryTabs, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(10) })
+
+        if (showingReal) {
+            pageContent.addView(label("REAL", 22, white, true).apply {
+                setPadding(0, dp(20), 0, dp(8))
+            })
+            pageContent.addView(infoCard("Browse the Real section in XAnime's protected in-app browser."),
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+            pageContent.addView(actionButton("▶  EPORNER", true) {
+                startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                    putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "Eporner")
+                    putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://www.eporner.com/")
+                    putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
+                })
+            }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
+            setContentView(root)
+            animateScreen(root)
+            return
+        }
 
         if (showingComics) {
             pageContent.addView(label("COMICS", 22, white, true).apply {
