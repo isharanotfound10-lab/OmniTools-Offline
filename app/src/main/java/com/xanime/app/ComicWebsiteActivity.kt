@@ -1107,9 +1107,80 @@ class ComicWebsiteActivity : Activity() {
             });
           }
 
-          removeSuppliedElements();
-          var observer = new MutationObserver(function() {
+          // Turn Eporner's quality-specific download links into copy buttons.
+          // The copied value is exactly: ".download " + the selected quality URL.
+          function convertQualityLinks() {
+            if (!document.documentElement) return;
+            document.querySelectorAll('a[href]').forEach(function(link) {
+              if (!link.isConnected || link.dataset.xanimeCopyQuality === '1') return;
+              var label = (link.textContent || '').replace(/\\s+/g, ' ').trim();
+              if (!/^Download\\s+MP4\\s*\\(/i.test(label)) return;
+              var match = label.match(/\\((\\d+p(?:\\s*HD)?)/i);
+              if (!match) return;
+              var quality = match[1].replace(/\\s+/g, ' ').trim();
+              var videoUrl;
+              try { videoUrl = new URL(link.getAttribute('href'), document.baseURI).href; }
+              catch (_) { return; }
+              if (!/^https?:\\/\\//i.test(videoUrl)) return;
+
+              var button = document.createElement('button');
+              button.type = 'button';
+              button.textContent = 'Copy ' + quality;
+              button.setAttribute('aria-label', 'Copy ' + quality + ' video link');
+              button.dataset.xanimeCopyQuality = '1';
+              button.style.cssText = 'background:transparent;border:0;padding:0;margin:0;color:#ffeb00;font:inherit;text-decoration:underline;cursor:pointer;';
+              button.addEventListener('click', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                var value = '.download ' + videoUrl;
+                function copied(ok) {
+                  if (ok) {
+                    button.textContent = 'Copied ' + quality + '!';
+                    setTimeout(function() {
+                      if (button.isConnected) button.textContent = 'Copy ' + quality;
+                    }, 1400);
+                  } else {
+                    button.textContent = 'Copy failed';
+                    setTimeout(function() {
+                      if (button.isConnected) button.textContent = 'Copy ' + quality;
+                    }, 1400);
+                  }
+                }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(value).then(function() {
+                    copied(true);
+                  }).catch(function() {
+                    copied(copyWithFallback(value));
+                  });
+                } else {
+                  copied(copyWithFallback(value));
+                }
+              });
+              link.replaceWith(button);
+            });
+          }
+
+          function copyWithFallback(value) {
+            try {
+              var field = document.createElement('textarea');
+              field.value = value;
+              field.setAttribute('readonly', '');
+              field.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+              document.body.appendChild(field);
+              field.select();
+              var ok = document.execCommand('copy');
+              field.remove();
+              return ok;
+            } catch (_) { return false; }
+          }
+
+          function refreshEpornerUi() {
             removeSuppliedElements();
+            convertQualityLinks();
+          }
+          refreshEpornerUi();
+          var observer = new MutationObserver(function() {
+            refreshEpornerUi();
           });
           observer.observe(document.documentElement, {
             childList: true,
