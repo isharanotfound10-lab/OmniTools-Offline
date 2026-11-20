@@ -1113,9 +1113,9 @@ class ComicWebsiteActivity : Activity() {
             if (!document.documentElement) return;
             document.querySelectorAll('#hd-porn-dload a[href]').forEach(function(link) {
               if (!link.isConnected || link.dataset.xanimeCopyQuality === '1') return;
-              var label = (link.textContent || '').replace(/\\s+/g, ' ').trim();
+              var label = (link.textContent || '').replace(/\s+/g, ' ').trim();
               // Eporner provides separate AV1 and H.264 links for each quality.
-              var match = label.match(/\\((\\d+p)(?:\\s*HD)?\\s*,\\s*(AV1|h264)\\b/i);
+              var match = label.match(/\((\d+p)(?:\s*HD)?\s*,\s*(AV1|h264)\b/i);
               if (!match) return;
               var quality = match[1].toLowerCase();
               var codec = match[2].toUpperCase();
@@ -1124,7 +1124,7 @@ class ComicWebsiteActivity : Activity() {
               var videoUrl;
               try { videoUrl = new URL(link.getAttribute('href'), document.baseURI).href; }
               catch (_) { return; }
-              if (!/^https?:\\/\\//i.test(videoUrl)) return;
+              if (!/^https?:\/\//i.test(videoUrl)) return;
 
               var button = document.createElement('button');
               button.type = 'button';
