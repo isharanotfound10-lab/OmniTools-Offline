@@ -1077,6 +1077,9 @@ class ComicWebsiteActivity : Activity() {
           var selectors = [
             // Eporner EPAD in-player and footer ad containers supplied by the user.
             '.vjs-inplayer-container',
+            // Eporner mobile top ad container and its inner slot.
+            '#admobiletop',
+            '#admobiletopinside',
             '#btasd',
             '#footadframe',
             'iframe[data-ep-adzone="desktop.inplayer"]',
