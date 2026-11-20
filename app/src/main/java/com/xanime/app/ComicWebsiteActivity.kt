@@ -1075,6 +1075,15 @@ class ComicWebsiteActivity : Activity() {
           window.__xanimeEpornerCleanupInstalled = true;
 
           var selectors = [
+            // Eporner EPAD in-player and footer ad containers supplied by the user.
+            '.vjs-inplayer-container',
+            '#btasd',
+            '#footadframe',
+            'iframe[data-ep-adzone="desktop.inplayer"]',
+            'iframe[data-ep-adzone="desktop.foot"]',
+            '[id^="epad-desktop-inplayer-"]',
+            '[id^="epad-desktop-foot-"]',
+            // Other Eporner elements supplied in the earlier HTML fragment.
             '#mainBlogPosts',
             '#mainphotos',
             '.footer-text',
