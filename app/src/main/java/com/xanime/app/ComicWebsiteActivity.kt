@@ -265,6 +265,10 @@ class ComicWebsiteActivity : Activity() {
                             page.evaluateJavascript(kingComixAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
                             }
+                        } else if (siteName.equals("Eporner", ignoreCase = true)) {
+                            page.evaluateJavascript(epornerCleanupScript) {
+                                page.visibility = android.view.View.VISIBLE
+                            }
                         } else if (blockPopups) {
                             page.evaluateJavascript(javAdCleanupScript) {
                                 page.visibility = android.view.View.VISIBLE
@@ -1060,6 +1064,47 @@ class ComicWebsiteActivity : Activity() {
           new MutationObserver(removeAdElements).observe(document.documentElement, {
             childList: true, subtree: true, attributes: true,
             attributeFilter: ['src','class','id','style']
+          });
+        })();
+    """.trimIndent()
+
+    /** Remove every Eporner page element represented in the user's supplied HTML fragment. */
+    private val epornerCleanupScript = """
+        (function() {
+          if (window.__xanimeEpornerCleanupInstalled) return;
+          window.__xanimeEpornerCleanupInstalled = true;
+
+          var selectors = [
+            '#mainBlogPosts',
+            '#mainphotos',
+            '.footer-text',
+            '#adinhead.ep-live',
+            '#menusection2',
+            'footer a',
+            'a[href*="/login"]',
+            'a[href*="/log-in"]',
+            'a[href*="/signin"]',
+            'a[href*="/sign-in"]',
+            'a[href*="/register"]',
+            'a[href*="/registration"]',
+            'a[href*="/signup"]',
+            'a[href*="/sign-up"]'
+          ];
+          var selectorText = selectors.join(',');
+          function removeSuppliedElements() {
+            if (!document.documentElement) return;
+            document.querySelectorAll(selectorText).forEach(function(node) {
+              if (node && node.parentNode) node.parentNode.removeChild(node);
+            });
+          }
+
+          removeSuppliedElements();
+          var observer = new MutationObserver(function() {
+            removeSuppliedElements();
+          });
+          observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true
           });
         })();
     """.trimIndent()
