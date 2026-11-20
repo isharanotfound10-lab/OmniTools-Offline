@@ -1113,15 +1113,15 @@ class ComicWebsiteActivity : Activity() {
             if (!document.documentElement) return;
             document.querySelectorAll('a[href]').forEach(function(link) {
               if (!link.isConnected || link.dataset.xanimeCopyQuality === '1') return;
-              var label = (link.textContent || '').replace(/\\s+/g, ' ').trim();
-              if (!/^Download\\s+MP4\\s*\\(/i.test(label)) return;
-              var match = label.match(/\\((\\d+p(?:\\s*HD)?)/i);
+              var label = (link.textContent || '').replace(/\s+/g, ' ').trim();
+              if (!/^Download\s+MP4\s*\(/i.test(label)) return;
+              var match = label.match(/\((\d+p(?:\s*HD)?)/i);
               if (!match) return;
-              var quality = match[1].replace(/\\s+/g, ' ').trim();
+              var quality = match[1].replace(/\s+/g, ' ').trim();
               var videoUrl;
               try { videoUrl = new URL(link.getAttribute('href'), document.baseURI).href; }
               catch (_) { return; }
-              if (!/^https?:\\/\\//i.test(videoUrl)) return;
+              if (!/^https?:\/\//i.test(videoUrl)) return;
 
               var button = document.createElement('button');
               button.type = 'button';
