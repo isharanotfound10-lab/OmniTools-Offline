@@ -1171,9 +1171,21 @@ class ComicWebsiteActivity : Activity() {
             } catch (_) { return false; }
           }
 
+          // Click Eporner's own VAST skip control only after the player
+          // marks it enabled (the countdown has finished).
+          function clickEnabledSkipButtons() {
+            if (!document.documentElement) return;
+            document.querySelectorAll('.vast-skip-button.enabled').forEach(function(button) {
+              if (!button.isConnected || button.dataset.xanimeAutoSkipped === '1') return;
+              button.dataset.xanimeAutoSkipped = '1';
+              button.click();
+            });
+          }
+
           function refreshEpornerUi() {
             removeSuppliedElements();
             convertQualityLinks();
+            clickEnabledSkipButtons();
           }
           refreshEpornerUi();
           var observer = new MutationObserver(function() {
@@ -1181,7 +1193,9 @@ class ComicWebsiteActivity : Activity() {
           });
           observer.observe(document.documentElement, {
             childList: true,
-            subtree: true
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class']
           });
         })();
     """.trimIndent()
