@@ -3691,11 +3691,16 @@ class MainActivity : Activity() {
                 text = title
                 textSize = 14f
                 setTextColor(white)
+                minHeight = dp(50)
+                setPadding(dp(10), dp(5), dp(10), dp(5))
                 buttonTintList = android.content.res.ColorStateList.valueOf(accent)
+                background = ripple(glassDrawable(12))
                 isChecked = prefs.getBoolean(key, default)
                 setOnCheckedChangeListener { _, checked ->
                     prefs.edit().putBoolean(key, checked).apply()
                 }
+            }, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(5)
             })
         }
         fun selector(title: String, key: String, values: List<String>, default: String) {
@@ -3736,9 +3741,15 @@ class MainActivity : Activity() {
         option("High-quality thumbnails (uses more data)", "high_quality_thumbnails", false)
         option("Cache search details and thumbnails", "cache_enabled", true)
         option("Data Saver (smaller thumbnails, no extra preloading)", "data_saver_mode", false)
+        // Keep the full settings catalogue reachable on compact phone screens.
+        val settingsScroll = ScrollView(this).apply {
+            isFillViewport = false
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(panel, ScrollView.LayoutParams(-1, -2))
+        }
         val dialog = AlertDialog.Builder(this)
             .setTitle("PERSONALIZE XANIME")
-            .setView(panel)
+            .setView(settingsScroll, dp(8), dp(4), dp(8), dp(4))
             .setPositiveButton("APPLY") { _, _ -> showHome() }
             .setNeutralButton("CLEAR CACHE") { _, _ ->
                 detailCache.clear()
