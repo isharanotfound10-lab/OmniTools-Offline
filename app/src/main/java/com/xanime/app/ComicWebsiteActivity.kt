@@ -352,7 +352,7 @@ class ComicWebsiteActivity : Activity() {
               window.__xanimeDirectLinkStarted = true;
               window.__xanimeCopiedText = '';
               function capture(value) {
-                if (typeof value === 'string' && /^https?:\\/\\//i.test(value.trim())) {
+                if (typeof value === 'string' && (value.trim().startsWith('http://') || value.trim().startsWith('https://'))) {
                   window.__xanimeCopiedText = value.trim();
                 }
               }
@@ -400,7 +400,7 @@ class ComicWebsiteActivity : Activity() {
                     var parent = linkButton.parentElement;
                     var anchors = parent ? Array.from(parent.querySelectorAll('a[href]')) : [];
                     copied = anchors.map(function(a){return a.href;}).find(function(h) {
-                      return /^https?:/i.test(h) && !/allporndownloader\\.com/i.test(h);
+                      return (h.startsWith('http://') || h.startsWith('https://')) && h.indexOf('allporndownloader.com') < 0;
                     }) || '';
                   }
                   if (copied) {
@@ -422,7 +422,7 @@ class ComicWebsiteActivity : Activity() {
                   fields.find(function(el){return (el.type || '').toLowerCase() === 'text';}) || fields[0];
                 var getButton = Array.from(document.querySelectorAll('button,[role="button"],input[type="submit"],input[type="button"]'))
                   .filter(visible).find(function(el) {
-                    return ((el.innerText || el.value || '').toLowerCase().replace(/\\s+/g,' ').includes('get download link'));
+                    return ((el.innerText || el.value || '').toLowerCase().includes('get download link'));
                   });
                 if (field && getButton) {
                   clearInterval(formTimer);
