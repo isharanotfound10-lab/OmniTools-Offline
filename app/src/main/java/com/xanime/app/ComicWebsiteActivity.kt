@@ -264,7 +264,7 @@ class ComicWebsiteActivity : Activity() {
                     if (directLinkInProgress && isDownloaderHost(url)) {
                         page.visibility = android.view.View.VISIBLE
                         automateDownloaderPage(page)
-                        return@evaluateJavascript
+                        return
                     }
                     page.evaluateJavascript(adCleanupScript) {
                         page.evaluateJavascript(blobDownloadScript, null)
