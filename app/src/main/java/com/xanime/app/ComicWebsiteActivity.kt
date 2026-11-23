@@ -3,6 +3,8 @@ package com.xanime.app
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.ContentValues
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
@@ -13,6 +15,8 @@ import java.io.File
 import java.io.FileOutputStream
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Message
 import android.view.Gravity
 import android.webkit.WebChromeClient
@@ -33,6 +37,7 @@ class ComicWebsiteActivity : Activity() {
         const val EXTRA_SITE_NAME = "comic_site_name"
         const val EXTRA_SITE_URL = "comic_site_url"
         const val EXTRA_BLOCK_POPUPS = "comic_block_popups"
+        const val EXTRA_DIRECT_LINK_BUTTON = "comic_direct_link_button"
     }
 
     private var browser: WebView? = null
@@ -43,12 +48,18 @@ class ComicWebsiteActivity : Activity() {
     private var blockPopups: Boolean = false
     private var allowedHost: String = ""
     private val downloadBridge = BlobDownloadBridge()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var directLinkEnabled = false
+    @Volatile private var directLinkInProgress = false
+    private var originalVideoPageUrl: String? = null
+    private val directLinkBridge = DirectLinkBridge()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         siteName = intent.getStringExtra(EXTRA_SITE_NAME)?.take(40).orEmpty()
         blockPopups = intent.getBooleanExtra(EXTRA_BLOCK_POPUPS, false)
+        directLinkEnabled = intent.getBooleanExtra(EXTRA_DIRECT_LINK_BUTTON, false)
         val siteUrl = intent.getStringExtra(EXTRA_SITE_URL).orEmpty()
         val parsed = Uri.parse(siteUrl)
         allowedHost = parsed.host?.lowercase().orEmpty()
@@ -92,6 +103,16 @@ class ComicWebsiteActivity : Activity() {
             setOnClickListener { browser?.reload() }
         }, LinearLayout.LayoutParams(dp(44), dp(42)))
         root.addView(toolbar, LinearLayout.LayoutParams(-1, dp(44)))
+        if (directLinkEnabled) {
+            root.addView(Button(this).apply {
+                text = "Get Direct Download Link"
+                isAllCaps = false
+                textSize = 13f
+                setTextColor(Color.WHITE)
+                setBackgroundColor(Color.rgb(190, 75, 255))
+                setOnClickListener { startDirectLinkFlow() }
+            }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(7); bottomMargin = dp(5) })
+        }
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
@@ -129,6 +150,7 @@ class ComicWebsiteActivity : Activity() {
             settings.setSupportMultipleWindows(!blockPopups)
             // HitomiLA creates ZIP downloads as Blob URLs; bridge those to Downloads.
             addJavascriptInterface(downloadBridge, "XAnimeDownloads")
+            if (directLinkEnabled) addJavascriptInterface(directLinkBridge, "XAnimeDirectLink")
             setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
                 startRegularDownload(url, userAgent, contentDisposition, mimeType)
             }
@@ -239,6 +261,11 @@ class ComicWebsiteActivity : Activity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     val page = view ?: return
+                    if (directLinkInProgress && isDownloaderHost(url)) {
+                        page.visibility = android.view.View.VISIBLE
+                        automateDownloaderPage(page)
+                        return@evaluateJavascript
+                    }
                     page.evaluateJavascript(adCleanupScript) {
                         page.evaluateJavascript(blobDownloadScript, null)
                         if (siteName.equals("HitomiLA", ignoreCase = true)) {
@@ -297,6 +324,162 @@ class ComicWebsiteActivity : Activity() {
         }
     }
 
+    private fun isDownloaderHost(rawUrl: String?): Boolean {
+        val host = runCatching { Uri.parse(rawUrl).host?.lowercase().orEmpty() }.getOrDefault("")
+        return host == "allporndownloader.com" || host == "www.allporndownloader.com"
+    }
+
+    private fun startDirectLinkFlow() {
+        val current = browser?.url
+        val uri = runCatching { Uri.parse(current) }.getOrNull()
+        val host = uri?.host?.lowercase().orEmpty()
+        if (current.isNullOrBlank() || !(host == allowedHost || host.endsWith(".$allowedHost"))) {
+            Toast.makeText(this, "Open a supported video page first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (directLinkInProgress) return
+        originalVideoPageUrl = current
+        directLinkInProgress = true
+        Toast.makeText(this, "Getting direct link…", Toast.LENGTH_SHORT).show()
+        browser?.loadUrl("https://allporndownloader.com/")
+    }
+
+    private fun automateDownloaderPage(page: WebView) {
+        val encodedVideoUrl = org.json.JSONObject.quote(originalVideoPageUrl.orEmpty())
+        val script = """
+            (function() {
+              if (window.__xanimeDirectLinkStarted) return;
+              window.__xanimeDirectLinkStarted = true;
+              window.__xanimeCopiedText = '';
+              function capture(value) {
+                if (typeof value === 'string' && /^https?:\\/\\//i.test(value.trim())) {
+                  window.__xanimeCopiedText = value.trim();
+                }
+              }
+              try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  Object.defineProperty(navigator.clipboard, 'writeText', {
+                    configurable: true,
+                    value: function(value) { capture(value); return Promise.resolve(); }
+                  });
+                }
+              } catch (e) {}
+              document.addEventListener('copy', function(event) {
+                try { capture(event.clipboardData && event.clipboardData.getData('text/plain')); } catch (e) {}
+              }, true);
+              try {
+                var originalExec = document.execCommand.bind(document);
+                document.execCommand = function(command) {
+                  if (String(command).toLowerCase() === 'copy') {
+                    try { capture(window.getSelection().toString()); } catch (e) {}
+                  }
+                  return originalExec(command);
+                };
+              } catch (e) {}
+
+              function visible(el) {
+                if (!el) return false;
+                var r = el.getBoundingClientRect(), style = getComputedStyle(el);
+                return r.width > 0 && r.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+              }
+              function fail() {
+                if (window.XAnimeDirectLink) window.XAnimeDirectLink.onFailure('The downloader did not return a copyable link.');
+              }
+              function clickLinkButton() {
+                var controls = Array.from(document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]')).filter(visible);
+                var linkButton = controls.find(function(el) {
+                  return ((el.innerText || el.value || el.getAttribute('aria-label') || '').trim().toLowerCase() === 'link');
+                });
+                if (!linkButton) return false;
+                linkButton.click();
+                var tries = 0;
+                var copyTimer = setInterval(function() {
+                  tries++;
+                  var copied = window.__xanimeCopiedText || '';
+                  if (!copied) {
+                    var parent = linkButton.parentElement;
+                    var anchors = parent ? Array.from(parent.querySelectorAll('a[href]')) : [];
+                    copied = anchors.map(function(a){return a.href;}).find(function(h) {
+                      return /^https?:/i.test(h) && !/allporndownloader\\.com/i.test(h);
+                    }) || '';
+                  }
+                  if (copied) {
+                    clearInterval(copyTimer);
+                    window.XAnimeDirectLink.onDirectLink(copied);
+                  } else if (tries >= 15) {
+                    clearInterval(copyTimer);
+                    fail();
+                  }
+                }, 350);
+                return true;
+              }
+
+              var attempts = 0;
+              var formTimer = setInterval(function() {
+                attempts++;
+                var fields = Array.from(document.querySelectorAll('input:not([type="hidden"]),textarea')).filter(visible);
+                var field = fields.find(function(el){return (el.type || '').toLowerCase() === 'url';}) ||
+                  fields.find(function(el){return (el.type || '').toLowerCase() === 'text';}) || fields[0];
+                var getButton = Array.from(document.querySelectorAll('button,[role="button"],input[type="submit"],input[type="button"]'))
+                  .filter(visible).find(function(el) {
+                    return ((el.innerText || el.value || '').toLowerCase().replace(/\\s+/g,' ').includes('get download link'));
+                  });
+                if (field && getButton) {
+                  clearInterval(formTimer);
+                  field.value = $encodedVideoUrl;
+                  field.dispatchEvent(new Event('input', {bubbles:true}));
+                  field.dispatchEvent(new Event('change', {bubbles:true}));
+                  getButton.click();
+                  var resultTries = 0;
+                  var resultTimer = setInterval(function() {
+                    resultTries++;
+                    if (clickLinkButton()) clearInterval(resultTimer);
+                    else if (resultTries >= 50) { clearInterval(resultTimer); fail(); }
+                  }, 500);
+                } else if (attempts >= 30) {
+                  clearInterval(formTimer);
+                  fail();
+                }
+              }, 400);
+            })();
+        """.trimIndent()
+        page.evaluateJavascript(script, null)
+        mainHandler.postDelayed({
+            if (directLinkInProgress && isDownloaderHost(page.url)) {
+                directLinkBridge.onFailure("Timed out waiting for the downloader.")
+            }
+        }, 45000)
+    }
+
+    private inner class DirectLinkBridge {
+        @JavascriptInterface
+        fun onDirectLink(rawUrl: String?) {
+            runOnUiThread {
+                val value = rawUrl?.trim().orEmpty()
+                val parsed = runCatching { Uri.parse(value) }.getOrNull()
+                if (parsed?.scheme !in listOf("http", "https") || parsed.host.isNullOrBlank()) {
+                    onFailure("The downloader returned an invalid link.")
+                    return@runOnUiThread
+                }
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Direct download link", value))
+                directLinkInProgress = false
+                Toast.makeText(this@ComicWebsiteActivity, "Link Copied", Toast.LENGTH_SHORT).show()
+                originalVideoPageUrl?.let { browser?.loadUrl(it) }
+            }
+        }
+
+        @JavascriptInterface
+        fun onFailure(message: String?) {
+            runOnUiThread {
+                if (!directLinkInProgress) return@runOnUiThread
+                directLinkInProgress = false
+                Toast.makeText(this@ComicWebsiteActivity, message ?: "Couldn't get direct link", Toast.LENGTH_LONG).show()
+                originalVideoPageUrl?.let { browser?.loadUrl(it) }
+            }
+        }
+    }
+
     private fun isNHaentaiAdRedirect(uri: Uri): Boolean {
         val host = uri.host?.lowercase().orEmpty()
         val path = uri.path?.lowercase().orEmpty()
@@ -308,8 +491,9 @@ class ComicWebsiteActivity : Activity() {
         val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return false
         val scheme = uri.scheme?.lowercase()
         val host = uri.host?.lowercase() ?: return false
-        return (scheme == "https" || scheme == "http") &&
-            (host == allowedHost || host.endsWith(".$allowedHost"))
+        val originalSite = host == allowedHost || host.endsWith(".$allowedHost")
+        val downloader = directLinkInProgress && isDownloaderHost(rawUrl)
+        return (scheme == "https" || scheme == "http") && (originalSite || downloader)
     }
 
     /** Remove only the KingComix ad slots and notification overlay identified in the supplied page. */
