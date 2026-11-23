@@ -56,18 +56,18 @@ import org.jsoup.Jsoup
 class MainActivity : Activity() {
     private val prefs get() = getSharedPreferences("xanime", MODE_PRIVATE)
     private val amoled get() = prefs.getBoolean("amoled_mode", false)
-    private val bgColor: Int get() = if (amoled) Color.BLACK else Color.rgb(2, 6, 9)
-    private val surface: Int get() = if (amoled) Color.rgb(8, 16, 20) else Color.rgb(5, 23, 32)
-    private val surface2: Int get() = if (amoled) Color.rgb(13, 27, 33) else Color.rgb(7, 39, 51)
+    private val bgColor: Int get() = Color.rgb(3, 2, 10)
+    private val surface: Int get() = if (amoled) Color.rgb(8, 5, 18) else Color.rgb(13, 7, 27)
+    private val surface2: Int get() = if (amoled) Color.rgb(18, 11, 35) else Color.rgb(24, 13, 45)
     private val accent: Int get() = when (prefs.getString("accent_color", "Purple")) {
         "Pink" -> Color.rgb(255, 76, 164)
         "Cyan" -> Color.rgb(0, 190, 210)
         "Blue" -> Color.rgb(75, 130, 255)
         "Green" -> Color.rgb(60, 190, 130)
-        else -> Color.rgb(190, 75, 255)
+        else -> Color.rgb(174, 65, 255)
     }
     private val pink = Color.rgb(255, 76, 164)
-    private val muted = Color.rgb(174, 163, 193)
+    private val muted = Color.rgb(177, 166, 205)
     private val white = Color.WHITE
     private val worker = Executors.newFixedThreadPool(2)
     private var hitomiSearchRequestId = 0
@@ -279,7 +279,7 @@ class MainActivity : Activity() {
         ambientBackground = AmbientBackgroundDrawable(bgColor, accent)
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(20), dp(18), dp(14))
+            setPadding(dp(16), dp(18), dp(16), dp(14))
             background = ambientBackground
             if (prefs.getBoolean("ambient_background", true)) ambientBackground?.start()
             layoutParams = ViewGroup.LayoutParams(-1, -1)
@@ -3683,6 +3683,9 @@ class MainActivity : Activity() {
             })
             val spinner = Spinner(this)
             spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, values)
+            spinner.background = ripple(glassDrawable(14))
+            spinner.dropDownVerticalOffset = dp(6)
+            spinner.popupBackground = rounded(Color.rgb(19, 10, 35), 16)
             spinner.setSelection(values.indexOf(prefs.getString(key, default)).coerceAtLeast(0))
             spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: AdapterView<*>?) = Unit
@@ -3732,8 +3735,8 @@ class MainActivity : Activity() {
         }
         view.alpha = 0f
         view.translationY = -dp(5).toFloat()
-        view.animate().alpha(1f).translationY(0f).setDuration(190)
-            .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        view.animate().alpha(1f).translationY(0f).setDuration(260)
+            .setInterpolator(android.view.animation.DecelerateInterpolator(1.5f)).start()
     }
 
     private fun animateEntrance(view: View, index: Int) {
@@ -3745,8 +3748,8 @@ class MainActivity : Activity() {
         view.scaleY = 0.985f
         view.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
             .setStartDelay((index.coerceAtMost(6) * 28).toLong())
-            .setDuration(230)
-            .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+            .setDuration(310)
+            .setInterpolator(android.view.animation.OvershootInterpolator(0.82f))
             .start()
     }
 
@@ -3931,40 +3934,69 @@ class MainActivity : Activity() {
 
     private fun actionButton(text: String, primary: Boolean = true, action: () -> Unit) =
         Button(this).apply {
-            this.text = text; textSize = 11f; isAllCaps = false; typeface = Typeface.DEFAULT_BOLD
+            this.text = text
+            textSize = 12f
+            isAllCaps = false
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             setTextColor(white)
-            val fill = if (primary) accent else surface2
-            background = ripple(GradientDrawable().apply {
-                setColor(fill)
-                cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.argb(85, 235, 220, 255))
+            minHeight = dp(44)
+            minimumHeight = dp(44)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            background = ripple(GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                if (primary) intArrayOf(
+                    Color.argb(245, Color.red(accent), Color.green(accent), Color.blue(accent)),
+                    Color.argb(210, Color.red(accent) / 2, Color.green(accent) / 2, Color.blue(accent) / 2)
+                ) else intArrayOf(Color.rgb(31, 20, 52), Color.rgb(13, 8, 25))
+            ).apply {
+                cornerRadius = dp(17).toFloat()
+                setStroke(dp(1), if (primary) Color.argb(170, 222, 180, 255) else Color.argb(95, 170, 115, 255))
             })
-            setOnClickListener {
-                if (getSharedPreferences("xanime", MODE_PRIVATE).getBoolean("smooth_animations", true)) {
-                    animate().scaleX(0.97f).scaleY(0.97f).setDuration(65).withEndAction {
-                        animate().scaleX(1f).scaleY(1f).setDuration(85).start()
-                    }.start()
+            elevation = dp(if (primary) 5 else 1).toFloat()
+            stateListAnimator = null
+            setOnTouchListener { target, event ->
+                if (!animationsEnabled()) return@setOnTouchListener false
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> target.animate().scaleX(.965f).scaleY(.965f)
+                        .setDuration(90).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL ->
+                        target.animate().scaleX(1f).scaleY(1f).setDuration(220)
+                            .setInterpolator(android.view.animation.OvershootInterpolator(1.35f)).start()
                 }
-                action()
+                false
             }
+            setOnClickListener { action() }
         }
 
     private fun glassDrawable(radius: Int): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.argb(205, 8, 35, 47), Color.argb(188, 3, 17, 27))).apply {
+            intArrayOf(Color.argb(232, 28, 16, 48), Color.argb(218, 8, 5, 19))).apply {
             cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), Color.argb(112, 34, 174, 197))
+            setStroke(dp(1), Color.argb(145, 157, 91, 255))
         }
 
     private fun ripple(content: Drawable): RippleDrawable =
         RippleDrawable(ColorStateList.valueOf(Color.argb(76, 100, 220, 235)), content, null)
 
     private fun animateScreen(view: View) {
-        if (!prefs.getBoolean("smooth_animations", true)) return
+        if (!animationsEnabled()) {
+            view.alpha = 1f
+            view.translationY = 0f
+            view.scaleX = 1f
+            view.scaleY = 1f
+            return
+        }
+        view.animate().cancel()
         view.alpha = 0f
-        view.translationY = dp(7).toFloat()
+        view.translationY = dp(13).toFloat()
+        view.scaleX = .992f
+        view.scaleY = .992f
         view.post {
-            if (!isFinishing) view.animate().alpha(1f).translationY(0f).setDuration(230).start()
+            if (!isFinishing) view.animate()
+                .alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
+                .setDuration(360)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.45f))
+                .start()
         }
     }
 
