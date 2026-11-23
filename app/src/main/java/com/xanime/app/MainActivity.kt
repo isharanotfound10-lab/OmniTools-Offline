@@ -3702,7 +3702,7 @@ class MainActivity : Activity() {
             spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, values)
             spinner.background = ripple(glassDrawable(14))
             spinner.dropDownVerticalOffset = dp(6)
-            spinner.popupBackground = rounded(Color.rgb(19, 10, 35), 16)
+            spinner.setPopupBackgroundDrawable(rounded(Color.rgb(19, 10, 35), 16))
             spinner.setSelection(values.indexOf(prefs.getString(key, default)).coerceAtLeast(0))
             spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                 override fun onNothingSelected(parent: AdapterView<*>?) = Unit
