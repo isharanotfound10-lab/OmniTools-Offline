@@ -60,10 +60,14 @@ class MainActivity : Activity() {
     private val surface: Int get() = if (amoled) Color.rgb(8, 5, 18) else Color.rgb(13, 7, 27)
     private val surface2: Int get() = if (amoled) Color.rgb(18, 11, 35) else Color.rgb(24, 13, 45)
     private val accent: Int get() = when (prefs.getString("accent_color", "Purple")) {
-        "Pink" -> Color.rgb(255, 76, 164)
-        "Cyan" -> Color.rgb(0, 190, 210)
-        "Blue" -> Color.rgb(75, 130, 255)
-        "Green" -> Color.rgb(60, 190, 130)
+        "Pink", "Neon Rose" -> Color.rgb(255, 76, 164)
+        "Cyan", "Ice Cyan" -> Color.rgb(0, 205, 225)
+        "Blue", "Electric Blue" -> Color.rgb(75, 130, 255)
+        "Green", "Emerald" -> Color.rgb(45, 210, 145)
+        "Magenta" -> Color.rgb(225, 55, 220)
+        "Amber" -> Color.rgb(255, 170, 55)
+        "Crimson" -> Color.rgb(245, 65, 95)
+        "Lavender" -> Color.rgb(178, 155, 255)
         else -> Color.rgb(174, 65, 255)
     }
     private val pink = Color.rgb(255, 76, 164)
@@ -3726,6 +3730,8 @@ class MainActivity : Activity() {
             setPadding(0, dp(12), 0, dp(4))
         })
         option("Smooth animations", "smooth_animations", true)
+        selector("Animation feel", "motion_profile", listOf("Cinematic", "Smooth", "Snappy"), "Smooth")
+        option("Haptic touch feedback", "haptic_feedback", true)
         option("Fast search (up to 4 concurrent detail requests)", "fast_search", true)
         option("High-quality thumbnails (uses more data)", "high_quality_thumbnails", false)
         option("Cache search details and thumbnails", "cache_enabled", true)
@@ -3751,8 +3757,8 @@ class MainActivity : Activity() {
                 decor.scaleY = .94f
                 decor.translationY = dp(12).toFloat()
                 decor.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f)
-                    .setDuration(280)
-                    .setInterpolator(android.view.animation.OvershootInterpolator(0.9f))
+                    .setDuration(motionDuration(280))
+                    .setInterpolator(motionInterpolator())
                     .start()
             }
         }
@@ -3762,6 +3768,23 @@ class MainActivity : Activity() {
     private fun animationsEnabled(): Boolean =
         prefs.getBoolean("smooth_animations", true)
 
+    private fun motionDuration(base: Long): Long {
+        if (!animationsEnabled()) return 0L
+        val multiplier = when (prefs.getString("motion_profile", "Smooth")) {
+            "Cinematic" -> 1.22f
+            "Snappy" -> 0.68f
+            else -> 1f
+        }
+        return (base * multiplier).toLong().coerceAtLeast(90L)
+    }
+
+    private fun motionInterpolator(): android.view.animation.Interpolator =
+        when (prefs.getString("motion_profile", "Smooth")) {
+            "Cinematic" -> android.view.animation.OvershootInterpolator(0.72f)
+            "Snappy" -> android.view.animation.DecelerateInterpolator(2.1f)
+            else -> android.view.animation.DecelerateInterpolator(1.45f)
+        }
+
     private fun animateReveal(view: View) {
         if (!animationsEnabled()) {
             view.alpha = 1f
@@ -3770,8 +3793,8 @@ class MainActivity : Activity() {
         }
         view.alpha = 0f
         view.translationY = -dp(5).toFloat()
-        view.animate().alpha(1f).translationY(0f).setDuration(260)
-            .setInterpolator(android.view.animation.DecelerateInterpolator(1.5f)).start()
+        view.animate().alpha(1f).translationY(0f).setDuration(motionDuration(260))
+            .setInterpolator(motionInterpolator()).start()
     }
 
     private fun animateEntrance(view: View, index: Int) {
@@ -3783,8 +3806,8 @@ class MainActivity : Activity() {
         view.scaleY = 0.985f
         view.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
             .setStartDelay((index.coerceAtMost(6) * 28).toLong())
-            .setDuration(310)
-            .setInterpolator(android.view.animation.OvershootInterpolator(0.82f))
+            .setDuration(motionDuration(310))
+            .setInterpolator(motionInterpolator())
             .start()
     }
 
@@ -4000,7 +4023,12 @@ class MainActivity : Activity() {
                 }
                 false
             }
-            setOnClickListener { action() }
+            setOnClickListener {
+                if (prefs.getBoolean("haptic_feedback", true)) {
+                    performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                }
+                action()
+            }
         }
 
     private fun glassDrawable(radius: Int): GradientDrawable =
@@ -4029,8 +4057,8 @@ class MainActivity : Activity() {
         view.post {
             if (!isFinishing) view.animate()
                 .alpha(1f).translationY(0f).scaleX(1f).scaleY(1f)
-                .setDuration(360)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(1.45f))
+                .setDuration(motionDuration(360))
+                .setInterpolator(motionInterpolator())
                 .start()
         }
     }
