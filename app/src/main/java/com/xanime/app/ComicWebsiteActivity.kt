@@ -426,7 +426,9 @@ class ComicWebsiteActivity : Activity() {
                   });
                 if (field && getButton) {
                   clearInterval(formTimer);
-                  field.value = $encodedVideoUrl;
+                  var valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+                  if (valueSetter && valueSetter.set) valueSetter.set.call(field, $encodedVideoUrl);
+                  else field.value = $encodedVideoUrl;
                   field.dispatchEvent(new Event('input', {bubbles:true}));
                   field.dispatchEvent(new Event('change', {bubbles:true}));
                   getButton.click();
