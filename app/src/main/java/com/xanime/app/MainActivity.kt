@@ -3712,8 +3712,8 @@ class MainActivity : Activity() {
         option("High-quality thumbnails (uses more data)", "high_quality_thumbnails", false)
         option("Cache search details and thumbnails", "cache_enabled", true)
         option("Data Saver (smaller thumbnails, no extra preloading)", "data_saver_mode", false)
-        AlertDialog.Builder(this)
-            .setTitle("XAnime settings")
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("PERSONALIZE XANIME")
             .setView(panel)
             .setPositiveButton("APPLY") { _, _ -> showHome() }
             .setNeutralButton("CLEAR CACHE") { _, _ ->
@@ -3721,7 +3721,24 @@ class MainActivity : Activity() {
                 imageCache.evictAll()
                 Toast.makeText(this, "Cache cleared", Toast.LENGTH_SHORT).show()
             }
-            .show()
+            .create()
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawable(glassDrawable(22))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.setTextColor(accent)
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setTextColor(muted)
+            val decor = dialog.window?.decorView
+            if (animationsEnabled() && decor != null) {
+                decor.alpha = 0f
+                decor.scaleX = .94f
+                decor.scaleY = .94f
+                decor.translationY = dp(12).toFloat()
+                decor.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f)
+                    .setDuration(280)
+                    .setInterpolator(android.view.animation.OvershootInterpolator(0.9f))
+                    .start()
+            }
+        }
+        dialog.show()
     }
 
     private fun animationsEnabled(): Boolean =
