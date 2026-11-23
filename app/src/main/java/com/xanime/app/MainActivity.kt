@@ -320,12 +320,20 @@ class MainActivity : Activity() {
         pageContent = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll.addView(pageContent, ViewGroup.LayoutParams(-1, -2))
         root.addView(scroll, LinearLayout.LayoutParams(-1, -1))
-        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; orientation = LinearLayout.HORIZONTAL }
+        val header = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(2), dp(2), dp(2), dp(8))
+        }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(label("XAnime", 25, white, true))
-        titles.addView(label(":|  DISCOVER • WATCH • ENJOY", 9, muted, true).apply {
-            letterSpacing = .12f
-            setPadding(dp(2), dp(3), 0, 0)
+        titles.addView(label("✦  DISCOVER  •  WATCH  •  ENJOY", 9, muted, true).apply {
+            letterSpacing = .15f
+            setPadding(dp(2), dp(4), 0, 0)
+        })
+        titles.addView(label("YOUR PERSONAL MEDIA UNIVERSE", 8, accent, true).apply {
+            letterSpacing = .18f
+            setPadding(dp(2), dp(5), 0, 0)
         })
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         if (!showingWatchAnimeHentai && !showingComics && !showingJav && !showingReal) {
@@ -344,7 +352,12 @@ class MainActivity : Activity() {
         pageContent.addView(header)
 
         // Top-level library switcher: source tabs stay grouped under Hentai.
-        val libraryTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val libraryTabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            background = glassDrawable(20)
+        }
         libraryTabs.addView(actionButton("Hentai", !showingComics && !showingJav && !showingReal) {
             if (showingComics || showingJav || showingReal) {
                 showingComics = false
@@ -377,7 +390,10 @@ class MainActivity : Activity() {
                 showHome()
             }
         }, LinearLayout.LayoutParams(0, dp(42), 1f))
-        pageContent.addView(libraryTabs, LinearLayout.LayoutParams(-1, dp(44)).apply { topMargin = dp(10) })
+        pageContent.addView(libraryTabs, LinearLayout.LayoutParams(-1, dp(54)).apply {
+            topMargin = dp(13)
+            bottomMargin = dp(4)
+        })
 
         if (showingReal) {
             pageContent.addView(label("REAL", 22, white, true).apply {
@@ -965,7 +981,8 @@ class MainActivity : Activity() {
                 setTextColor(white)
                 setHintTextColor(muted)
                 setPadding(dp(14), dp(10), dp(14), dp(10))
-                background = rounded(surface2, 14)
+                background = ripple(glassDrawable(16))
+                elevation = dp(1).toFloat()
             }
             pageContent.addView(realSearch, LinearLayout.LayoutParams(-1, dp(48)).apply {
                 topMargin = dp(12)
@@ -3691,6 +3708,7 @@ class MainActivity : Activity() {
                 override fun onNothingSelected(parent: AdapterView<*>?) = Unit
                 override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                     prefs.edit().putString(key, values[position]).apply()
+                    view?.let { animateReveal(it) }
                 }
             }
             panel.addView(spinner, LinearLayout.LayoutParams(-1, dp(44)))
