@@ -383,16 +383,63 @@ class MainActivity : Activity() {
             pageContent.addView(label("REAL", 22, white, true).apply {
                 setPadding(0, dp(20), 0, dp(8))
             })
-            pageContent.addView(infoCard("Browse the Real section in XAnime's protected in-app browser."),
+            pageContent.addView(infoCard("Browse supported adult-video platforms in XAnime. Use only lawful content featuring consenting adults."),
                 LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
-            pageContent.addView(actionButton("▶  EPORNER", true) {
-                startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                    putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "Eporner")
-                    putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://www.eporner.com/")
-                    putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
-                    putExtra(ComicWebsiteActivity.EXTRA_DIRECT_LINK_BUTTON, true)
-                })
-            }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
+
+            val realSites = listOf(
+                "Eporner" to "https://www.eporner.com/",
+                "Pornhub" to "https://www.pornhub.com/",
+                "XVideos" to "https://www.xvideos.com/",
+                "xHamster" to "https://xhamster.com/",
+                "XNXX" to "https://www.xnxx.com/",
+                "RedTube" to "https://www.redtube.com/",
+                "YouPorn" to "https://www.youporn.com/",
+                "SpankBang" to "https://spankbang.com/",
+                "Tube8" to "https://www.tube8.com/",
+                "TNAFlix" to "https://www.tnaflix.com/",
+                "HClips" to "https://www.hclips.com/",
+                "Thumbzilla" to "https://www.thumbzilla.com/"
+            )
+            val realSearch = EditText(this).apply {
+                hint = "Search websites…"
+                setSingleLine(true)
+                textSize = 14f
+                setTextColor(white)
+                setHintTextColor(muted)
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                background = rounded(surface2, 14)
+            }
+            pageContent.addView(realSearch, LinearLayout.LayoutParams(-1, dp(48)).apply {
+                topMargin = dp(12)
+                bottomMargin = dp(8)
+            })
+            val realSiteList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            pageContent.addView(realSiteList, LinearLayout.LayoutParams(-1, -2))
+            fun renderRealSites(filter: String) {
+                realSiteList.removeAllViews()
+                realSites.filter { it.first.contains(filter, ignoreCase = true) ||
+                    it.second.contains(filter, ignoreCase = true) }.forEach { site ->
+                    realSiteList.addView(actionButton("▶  " + site.first, true) {
+                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, site.first)
+                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, site.second)
+                            putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
+                            putExtra(ComicWebsiteActivity.EXTRA_DIRECT_LINK_BUTTON, true)
+                        })
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(7) })
+                }
+                if (realSiteList.childCount == 0) {
+                    realSiteList.addView(infoCard("No matching websites."))
+                }
+            }
+            realSearch.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    renderRealSites(s?.toString().orEmpty())
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+            renderRealSites("")
             setContentView(root)
             animateScreen(root)
             return
