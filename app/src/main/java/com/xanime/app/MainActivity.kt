@@ -4008,7 +4008,7 @@ class MainActivity : Activity() {
                 ) else intArrayOf(Color.rgb(31, 20, 52), Color.rgb(13, 8, 25))
             ).apply {
                 cornerRadius = dp(17).toFloat()
-                setStroke(dp(1), if (primary) Color.argb(170, 222, 180, 255) else Color.argb(95, 170, 115, 255))
+                setStroke(dp(1), if (primary) accentWithAlpha(190) else accentWithAlpha(125))
             })
             elevation = dp(if (primary) 5 else 1).toFloat()
             stateListAnimator = null
@@ -4031,15 +4031,19 @@ class MainActivity : Activity() {
             }
         }
 
+    private fun accentWithAlpha(alpha: Int): Int =
+        Color.argb(alpha, Color.red(accent), Color.green(accent), Color.blue(accent))
+
     private fun glassDrawable(radius: Int): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.argb(232, 28, 16, 48), Color.argb(218, 8, 5, 19))).apply {
+            intArrayOf(Color.rgb(28, 16, 48), Color.rgb(8, 5, 19))).apply {
             cornerRadius = dp(radius).toFloat()
-            setStroke(dp(1), Color.argb(145, 157, 91, 255))
+            // Every glass surface follows the selected accent instead of staying purple.
+            setStroke(dp(1), accentWithAlpha(150))
         }
 
     private fun ripple(content: Drawable): RippleDrawable =
-        RippleDrawable(ColorStateList.valueOf(Color.argb(76, 100, 220, 235)), content, null)
+        RippleDrawable(ColorStateList.valueOf(accentWithAlpha(82)), content, null)
 
     private fun animateScreen(view: View) {
         if (!animationsEnabled()) {
