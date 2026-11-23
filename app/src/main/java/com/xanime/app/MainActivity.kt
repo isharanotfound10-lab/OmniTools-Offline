@@ -390,6 +390,7 @@ class MainActivity : Activity() {
                     putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "Eporner")
                     putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://www.eporner.com/")
                     putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
+                    putExtra(ComicWebsiteActivity.EXTRA_DIRECT_LINK_BUTTON, true)
                 })
             }, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(12) })
             setContentView(root)
