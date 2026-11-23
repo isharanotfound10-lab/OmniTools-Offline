@@ -3720,7 +3720,7 @@ class MainActivity : Activity() {
         panel.addView(label("PERSONALIZATION", 11, accent, true).apply {
             setPadding(0, dp(4), 0, dp(4))
         })
-        selector("Accent colour", "accent_color", listOf("Purple", "Pink", "Cyan", "Blue", "Green"), "Purple")
+        selector("Accent colour", "accent_color", listOf("Purple", "Lavender", "Neon Rose", "Magenta", "Electric Blue", "Ice Cyan", "Emerald", "Amber", "Crimson"), "Purple")
         selector("Card design", "card_style", listOf("Glass", "Solid", "Minimal"), "Glass")
         selector("Content layout", "layout_mode", listOf("Gallery", "Compact"), "Gallery")
         option("AMOLED black background", "amoled_mode", false)
