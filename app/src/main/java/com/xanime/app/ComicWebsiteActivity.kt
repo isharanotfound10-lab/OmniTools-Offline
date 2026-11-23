@@ -68,13 +68,13 @@ class ComicWebsiteActivity : Activity() {
             return
         }
 
-        window.statusBarColor = Color.rgb(7, 6, 15)
-        window.navigationBarColor = Color.rgb(7, 6, 15)
+        window.statusBarColor = Color.rgb(3, 2, 10)
+        window.navigationBarColor = Color.rgb(3, 2, 10)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(7, 6, 15))
-            setPadding(dp(10), dp(10), dp(10), dp(8))
+            setBackgroundColor(Color.rgb(3, 2, 10))
+            setPadding(dp(14), dp(14), dp(14), dp(10))
         }
         val toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -84,7 +84,10 @@ class ComicWebsiteActivity : Activity() {
             text = "‹"
             isAllCaps = false
             setTextColor(Color.WHITE)
-            setBackgroundColor(Color.rgb(34, 26, 49))
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.rgb(46, 26, 76), Color.rgb(18, 10, 32))
+            ).apply { cornerRadius = dp(15).toFloat(); setStroke(dp(1), Color.argb(150, 170, 105, 255)) }
             setOnClickListener { finish() }
         }, LinearLayout.LayoutParams(dp(44), dp(42)))
 
@@ -109,15 +112,18 @@ class ComicWebsiteActivity : Activity() {
                 isAllCaps = false
                 textSize = 13f
                 setTextColor(Color.WHITE)
-                setBackgroundColor(Color.rgb(190, 75, 255))
+                background = android.graphics.drawable.GradientDrawable(
+                    android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(Color.rgb(190, 82, 255), Color.rgb(111, 35, 194))
+                ).apply { cornerRadius = dp(16).toFloat(); setStroke(dp(1), Color.argb(180, 225, 190, 255)) }
                 setOnClickListener { startDirectLinkFlow() }
             }, LinearLayout.LayoutParams(-1, dp(46)).apply { topMargin = dp(7); bottomMargin = dp(5) })
         }
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
-            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(190, 75, 255))
-            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(30, 38, 48))
+            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(174, 65, 255))
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(39, 25, 58))
         }
         root.addView(progress, LinearLayout.LayoutParams(-1, dp(3)))
 
