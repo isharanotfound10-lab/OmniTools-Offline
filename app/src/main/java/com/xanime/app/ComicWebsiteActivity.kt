@@ -459,7 +459,7 @@ class ComicWebsiteActivity : Activity() {
             runOnUiThread {
                 val value = rawUrl?.trim().orEmpty()
                 val parsed = runCatching { Uri.parse(value) }.getOrNull()
-                if (parsed?.scheme !in listOf("http", "https") || parsed.host.isNullOrBlank()) {
+                if (parsed == null || parsed.scheme !in listOf("http", "https") || parsed.host.isNullOrBlank()) {
                     onFailure("The downloader returned an invalid link.")
                     return@runOnUiThread
                 }
