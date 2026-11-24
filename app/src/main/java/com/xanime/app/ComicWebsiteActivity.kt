@@ -19,6 +19,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Message
 import android.view.Gravity
+import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -142,16 +143,6 @@ class ComicWebsiteActivity : Activity() {
         }
         browser = webView
         root.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
-        if (directLinkEnabled) {
-            // Keep the downloader in a separate, attached but invisible WebView.
-            // The source page remains on screen while the form is filled and resolved.
-            directLinkWebView = createBrowser().apply {
-                visibility = android.view.View.INVISIBLE
-                isFocusable = false
-                isFocusableInTouchMode = false
-            }
-            root.addView(directLinkWebView, LinearLayout.LayoutParams(dp(1), dp(1)))
-        }
         setContentView(root)
         webView.loadUrl(siteUrl)
     }
@@ -358,11 +349,22 @@ class ComicWebsiteActivity : Activity() {
         originalVideoPageUrl = current
         directLinkInProgress = true
         Toast.makeText(this, "Getting direct link…", Toast.LENGTH_SHORT).show()
-        directLinkWebView?.loadUrl("https://allporndownloader.com/")
-            ?: run {
+        val downloader = directLinkWebView ?: run {
+            val parent = browser?.parent as? ViewGroup
+            if (parent == null) {
                 directLinkInProgress = false
                 Toast.makeText(this, "Background downloader is unavailable.", Toast.LENGTH_LONG).show()
+                return
             }
+            createBrowser().apply {
+                visibility = android.view.View.INVISIBLE
+                isFocusable = false
+                isFocusableInTouchMode = false
+                parent.addView(this, ViewGroup.LayoutParams(dp(1), dp(1)))
+                directLinkWebView = this
+            }
+        }
+        downloader.loadUrl("https://allporndownloader.com/")
     }
 
     private fun automateDownloaderPage(page: WebView) {
