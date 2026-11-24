@@ -995,14 +995,14 @@ class MainActivity : Activity() {
                 realSiteList.removeAllViews()
                 realSites.filter { it.first.contains(filter, ignoreCase = true) ||
                     it.second.contains(filter, ignoreCase = true) }.forEach { site ->
-                    realSiteList.addView(actionButton("▶  " + site.first, true) {
+                    realSiteList.addView(websiteCard(site.first, site.second) {
                         startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
                             putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, site.first)
                             putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, site.second)
                             putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
                             putExtra(ComicWebsiteActivity.EXTRA_DIRECT_LINK_BUTTON, true)
                         })
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(7) })
+                    }, LinearLayout.LayoutParams(-1, dp(68)).apply { bottomMargin = dp(9) })
                 }
                 if (realSiteList.childCount == 0) {
                     realSiteList.addView(infoCard("No matching websites."))
@@ -1062,7 +1062,7 @@ class MainActivity : Activity() {
                         url.contains(filter.trim(), ignoreCase = true)
                 }
                 matches.forEach { (siteName, siteUrl) ->
-                    comicList.addView(actionButton(siteName, true) {
+                    comicList.addView(websiteCard(siteName, siteUrl) {
                         if (siteName == "HentaiRead") {
                             startActivity(Intent(this, HentaiReadComicsActivity::class.java))
                         } else {
@@ -1072,8 +1072,8 @@ class MainActivity : Activity() {
                                 putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
                             })
                         }
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply {
-                        bottomMargin = dp(8)
+                    }, LinearLayout.LayoutParams(-1, dp(68)).apply {
+                        bottomMargin = dp(9)
                     })
                 }
                 if (matches.isEmpty()) {
@@ -1173,14 +1173,14 @@ class MainActivity : Activity() {
                 javList.removeAllViews()
                 javWebsites.filter { it.first.contains(filter.trim(), ignoreCase = true) }
                     .forEach { (siteName, siteUrl) ->
-                        javList.addView(actionButton(siteName, true) {
+                        javList.addView(websiteCard(siteName, siteUrl) {
                             startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
                                 putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "JAV • " + siteName)
                                 putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, siteUrl)
                                 putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
                             })
-                        }, LinearLayout.LayoutParams(-1, dp(52)).apply {
-                            bottomMargin = dp(8)
+                        }, LinearLayout.LayoutParams(-1, dp(68)).apply {
+                            bottomMargin = dp(9)
                         })
                     }
             }
@@ -3940,6 +3940,88 @@ class MainActivity : Activity() {
             if (scrollableTab && endMargin == 0) marginEnd = dp(8)
         })
     }
+
+    // A full-surface website row makes navigation feel like a deliberate, tappable card.
+    // Uses a lightweight monogram instead of network-loaded favicons to keep scrolling smooth.
+    private fun websiteCard(siteName: String, siteUrl: String, action: () -> Unit) =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            isClickable = true
+            isFocusable = true
+            setPadding(dp(12), dp(9), dp(13), dp(9))
+            background = ripple(glassDrawable(17))
+            elevation = dp(2).toFloat()
+
+            val mark = TextView(this@MainActivity).apply {
+                text = siteName.trim().take(1).uppercase()
+                textSize = 18f
+                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                gravity = Gravity.CENTER
+                setTextColor(white)
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(accentWithAlpha(210), accentWithAlpha(90))
+                ).apply {
+                    cornerRadius = dp(13).toFloat()
+                    setStroke(dp(1), accentWithAlpha(180))
+                }
+            }
+            addView(mark, LinearLayout.LayoutParams(dp(46), dp(46)).apply {
+                marginEnd = dp(12)
+            })
+
+            val details = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            details.addView(TextView(this@MainActivity).apply {
+                text = siteName
+                textSize = 14f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                setTextColor(white)
+            })
+            val domain = Uri.parse(siteUrl).host?.removePrefix("www.") ?: siteUrl
+            details.addView(TextView(this@MainActivity).apply {
+                text = domain
+                textSize = 10f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTextColor(muted)
+                setPadding(0, dp(4), 0, 0)
+            })
+            addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+
+            addView(TextView(this@MainActivity).apply {
+                text = "↗"
+                textSize = 22f
+                gravity = Gravity.CENTER
+                setTextColor(accent)
+                contentDescription = "Open $siteName"
+            }, LinearLayout.LayoutParams(dp(30), dp(42)))
+
+            setOnTouchListener { target, event ->
+                if (!animationsEnabled()) return@setOnTouchListener false
+                when (event.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN ->
+                        target.animate().scaleX(.985f).scaleY(.985f).alpha(.88f)
+                            .setDuration(85).start()
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL ->
+                        target.animate().scaleX(1f).scaleY(1f).alpha(1f)
+                            .setDuration(160).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+                }
+                false
+            }
+            setOnClickListener {
+                if (prefs.getBoolean("haptic_feedback", true)) {
+                    performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                }
+                action()
+            }
+        }
 
     private fun infoCard(message: String) = TextView(this).apply {
         text = message; textSize = 13f; setTextColor(muted)
