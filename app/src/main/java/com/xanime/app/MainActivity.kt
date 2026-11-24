@@ -3745,11 +3745,11 @@ class MainActivity : Activity() {
         val settingsScroll = ScrollView(this).apply {
             isFillViewport = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            addView(panel, ScrollView.LayoutParams(-1, -2))
+            addView(panel, android.view.ViewGroup.LayoutParams(-1, -2))
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle("PERSONALIZE XANIME")
-            .setView(settingsScroll, dp(8), dp(4), dp(8), dp(4))
+            .setView(settingsScroll)
             .setPositiveButton("APPLY") { _, _ -> showHome() }
             .setNeutralButton("CLEAR CACHE") { _, _ ->
                 detailCache.clear()
