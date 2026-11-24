@@ -41,6 +41,7 @@ class ComicWebsiteActivity : Activity() {
     }
 
     private var browser: WebView? = null
+    private var directLinkWebView: WebView? = null
     private var popupWebView: WebView? = null
     private lateinit var progress: ProgressBar
     private lateinit var pageTitle: TextView
@@ -141,6 +142,16 @@ class ComicWebsiteActivity : Activity() {
         }
         browser = webView
         root.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
+        if (directLinkEnabled) {
+            // Keep the downloader in a separate, attached but invisible WebView.
+            // The source page remains on screen while the form is filled and resolved.
+            directLinkWebView = createBrowser().apply {
+                visibility = android.view.View.INVISIBLE
+                isFocusable = false
+                isFocusableInTouchMode = false
+            }
+            root.addView(directLinkWebView, LinearLayout.LayoutParams(dp(1), dp(1)))
+        }
         setContentView(root)
         webView.loadUrl(siteUrl)
     }
@@ -347,7 +358,11 @@ class ComicWebsiteActivity : Activity() {
         originalVideoPageUrl = current
         directLinkInProgress = true
         Toast.makeText(this, "Getting direct link…", Toast.LENGTH_SHORT).show()
-        browser?.loadUrl("https://allporndownloader.com/")
+        directLinkWebView?.loadUrl("https://allporndownloader.com/")
+            ?: run {
+                directLinkInProgress = false
+                Toast.makeText(this, "Background downloader is unavailable.", Toast.LENGTH_LONG).show()
+            }
     }
 
     private fun automateDownloaderPage(page: WebView) {
@@ -472,8 +487,9 @@ class ComicWebsiteActivity : Activity() {
                 val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Direct download link", value))
                 directLinkInProgress = false
-                Toast.makeText(this@ComicWebsiteActivity, "Link Copied", Toast.LENGTH_SHORT).show()
-                originalVideoPageUrl?.let { browser?.loadUrl(it) }
+                Toast.makeText(this@ComicWebsiteActivity, "Direct link copied", Toast.LENGTH_SHORT).show()
+                directLinkWebView?.stopLoading()
+                directLinkWebView?.loadUrl("about:blank")
             }
         }
 
@@ -483,7 +499,8 @@ class ComicWebsiteActivity : Activity() {
                 if (!directLinkInProgress) return@runOnUiThread
                 directLinkInProgress = false
                 Toast.makeText(this@ComicWebsiteActivity, message ?: "Couldn't get direct link", Toast.LENGTH_LONG).show()
-                originalVideoPageUrl?.let { browser?.loadUrl(it) }
+                directLinkWebView?.stopLoading()
+                directLinkWebView?.loadUrl("about:blank")
             }
         }
     }
@@ -1671,6 +1688,13 @@ class ComicWebsiteActivity : Activity() {
 
     override fun onDestroy() {
         closePopup(popupWebView)
+        directLinkWebView?.apply {
+            stopLoading()
+            webChromeClient = null
+            webViewClient = WebViewClient()
+            destroy()
+        }
+        directLinkWebView = null
         browser?.apply {
             stopLoading()
             webChromeClient = null
