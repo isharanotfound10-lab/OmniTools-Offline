@@ -1199,33 +1199,39 @@ class MainActivity : Activity() {
         }
 
         val sourceTabs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        addWebsiteTab(sourceTabs, "XAnime", listOf("DIRECT LINKS"),
-            !showingHentaini && !showingWatchAnimeHentai, 6) {
+        val currentHentaiSourceTab = when {
+            showingHentaini -> 1
+            showingWatchAnimeHentai -> 2
+            else -> 0
+        }
+        fun switchHentaiSourceTab(target: Int) {
+            if (target == currentHentaiSourceTab) return
+            // Match the directional slide/fade used by the main Hentai/Comics/JAV/Real tabs.
+            libraryTabTransitionDirection =
+                if (target > currentHentaiSourceTab) 1f else -1f
+            libraryTabTransitionPending = true
             if (showingWatchAnimeHentai) watchAnimeRequestId++
             val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
-            showingHentaini = false
-            showingWatchAnimeHentai = false
-            showingFavorites = keepFavorites
+            showingHentaini = target == 1
+            showingWatchAnimeHentai = target == 2
+            if (showingHentaini) showingHentainiFavorites = keepFavorites
+            else showingFavorites = keepFavorites
             watchAnimeLoading = false
+            if (!showingWatchAnimeHentai) watchAnimeSeriesLoading = false
             showHome()
+        }
+        addWebsiteTab(sourceTabs, "XAnime", listOf("DIRECT LINKS"),
+            currentHentaiSourceTab == 0, 6) {
+            switchHentaiSourceTab(0)
         }
         addWebsiteTab(sourceTabs, "Hentaini",
-            listOf("MEGA", "MEDIAFIRE", "TERABOX", "DIRECT LINKS"), showingHentaini, 6) {
-            if (showingWatchAnimeHentai) watchAnimeRequestId++
-            val keepFavorites = if (showingHentaini) showingHentainiFavorites else showingFavorites
-            showingHentaini = true
-            showingWatchAnimeHentai = false
-            showingHentainiFavorites = keepFavorites
-            watchAnimeLoading = false
-            showHome()
+            listOf("MEGA", "MEDIAFIRE", "TERABOX", "DIRECT LINKS"),
+            currentHentaiSourceTab == 1, 6) {
+            switchHentaiSourceTab(1)
         }
         addWebsiteTab(sourceTabs, "WatchAnimeHentai", listOf("IN-APP DOWNLOAD"),
-            showingWatchAnimeHentai) {
-            if (showingWatchAnimeHentai) return@addWebsiteTab
-            showingHentaini = false
-            showingWatchAnimeHentai = true
-            showingFavorites = false
-            showHome()
+            currentHentaiSourceTab == 2) {
+            switchHentaiSourceTab(2)
         }
         pageContent.addView(sourceTabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
 
