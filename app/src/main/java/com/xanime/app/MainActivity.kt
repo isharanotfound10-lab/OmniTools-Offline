@@ -85,6 +85,8 @@ class MainActivity : Activity() {
     }
     private val main = Handler(Looper.getMainLooper())
     private var ambientBackground: AmbientBackgroundDrawable? = null
+    private var libraryTabTransitionPending = false
+    private var libraryTabTransitionDirection = 1f
     private val activeShimmers = mutableSetOf<ShimmerDrawable>()
 
     private var query = ""
@@ -362,37 +364,32 @@ class MainActivity : Activity() {
             setPadding(dp(5), dp(5), dp(5), dp(5))
             background = glassDrawable(20)
         }
-        libraryTabs.addView(actionButton("Hentai", !showingComics && !showingJav && !showingReal) {
-            if (showingComics || showingJav || showingReal) {
-                showingComics = false
-                showingJav = false
-                showingReal = false
-                showHome()
-            }
+        val currentLibraryTab = when {
+            showingComics -> 1
+            showingJav -> 2
+            showingReal -> 3
+            else -> 0
+        }
+        fun switchLibraryTab(target: Int) {
+            if (target == currentLibraryTab) return
+            libraryTabTransitionDirection = if (target > currentLibraryTab) 1f else -1f
+            libraryTabTransitionPending = true
+            showingComics = target == 1
+            showingJav = target == 2
+            showingReal = target == 3
+            showHome()
+        }
+        libraryTabs.addView(actionButton("Hentai", currentLibraryTab == 0) {
+            switchLibraryTab(0)
         }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
-        libraryTabs.addView(actionButton("Comics", showingComics) {
-            if (!showingComics) {
-                showingComics = true
-                showingJav = false
-                showingReal = false
-                showHome()
-            }
+        libraryTabs.addView(actionButton("Comics", currentLibraryTab == 1) {
+            switchLibraryTab(1)
         }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
-        libraryTabs.addView(actionButton("Jav", showingJav) {
-            if (!showingJav) {
-                showingComics = false
-                showingJav = true
-                showingReal = false
-                showHome()
-            }
+        libraryTabs.addView(actionButton("Jav", currentLibraryTab == 2) {
+            switchLibraryTab(2)
         }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { marginEnd = dp(5) })
-        libraryTabs.addView(actionButton("Real", showingReal) {
-            if (!showingReal) {
-                showingComics = false
-                showingJav = false
-                showingReal = true
-                showHome()
-            }
+        libraryTabs.addView(actionButton("Real", currentLibraryTab == 3) {
+            switchLibraryTab(3)
         }, LinearLayout.LayoutParams(0, dp(42), 1f))
         pageContent.addView(libraryTabs, LinearLayout.LayoutParams(-1, dp(54)).apply {
             topMargin = dp(13)
@@ -4063,14 +4060,34 @@ class MainActivity : Activity() {
 
     private fun animateScreen(view: View) {
         if (!animationsEnabled()) {
+            libraryTabTransitionPending = false
             view.alpha = 1f
+            view.translationX = 0f
             view.translationY = 0f
             view.scaleX = 1f
             view.scaleY = 1f
             return
         }
         view.animate().cancel()
+        if (libraryTabTransitionPending) {
+            val direction = libraryTabTransitionDirection
+            libraryTabTransitionPending = false
+            view.alpha = 0.82f
+            view.translationX = direction * dp(24).toFloat()
+            view.translationY = 0f
+            view.scaleX = 1f
+            view.scaleY = 1f
+            view.post {
+                if (!isFinishing) view.animate()
+                    .alpha(1f).translationX(0f)
+                    .setDuration(motionDuration(245))
+                    .setInterpolator(android.view.animation.DecelerateInterpolator(1.7f))
+                    .start()
+            }
+            return
+        }
         view.alpha = 0f
+        view.translationX = 0f
         view.translationY = dp(13).toFloat()
         view.scaleX = .992f
         view.scaleY = .992f
