@@ -3954,7 +3954,12 @@ class MainActivity : Activity() {
                     background = glassDrawable(16)
                 }) {}
             }
-            return object : RecyclerView.ViewHolder(FrameLayout(this@MainActivity)) {}
+            return object : RecyclerView.ViewHolder(FrameLayout(this@MainActivity).apply {
+                layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    dp(77)
+                )
+            }) {}
         }
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
