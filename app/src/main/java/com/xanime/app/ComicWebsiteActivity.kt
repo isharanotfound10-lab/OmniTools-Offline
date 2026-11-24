@@ -279,7 +279,7 @@ class ComicWebsiteActivity : Activity() {
                     super.onPageFinished(view, url)
                     val page = view ?: return
                     if (directLinkInProgress && isDownloaderHost(url)) {
-                        page.visibility = android.view.View.VISIBLE
+                        page.visibility = android.view.View.INVISIBLE
                         automateDownloaderPage(page)
                         return
                     }
@@ -489,7 +489,6 @@ class ComicWebsiteActivity : Activity() {
                 directLinkInProgress = false
                 Toast.makeText(this@ComicWebsiteActivity, "Direct link copied", Toast.LENGTH_SHORT).show()
                 directLinkWebView?.stopLoading()
-                directLinkWebView?.loadUrl("about:blank")
             }
         }
 
