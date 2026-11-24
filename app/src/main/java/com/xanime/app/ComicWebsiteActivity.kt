@@ -42,6 +42,7 @@ class ComicWebsiteActivity : Activity() {
 
     private var browser: WebView? = null
     private var directLinkWebView: WebView? = null
+    private var directLinkContainer: LinearLayout? = null
     private var popupWebView: WebView? = null
     private lateinit var progress: ProgressBar
     private lateinit var pageTitle: TextView
@@ -142,16 +143,8 @@ class ComicWebsiteActivity : Activity() {
         }
         browser = webView
         root.addView(webView, LinearLayout.LayoutParams(-1, 0, 1f))
-        if (directLinkEnabled) {
-            // Keep the downloader in a separate, attached but invisible WebView.
-            // The source page remains on screen while the form is filled and resolved.
-            directLinkWebView = createBrowser().apply {
-                visibility = android.view.View.INVISIBLE
-                isFocusable = false
-                isFocusableInTouchMode = false
-            }
-            root.addView(directLinkWebView, LinearLayout.LayoutParams(dp(1), dp(1)))
-        }
+        // The downloader WebView is created on first use, not when the browser opens.
+        directLinkContainer = root
         setContentView(root)
         webView.loadUrl(siteUrl)
     }
@@ -358,11 +351,17 @@ class ComicWebsiteActivity : Activity() {
         originalVideoPageUrl = current
         directLinkInProgress = true
         Toast.makeText(this, "Getting direct link…", Toast.LENGTH_SHORT).show()
-        directLinkWebView?.loadUrl("https://allporndownloader.com/")
-            ?: run {
-                directLinkInProgress = false
-                Toast.makeText(this, "Background downloader is unavailable.", Toast.LENGTH_LONG).show()
+        val downloader = directLinkWebView ?: run {
+            val created = createBrowser().apply {
+                visibility = android.view.View.INVISIBLE
+                isFocusable = false
+                isFocusableInTouchMode = false
             }
+            directLinkWebView = created
+            directLinkContainer?.addView(created, LinearLayout.LayoutParams(dp(1), dp(1)))
+            created
+        }
+        downloader.loadUrl("https://allporndownloader.com/")
     }
 
     private fun automateDownloaderPage(page: WebView) {
