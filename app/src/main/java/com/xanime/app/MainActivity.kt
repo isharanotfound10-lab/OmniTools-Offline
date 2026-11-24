@@ -25,6 +25,9 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import android.view.inputmethod.EditorInfo
 import android.text.Editable
 import android.text.TextWatcher
@@ -989,24 +992,18 @@ class MainActivity : Activity() {
                 topMargin = dp(12)
                 bottomMargin = dp(8)
             })
-            val realSiteList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            pageContent.addView(realSiteList, LinearLayout.LayoutParams(-1, -2))
+            val realAdapter = WebsiteDirectoryAdapter("No matching websites.") { site ->
+                startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                    putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, site.first)
+                    putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, site.second)
+                    putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
+                    putExtra(ComicWebsiteActivity.EXTRA_DIRECT_LINK_BUTTON, true)
+                })
+            }
+            val realSiteList = createWebsiteRecycler(realAdapter)
             fun renderRealSites(filter: String) {
-                realSiteList.removeAllViews()
-                realSites.filter { it.first.contains(filter, ignoreCase = true) ||
-                    it.second.contains(filter, ignoreCase = true) }.forEach { site ->
-                    realSiteList.addView(websiteCard(site.first, site.second) {
-                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, site.first)
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, site.second)
-                            putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
-                            putExtra(ComicWebsiteActivity.EXTRA_DIRECT_LINK_BUTTON, true)
-                        })
-                    }, LinearLayout.LayoutParams(-1, dp(68)).apply { bottomMargin = dp(9) })
-                }
-                if (realSiteList.childCount == 0) {
-                    realSiteList.addView(infoCard("No matching websites."))
-                }
+                realAdapter.submitList(realSites.filter { it.first.contains(filter, ignoreCase = true) ||
+                    it.second.contains(filter, ignoreCase = true) })
             }
             realSearch.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -1016,6 +1013,7 @@ class MainActivity : Activity() {
                 override fun afterTextChanged(s: Editable?) {}
             })
             renderRealSites("")
+            installDirectoryRecycler(realSiteList)
             setContentView(root)
             animateScreen(root)
             return
@@ -1050,35 +1048,25 @@ class MainActivity : Activity() {
                 bottomMargin = dp(10)
             })
 
-            val comicList = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-            }
-            pageContent.addView(comicList, LinearLayout.LayoutParams(-1, -2))
-
-            fun renderComicWebsites(filter: String) {
-                comicList.removeAllViews()
-                val matches = comicWebsites.filter { (name, url) ->
-                    name.contains(filter.trim(), ignoreCase = true) ||
-                        url.contains(filter.trim(), ignoreCase = true)
-                }
-                matches.forEach { (siteName, siteUrl) ->
-                    comicList.addView(websiteCard(siteName, siteUrl) {
-                        if (siteName == "HentaiRead") {
-                            startActivity(Intent(this, HentaiReadComicsActivity::class.java))
-                        } else {
-                            startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                                putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "Comics • " + siteName)
-                                putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, siteUrl)
-                                putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
-                            })
-                        }
-                    }, LinearLayout.LayoutParams(-1, dp(68)).apply {
-                        bottomMargin = dp(9)
+            val comicAdapter = WebsiteDirectoryAdapter("No matching comic websites.") { site ->
+                if (site.first == "HentaiRead") {
+                    startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+                } else {
+                    startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                        putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "Comics • " + site.first)
+                        putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, site.second)
+                        putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
                     })
                 }
-                if (matches.isEmpty()) {
-                    comicList.addView(infoCard("No matching comic websites."))
-                }
+            }
+            val comicList = createWebsiteRecycler(comicAdapter)
+
+            fun renderComicWebsites(filter: String) {
+                val normalized = filter.trim()
+                comicAdapter.submitList(comicWebsites.filter { (name, url) ->
+                    name.contains(normalized, ignoreCase = true) ||
+                        url.contains(normalized, ignoreCase = true)
+                })
             }
 
             renderComicWebsites("")
@@ -1089,6 +1077,7 @@ class MainActivity : Activity() {
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
+            installDirectoryRecycler(comicList)
             setContentView(root)
             animateScreen(root)
             return
@@ -1164,25 +1153,19 @@ class MainActivity : Activity() {
                 "OMGJAV" to "https://omgjav.com/",
                 "Manko" to "https://manko.fun/"
             )
-            val javList = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
+            val javAdapter = WebsiteDirectoryAdapter("No matching JAV websites.") { site ->
+                startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                    putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "JAV • " + site.first)
+                    putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, site.second)
+                    putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
+                })
             }
-            pageContent.addView(javList, LinearLayout.LayoutParams(-1, -2))
+            val javList = createWebsiteRecycler(javAdapter)
 
             fun renderJavWebsites(filter: String) {
-                javList.removeAllViews()
-                javWebsites.filter { it.first.contains(filter.trim(), ignoreCase = true) }
-                    .forEach { (siteName, siteUrl) ->
-                        javList.addView(websiteCard(siteName, siteUrl) {
-                            startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                                putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "JAV • " + siteName)
-                                putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, siteUrl)
-                                putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
-                            })
-                        }, LinearLayout.LayoutParams(-1, dp(68)).apply {
-                            bottomMargin = dp(9)
-                        })
-                    }
+                val normalized = filter.trim()
+                javAdapter.submitList(javWebsites.filter { it.first.contains(normalized, ignoreCase = true) ||
+                    it.second.contains(normalized, ignoreCase = true) })
             }
             renderJavWebsites(javQuery)
             javSearch.addTextChangedListener(object : TextWatcher {
@@ -1193,6 +1176,7 @@ class MainActivity : Activity() {
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
+            installDirectoryRecycler(javList)
             setContentView(root)
             animateScreen(root)
             return
@@ -3939,6 +3923,76 @@ class MainActivity : Activity() {
             if (endMargin > 0) marginEnd = dp(endMargin)
             if (scrollableTab && endMargin == 0) marginEnd = dp(8)
         })
+    }
+
+
+    private inner class WebsiteDirectoryAdapter(
+        private val emptyMessage: String,
+        private val onOpen: (Pair<String, String>) -> Unit
+    ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+        private var sites: List<Pair<String, String>> = emptyList()
+        private val emptyType = 1
+
+        fun submitList(items: List<Pair<String, String>>) {
+            sites = items
+            notifyDataSetChanged()
+        }
+
+        override fun getItemViewType(position: Int): Int =
+            if (sites.isEmpty()) emptyType else 0
+
+        override fun getItemCount(): Int = if (sites.isEmpty()) 1 else sites.size
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+            if (viewType == emptyType) {
+                return object : RecyclerView.ViewHolder(TextView(this@MainActivity).apply {
+                    text = emptyMessage
+                    textSize = 13f
+                    setTextColor(muted)
+                    gravity = Gravity.CENTER
+                    setPadding(dp(16), dp(18), dp(16), dp(18))
+                    background = glassDrawable(16)
+                }) {}
+            }
+            return object : RecyclerView.ViewHolder(FrameLayout(this@MainActivity)) {}
+        }
+
+        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+            if (holder.itemViewType == emptyType) return
+            val site = sites[position]
+            val frame = holder.itemView as FrameLayout
+            frame.removeAllViews()
+            frame.addView(websiteCard(site.first, site.second) {
+                val currentPosition = holder.bindingAdapterPosition
+                if (currentPosition != RecyclerView.NO_POSITION && currentPosition < sites.size) {
+                    onOpen(sites[currentPosition])
+                }
+            }, FrameLayout.LayoutParams(-1, dp(68)).apply {
+                bottomMargin = dp(9)
+            })
+        }
+    }
+
+    private fun createWebsiteRecycler(adapter: WebsiteDirectoryAdapter): RecyclerView =
+        RecyclerView(this).apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            this.adapter = adapter
+            setHasFixedSize(true)
+            itemAnimator = null
+            overScrollMode = View.OVER_SCROLL_NEVER
+            clipToPadding = false
+            setPadding(0, dp(2), 0, dp(8))
+        }
+
+    private fun installDirectoryRecycler(directory: RecyclerView) {
+        scroll.removeView(pageContent)
+        root.removeView(scroll)
+        val shell = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        shell.addView(pageContent, LinearLayout.LayoutParams(-1, -2))
+        shell.addView(directory, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(shell, LinearLayout.LayoutParams(-1, -1))
     }
 
     // A full-surface website row makes navigation feel like a deliberate, tappable card.
