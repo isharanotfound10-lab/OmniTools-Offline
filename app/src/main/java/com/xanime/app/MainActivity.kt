@@ -3016,7 +3016,12 @@ class MainActivity : Activity() {
             animateEntrance(card, content.childCount - 1)
         }
         if (!showingFavorites) renderNextPageButton()
-        scroll.post { scroll.scrollTo(0, previousScrollY) }
+        // Cards are attached only after this render pass. Re-scan once layout
+        // has completed so thumbnails queued while detached are actually started.
+        scroll.post {
+            scroll.scrollTo(0, previousScrollY)
+            loadVisibleImages(pageContent)
+        }
     }
 
 
