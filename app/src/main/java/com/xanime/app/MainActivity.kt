@@ -1022,130 +1022,73 @@ class MainActivity : Activity() {
         }
 
         if (showingComics) {
-            pageContent.addView(label("COMICS", 22, white, true).apply {
+            pageContent.addView(label("COMIC WEBSITES", 22, white, true).apply {
                 setPadding(0, dp(20), 0, dp(8))
             })
-            pageContent.addView(label("CHOOSE A WEBSITE", 9, muted, true).apply {
-                letterSpacing = .12f
-                setPadding(0, dp(3), 0, dp(9))
-            })
-            // Keep comic sources in one compact, horizontally scrollable tab strip.
-            val comicTabs = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
+            val comicWebsites = listOf(
+                "HentaiRead" to "https://hentairead.com/",
+                "HitomiLA" to "https://hitomi.la/",
+                "AllPornComic" to "https://allporncomic.com/home-3/",
+                "NovelCrow" to "https://novelcrow.com/",
+                "MultiPorn" to "https://multporn.com/",
+                "KingComix" to "https://kingcomix.com/",
+                "nHentai.net" to "https://nhentai.net/",
+                "nHentai.to" to "https://nhentai.to/"
+            )
+            val comicSearch = EditText(this).apply {
+                hint = "Search ${comicWebsites.size} websites..."
+                setHintTextColor(muted)
+                setTextColor(white)
+                textSize = 14f
+                isSingleLine = true
+                imeOptions = EditorInfo.IME_ACTION_SEARCH
+                setPadding(dp(13), 0, dp(10), 0)
+                background = ripple(glassDrawable(14))
             }
-            val comicTabsScroll = HorizontalScrollView(this).apply {
-                isHorizontalScrollBarEnabled = false
-                isFillViewport = false
-                clipToPadding = false
-                addView(comicTabs, ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                ))
-            }
-            addWebsiteTab(comicTabs, "HentaiRead", listOf("READ"),
-                selectedComicSource == "HentaiRead", 5, scrollableTab = true) {
-                selectedComicSource = "HentaiRead"
-                showHome()
-            }
-            addWebsiteTab(comicTabs, "HitomiLA", listOf("READ"),
-                selectedComicSource == "HitomiLA", 5, scrollableTab = true) {
-                selectedComicSource = "HitomiLA"
-                showHome()
-            }
-            addWebsiteTab(comicTabs, "AllPornComic", emptyList(),
-                selectedComicSource == "AllPornComic", 5, scrollableTab = true) {
-                selectedComicSource = "AllPornComic"
-                showHome()
-            }
-            addWebsiteTab(comicTabs, "NovelCrow", emptyList(),
-                selectedComicSource == "NovelCrow", 5, scrollableTab = true) {
-                selectedComicSource = "NovelCrow"
-                showHome()
-            }
-            addWebsiteTab(comicTabs, "MultiPorn", emptyList(),
-                selectedComicSource == "MultiPorn", 5, scrollableTab = true) {
-                selectedComicSource = "MultiPorn"
-                showHome()
-            }
-            addWebsiteTab(comicTabs, "KingComix", emptyList(),
-                selectedComicSource == "KingComix", 5, scrollableTab = true) {
-                selectedComicSource = "KingComix"
-                showHome()
-            }
-            addWebsiteTab(comicTabs, "nHentai", listOf("NHENTAI.NET", "NHENTAI.TO"),
-                selectedComicSource == "nHentai", scrollableTab = true) {
-                selectedComicSource = "nHentai"
-                showHome()
-            }
-            pageContent.addView(comicTabsScroll, LinearLayout.LayoutParams(-1, -2).apply {
-                topMargin = dp(12)
+            pageContent.addView(comicSearch, LinearLayout.LayoutParams(-1, dp(46)).apply {
+                topMargin = dp(6)
+                bottomMargin = dp(10)
             })
 
-            when (selectedComicSource) {
-                "HentaiRead" -> {
-                    pageContent.addView(infoCard("Click Read to Browse And Read Hentai Manga. Enjoy!"),
-                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-                    pageContent.addView(actionButton("📖  READ", true) {
-                        startActivity(Intent(this, HentaiReadComicsActivity::class.java))
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+            val comicList = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            pageContent.addView(comicList, LinearLayout.LayoutParams(-1, -2))
+
+            fun renderComicWebsites(filter: String) {
+                comicList.removeAllViews()
+                val matches = comicWebsites.filter { (name, url) ->
+                    name.contains(filter.trim(), ignoreCase = true) ||
+                        url.contains(filter.trim(), ignoreCase = true)
                 }
-                "HitomiLA" -> showHitomiLaHome()
-                "AllPornComic" -> {
-                    pageContent.addView(infoCard("Click Read to Browse And Read AllPornComic."), 
-                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-                    pageContent.addView(actionButton("📖  READ", true) {
-                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "AllPornComic")
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://allporncomic.com/home-3/")
-                        })
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
+                matches.forEach { (siteName, siteUrl) ->
+                    comicList.addView(actionButton(siteName, true) {
+                        if (siteName == "HentaiRead") {
+                            startActivity(Intent(this, HentaiReadComicsActivity::class.java))
+                        } else {
+                            startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
+                                putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "Comics • " + siteName)
+                                putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, siteUrl)
+                                putExtra(ComicWebsiteActivity.EXTRA_BLOCK_POPUPS, true)
+                            })
+                        }
+                    }, LinearLayout.LayoutParams(-1, dp(52)).apply {
+                        bottomMargin = dp(8)
+                    })
                 }
-                "NovelCrow" -> {
-                    pageContent.addView(infoCard("Click Read to Browse And Read NovelCrow."), 
-                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-                    pageContent.addView(actionButton("📖  READ", true) {
-                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "NovelCrow")
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://novelcrow.com")
-                        })
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
-                }
-                "MultiPorn" -> {
-                    pageContent.addView(infoCard("Click Read to Browse MultiPorn."), 
-                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-                    pageContent.addView(actionButton("📖  READ", true) {
-                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "MultiPorn")
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://multporn.com/")
-                        })
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
-                }
-                "KingComix" -> {
-                    pageContent.addView(infoCard("Click Read to Browse KingComix."),
-                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-                    pageContent.addView(actionButton("📖  READ", true) {
-                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "KingComix")
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://kingcomix.com/")
-                        })
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
-                }
-                "nHentai" -> {
-                    pageContent.addView(infoCard("Choose a website to browse."), 
-                        LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-                    pageContent.addView(actionButton("Go To nHentai.net", true) {
-                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "nHentai")
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://nhentai.net/")
-                        })
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(10) })
-                    pageContent.addView(actionButton("Go To nHentai.to", false) {
-                        startActivity(Intent(this, ComicWebsiteActivity::class.java).apply {
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_NAME, "nHentai")
-                            putExtra(ComicWebsiteActivity.EXTRA_SITE_URL, "https://nhentai.to/")
-                        })
-                    }, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
+                if (matches.isEmpty()) {
+                    comicList.addView(infoCard("No matching comic websites."))
                 }
             }
+
+            renderComicWebsites("")
+            comicSearch.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    renderComicWebsites(s?.toString().orEmpty())
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
             setContentView(root)
             animateScreen(root)
             return
